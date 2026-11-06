@@ -92,8 +92,10 @@ A UUID is in its usual form with dashes. For a command of the console, `senderUu
 The mod registers every name of `commandNames()` with Brigadier as a literal that runs on its own
 and as the same literal with one argument `arguments` of the type greedy string. Both run
 `command`, and the mod sends every line of the answer to the source of the command as a system
-message. A command of a plugin needs no permission level in Brigadier: the plugin checks the
-sender itself, through `golem-permissions`.
+message, with `sendSystemMessage`, so neither the game rule `sendCommandFeedback` nor a silent
+source hides it, as they hide the feedback of `sendSuccess`. That keeps the offer of the source that
+`/golem source` makes to every player. A command of a plugin needs no permission level in
+Brigadier: the plugin checks the sender itself, through `golem-permissions`.
 
 Forge builds the commands when it loads the data packs: once at the start, before
 `ServerStartingEvent`, and again on every `/reload`. So `commandNames()` answers before

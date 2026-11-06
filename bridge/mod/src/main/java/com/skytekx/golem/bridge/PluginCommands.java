@@ -76,7 +76,10 @@ public final class PluginCommands {
 		return alone.then(rest);
 	}
 
-	/** Runs the command in the plugin and sends every line of its answer to the sender. */
+	/**
+	 * Runs the command in the plugin and sends every line of its answer to the sender, as a system
+	 * message, which the game rule sendCommandFeedback and a silent source do not suppress.
+	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
 		String[] lines = guard.ask("Host.command", () -> ask(source, name, rest), null);
@@ -87,7 +90,7 @@ public final class PluginCommands {
 		}
 		for (String line : lines) {
 			if (line != null) {
-				source.sendSuccess(() -> Component.literal(line), false);
+				source.sendSystemMessage(Component.literal(line));
 			}
 		}
 		return Command.SINGLE_SUCCESS;
