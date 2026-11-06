@@ -186,6 +186,35 @@ fn create_error(code: sys::jint) -> String {
 }
 
 /// Creates the JVM on the current thread with `options` and the hooks of the host.
+/// Puts `SIGSEGV` and `SIGBUS` back to their default action where a handler holds them, before
+/// the JVM installs its own.
+///
+/// The standard library of Rust installs a handler for both on start to report a stack
+/// overflow, and the JVM keeps a handler it finds as the next one of its chain. On a fault that
+/// the JVM does not own, such as a crash in the native library of a mod, it hands the signal on,
+/// and that handler resets the signal and returns, so the process dies of a bare `SIGSEGV` with
+/// no fatal error report, no `hs_err` file and no abort hook. With the default action behind it,
+/// the JVM reports the crash itself, as under the java launcher. A stack overflow of a Rust
+/// thread then reaches that report as well.
+fn release_fault_signals() {
+    for signal in [libc::SIGSEGV, libc::SIGBUS] {
+        let mut current = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
+        // SAFETY: A null new action makes sigaction only write the current one into `current`,
+        // which is valid memory for one struct sigaction.
+        let read = unsafe { libc::sigaction(signal, ptr::null(), current.as_mut_ptr()) };
+        if read != 0 {
+            continue;
+        }
+        // SAFETY: sigaction answered 0, so it wrote the whole struct.
+        let current = unsafe { current.assume_init() };
+        if current.sa_sigaction == libc::SIG_DFL || current.sa_sigaction == libc::SIG_IGN {
+            continue;
+        }
+        // SAFETY: SIG_DFL installs no code, and no other thread of the host sets these signals.
+        unsafe { libc::signal(signal, libc::SIG_DFL) };
+    }
+}
+
 fn create_vm(
     create: CreateJavaVm,
     options: &[CString],
@@ -217,6 +246,7 @@ fn create_vm(
     };
     let mut vm = ptr::null_mut();
     let mut env = ptr::null_mut();
+    release_fault_signals();
     // SAFETY: The pointers lead to live locals, the options point into `options` and to string
     // literals, which outlive the call, and HotSpot only reads them. The hooks have the types
     // that HotSpot casts extraInfo to for the options exit and abort.

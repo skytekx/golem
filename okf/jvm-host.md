@@ -204,6 +204,13 @@ A process holds one JVM, so `run` runs once.
 Both hooks catch every panic, so none unwinds into the JVM. `run` does not return after a hook,
 since the process ends.
 
+Before it creates the JVM, the host puts `SIGSEGV` and `SIGBUS` back to their default action. The
+standard library of Rust holds both with its handler for stack overflows, and HotSpot keeps a
+handler it finds as the next of its chain, so a crash in native code, such as the library of a mod,
+would reach that handler and end the process with a bare `SIGSEGV`: no fatal error report, no
+`hs_err` file and no abort hook. With the default action behind it, HotSpot reports the crash as
+under the launcher, and `03_launch_args` holds a write to the address 0 through `Unsafe` to that.
+
 ## The stop path
 
 Golem never stops the server with a signal. `-Xrs` keeps the JVM away from `SIGINT`, `SIGTERM` and

@@ -18,6 +18,7 @@ publish = false
 [dependencies]
 jni.workspace = true
 jni-sys.workspace = true
+libc.workspace = true
 libloading.workspace = true
 
 [lints]

@@ -82,6 +82,7 @@ version = "0.1.0"
 dependencies = [
  "jni",
  "jni-sys 0.3.1",
+ "libc",
  "libloading",
 ]
 

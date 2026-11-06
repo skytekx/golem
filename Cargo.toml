@@ -31,6 +31,7 @@ jni = { version = "0.21.1", default-features = false }
 jni-sys = "0.3.0"
 # Loads libjvm of the Java home that the server names, at run time.
 libloading = "0.8.9"
+libc = "0.2.191"
 # The configuration files and the JSON of the devtool.
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
