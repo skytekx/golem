@@ -23,9 +23,10 @@
 # Documentation/testing.md describes. The notebooks build the crates with cargo and the bridge
 # with Gradle, and boot the Forge server that tests/fetch.py installs, so the job caches the
 # downloads, the registry and the target of cargo, and the cache of Gradle, whose first build
-# remaps Minecraft. Notebook 08 boots the modpack of the live server three times, so the job
-# fetches the pack with tests/fetch.py --only modpack and caches it by the commit it pins. The
-# downloads and the pack are saved right after their download, so a failed run keeps them.
+# remaps Minecraft. Notebook 08 boots the modpack of the live server four times, under java,
+# golem and Arclight and then under golem on the world of Arclight, so the job fetches the pack
+# with tests/fetch.py --only modpack and caches it by the commit it pins. The downloads and the
+# pack are saved right after their download, so a failed run keeps them.
 #
 # Every action is pinned to the commit of a release, with its tag beside it. No job reads a
 # secret, and the token of every job can only read the repository.
