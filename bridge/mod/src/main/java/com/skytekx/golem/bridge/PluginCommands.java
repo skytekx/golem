@@ -78,7 +78,8 @@ public final class PluginCommands {
 
 	/**
 	 * Runs the command in the plugin and sends every line of its answer to the sender, as a system
-	 * message, which the game rule sendCommandFeedback and a silent source do not suppress.
+	 * message, which the game rule sendCommandFeedback does not suppress. A silent source, such
+	 * as a function, still sees no line, since the game drops every message to it.
 	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
