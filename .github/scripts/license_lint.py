@@ -35,6 +35,11 @@ the file. The rules are these.
 8. Every file that rule 6 covers names its copyright holders in SPDX-FileCopyrightText lines
    among its first lines, or in the .license file beside it, and one of them names Florian
    Kleber, the holder of Golem.
+9. A port keeps the license of the plugin it ports. ports.toml at the root names every port
+   with its path, its upstream, its license and the holders of the upstream. Every file below
+   the path carries exactly that license and a copyright line for each of those holders beside
+   the one of Florian Kleber, the Cargo.toml of the port states that license itself, and NOTICE
+   has a section that names the upstream.
 
 Unlike Aosabi, Golem has no default license for a file without a tag: rule 6 covers every file,
 not only the shipped sources.
@@ -94,6 +99,9 @@ AGPL_SENTENCES = (
     "Version 3, 19 November 2007",
     "13. Remote Network Interaction; Use with the GNU General Public License.",
 )
+
+#: The table of the ports, which rule 9 reads.
+PORTS = PurePosixPath("ports.toml")
 
 #: The names of a license file of a package under third_party/.
 LICENSE_FILE = re.compile(r"^(?:LICEN[CS]E|COPYING|UNLICENSE)(?:[-._].*)?$", re.I)
@@ -233,6 +241,78 @@ def license_texts(files: list[PurePosixPath], fail) -> dict:
     return known
 
 
+def load_ports(root: Path, fail) -> list[dict]:
+    """The ports of ports.toml, each checked for its fields, or no port when the file is absent."""
+    try:
+        table = tomllib.loads((root / PORTS).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError) as broken:
+        fail(PORTS, "rule 9: the table of the ports does not parse: %s" % broken)
+        return []
+    ports = []
+    for index, port in enumerate(table.get("port") or []):
+        where = "%s port %d" % (PORTS, index + 1)
+        missing = [field for field in ("name", "path", "upstream", "source", "license", "holders") if not port.get(field)]
+        if missing:
+            fail(where, "rule 9: the port lacks %s" % ", ".join(missing))
+            continue
+        if not isinstance(port["holders"], list) or not all(isinstance(holder, str) for holder in port["holders"]):
+            fail(where, "rule 9: holders is no list of strings")
+            continue
+        try:
+            licenses, _ = parse_expression(port["license"])
+        except ValueError as broken:
+            fail(where, "rule 9: the license %r is no SPDX expression, %s" % (port["license"], broken))
+            continue
+        ports.append(dict(port, path=PurePosixPath(port["path"]), licenses=licenses))
+    return ports
+
+
+def check_ports(root: Path, files: list[PurePosixPath], present: set, fail) -> None:
+    """Rule 9: every file of a port keeps the license and the holders of its upstream."""
+    ports = load_ports(root, fail)
+    if not ports:
+        return
+    try:
+        notice = (root / "NOTICE").read_text(encoding="utf-8")
+    except OSError:
+        notice = ""
+    for port in ports:
+        if port["upstream"] not in notice:
+            fail("NOTICE", "rule 9: NOTICE has no section on %s, the upstream of %s" % (port["upstream"], port["name"]))
+        owned = [path for path in files if port["path"] in path.parents]
+        for path in owned:
+            if path.name.endswith(".license"):
+                continue
+            lines = head(root, path)
+            expression = find_tag(lines) if lines is not None else None
+            source = path
+            if expression is None:
+                sidecar = PurePosixPath(str(path) + ".license")
+                lines = head(root, sidecar) if sidecar in present else None
+                expression = find_tag(lines, placed=False) if lines is not None else None
+                source = sidecar
+            if expression is None:
+                continue  # Rule 6 reports the missing tag.
+            if expression.strip() != port["license"]:
+                fail(source, "rule 9: a file of the port %s carries %s, not %s, the license of %s"
+                     % (port["name"], expression.strip(), port["license"], port["upstream"]))
+            holders = find_copyrights(lines)
+            for holder in port["holders"]:
+                if not any(holder in line for line in holders):
+                    fail(source, "rule 9: no copyright line names %s, a holder of %s" % (holder, port["upstream"]))
+        manifest = port["path"] / "Cargo.toml"
+        if manifest in present:
+            try:
+                package = tomllib.loads((root / manifest).read_text(encoding="utf-8")).get("package") or {}
+            except (OSError, ValueError):
+                continue  # Rule 4 reports it.
+            if package.get("license") != port["license"]:
+                fail(manifest, "rule 9: the port states the license %r, not %s, the license of %s"
+                     % (package.get("license"), port["license"], port["upstream"]))
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Check the licenses of the tree.")
     parser.add_argument("--root", type=Path, default=ROOT, help="The root of the tree, by default the repository.")
@@ -366,6 +446,9 @@ def main(argv=None) -> int:
     # Rule 7.
     if foreign and not (root / "NOTICE").is_file():
         fail("NOTICE", "rule 7: %s names a license other than the AGPL and the root holds no NOTICE" % foreign[0])
+
+    # Rule 9.
+    check_ports(root, files, present, fail)
 
     # A file beside another file may fail as itself and as the other file's .license.
     failures = list(dict.fromkeys(failures))

@@ -91,7 +91,7 @@ A fix or a feature adds or extends the notebook cell that proves it.
 
 | Notebook | Question |
 | --- | --- |
-| `01_license_lint` | Does the license lint pass this tree, refuse every break of its eight rules, and agree with `reuse lint`? |
+| `01_license_lint` | Does the license lint pass this tree, refuse every break of its nine rules, and agree with `reuse lint`? |
 | `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, and agree with Commitizen? |
 | `03_launch_args` | Does the JVM host read the launch of a Forge server as the java launcher of Temurin 17 reads it, and does a program run in its embedded JVM as it runs under java? |
 | `04_plugins` | Do the 14 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin, the queue, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
