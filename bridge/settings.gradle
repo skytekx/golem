@@ -21,3 +21,4 @@ pluginManagement {
 rootProject.name = 'bridge'
 
 include 'host'
+include 'mod'

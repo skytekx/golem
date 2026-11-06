@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+/*
+ * The Golem bridge mod, golem-bridge-<version>.jar: a Forge mod for Minecraft 1.20.1 and Forge
+ * 47.4.18 that hands the events of the server to the natives of the host class and runs the
+ * actions of Golem on the server thread.
+ *
+ * ForgeGradle compiles the mod against Minecraft in the official names of Mojang and then
+ * reobfuscates the jar, so every call into Minecraft carries the SRG name that the server runs
+ * with. The host class comes from the host project at compile time alone and never enters the
+ * jar, since the JVM host of Golem puts golem-host.jar on the module path itself.
+ */
+
+plugins {
+	id 'java'
+	id 'net.minecraftforge.gradle' version '[6.0.24,6.2)'
+}
+
+base {
+	archivesName = 'golem-bridge'
+}
+
+minecraft {
+	mappings channel: 'official', version: '1.20.1'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	minecraft 'net.minecraftforge:forge:1.20.1-47.4.18'
+	compileOnly project(':host')
+}
+
+tasks.named('processResources') {
+	// The .license file beside a JSON file carries its SPDX tags for REUSE, not for Forge.
+	exclude '**/*.license'
+}
+
+tasks.named('jar', Jar) {
+	manifest.attributes('Implementation-Title': 'Golem bridge')
+}

@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The metadata from which Forge 47 loads the Golem bridge mod.
+#
+# The version is the Implementation-Version of the manifest of the jar, which the build takes
+# from the Golem workspace. The mod runs on the server alone, so a client without it may join.
+
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "AGPL-3.0-only"
+issueTrackerURL = "https://github.com/skytekx/golem/issues"
+
+[[mods]]
+modId = "golem"
+version = "${file.jarVersion}"
+displayName = "Golem bridge"
+displayURL = "https://github.com/skytekx/golem"
+authors = "Florian Kleber"
+description = '''
+The bridge between the server and Golem, the Rust hybrid server of SkyTekx. It hands the events
+of the server to Golem and runs the actions of Golem on the server thread. Without Golem it logs
+one warning and stays off.
+'''
+# A client needs no copy of the mod, so the server list shows no red cross for a missing one.
+displayTest = "IGNORE_SERVER_VERSION"
+
+[[dependencies.golem]]
+modId = "forge"
+mandatory = true
+versionRange = "[47.4,48)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.golem]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,1.20.2)"
+ordering = "NONE"
+side = "BOTH"
