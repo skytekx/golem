@@ -31,13 +31,14 @@ These come from the session of 2026-11-06 (claude.ai session `016dYAZDqtsLdVqTQQ
 - A GraphQL API in addition to plugins.
 - Bukkit plugins stay possible but must run more efficiently, and dropping the Bukkit layer is the
   better choice if it is clearly faster.
-- The plugins in use are ported, and the Skylands stay as they are, because the datapack generator is
-  already optimal.
+- The plugins in use are ported, and the Skylands stay as they are, because the datapack generator
+  is already optimal.
 - The project is called Golem and lives in the repository `skytekx/golem`.
 - Quirks and security issues of the ported plugins are fixed during the port, not carried over.
 - Every quirk and every security issue gets its own GitHub issue, and the pull request links all of
   them.
-- Golem is licensed under the GNU AGPL 3 only, written into every source file, see [License](#license).
+- Golem is licensed under the GNU AGPL 3 only, written into every source file, see
+  [License](#license).
 - Commits are Conventional Commits as Commitizen writes them, in the form of the Linux kernel, and
   the code follows the kernel style with SPDX license lines, see
   [Commit and code style](#commit-and-code-style).
@@ -49,10 +50,10 @@ These come from the session of 2026-11-06 (claude.ai session `016dYAZDqtsLdVqTQQ
 ## Why the game itself stays Java
 
 Forge mods are not written against an API. They subclass vanilla classes, read their private fields
-through access transformers and inject code into the middle of vanilla methods through Mixins. A scan
-of all 216 server jars of `modrinth.index.json`, the 49 jars of `local-mods/`, the Forge 47.4.18 binary
-patches and the Arclight jar against the Mojang mappings of the 1.20.1 server gave these numbers on
-2026-11-06.
+through access transformers and inject code into the middle of vanilla methods through Mixins. A
+scan of all 216 server jars of `modrinth.index.json`, the 49 jars of `local-mods/`, the Forge
+47.4.18 binary patches and the Arclight jar against the Mojang mappings of the 1.20.1 server gave
+these numbers on 2026-11-06.
 
 | Measured | Value |
 |---|---|
@@ -91,12 +92,14 @@ Golem process (Rust, an Aosabi service)
 The parts in detail.
 
 - The JVM host starts Java 17 in the Golem process with the same arguments that Forge's
-  `unix_args.txt` gives the stock launcher and calls `cpw.mods.bootstraplauncher.BootstrapLauncher` on
-  a dedicated thread. On macOS the JVM must not run on the main thread. The host registers the native
-  methods of the bridge mod itself, so no separate library has to be loaded.
-- The stop path keeps the rule of [Arclight runtime](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/arclight.md): Golem never stops the server with a
-  signal. It queues `save-all flush` and `stop` on the server thread and waits until the JVM has
-  returned. Golem passes `-Xrs` so that the JVM leaves the signal handling to the host.
+  `unix_args.txt` gives the stock launcher and calls `cpw.mods.bootstraplauncher.BootstrapLauncher`
+  on a dedicated thread. On macOS the JVM must not run on the main thread. The host registers the
+  native methods of the bridge mod itself, so no separate library has to be loaded.
+- The stop path keeps the rule of [Arclight
+  runtime](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/arclight.md):
+  Golem never stops the server with a signal. It queues `save-all flush` and `stop` on the server
+  thread and waits until the JVM has returned. Golem passes `-Xrs` so that the JVM leaves the signal
+  handling to the host.
 - The bridge mod is a small Forge mod. It listens on the Forge event bus for joins, leaves, chat,
   commands, deaths, respawns, block interaction and server ticks and hands them to Rust. It drains a
   queue of actions from Rust at the end of every server tick, so Rust never touches game state from
@@ -106,36 +109,37 @@ The parts in detail.
   worker thread beside the server thread, so the runtime runs one call at a time behind a lock, as
   [Plugins](plugins/index.md) says. Plugins that only observe use the
   subscriptions of the GraphQL API instead.
-- The GraphQL API runs on Aosabi and replaces RCON for operators and tools. It binds to localhost and
-  reaches the outside only through the Cloudflare Tunnel with authentication through
+- The GraphQL API runs on Aosabi and replaces RCON for operators and tools. It binds to localhost
+  and reaches the outside only through the Cloudflare Tunnel with authentication through
   `aosabi-auth`. RCON stays available during the switch.
 - The native library holds the world generation work of [Native acceleration](#native-acceleration).
 
 ## Where the code lives
 
-Golem lives in its own repository, `skytekx/golem`, as the owner decided on 2026-11-06. It names Aosabi
-by path or git as long as the Aosabi crates are not on a registry. Aosabi promises no unsafe block in
-its own code and puts embedded targets first
-([Aosabi principles](https://github.com/netsnek/aosabi/blob/main/Documentation/principles.md)). A JVM
-host needs unsafe JNI calls and only runs on servers, so it does not belong into the Aosabi core. The
+Golem lives in its own repository, `skytekx/golem`, as the owner decided on 2026-11-06. It names
+Aosabi by path or git as long as the Aosabi crates are not on a registry. Aosabi promises no unsafe
+block in its own code and puts embedded targets first ([Aosabi
+principles](https://github.com/netsnek/aosabi/blob/main/Documentation/principles.md)). A JVM host
+needs unsafe JNI calls and only runs on servers, so it does not belong into the Aosabi core. The
 bridge mod lives in the same repository as a Gradle subproject.
 
 ## License
 
-Golem is licensed under the GNU Affero General Public License 3.0 only, SPDX `AGPL-3.0-only`, as
-the owner decided on 2026-11-06 after a comparison with the GPL 2, the GPL 3 and the LGPL, and then
+Golem is licensed under the GNU Affero General Public License 3.0 only, SPDX `AGPL-3.0-only`, as the
+owner decided on 2026-11-06 after a comparison with the GPL 2, the GPL 3 and the LGPL, and then
 narrowed from "or later" to "only" the same day. The copyright holder is Florian Kleber, reached at
-`opensource@skytekx.com`. [Documentation/licensing.md](../Documentation/licensing.md) holds the rules
-as they are built.
+`opensource@skytekx.com`. [Documentation/licensing.md](../Documentation/licensing.md) holds the
+rules as they are built.
 
 - The AGPL is the only one of them that reaches a server that is run but never distributed. Whoever
   runs a changed Golem for players must offer those players its source. Under the GPL 2 or 3 the
   changes could stay private.
 - The AGPL 3 takes Apache-2.0 code, so Aosabi works as it is. Aosabi is MIT, but some of its files
   are Apache-2.0, the code it takes from Pylon in `aosabi-core`, `aosabi-serve`, `aosabi-query` and
-  `aosabi-build` ([Aosabi licensing](https://github.com/netsnek/aosabi/blob/main/Documentation/licensing.md)),
-  and its TLS stack uses `ring`, which is under Apache-2.0 and ISC terms. A license that is GPL 2 only
-  could not take those parts.
+  `aosabi-build` ([Aosabi
+  licensing](https://github.com/netsnek/aosabi/blob/main/Documentation/licensing.md)), and its TLS
+  stack uses `ring`, which is under Apache-2.0 and ISC terms. A license that is GPL 2 only could not
+  take those parts.
 - Forge is LGPL-2.1 and LuckPerms is MIT. Both may be combined with AGPL code.
 - EssentialsX is GPL-3.0, which is compatible, but Golem still does not copy or translate its code.
   The port is written from the documented behaviour and from tests against the running plugin.
@@ -144,9 +148,9 @@ as they are built.
 - "Only" keeps Golem on the AGPL 3 of 2007, so a later AGPL of the Free Software Foundation does
   not apply to Golem by itself.
 
-Golem follows its own license on the SkyTekx server. The command `/golem source`, the server list text
-and the field `server.source` of the GraphQL API name the repository and the exact commit that runs,
-so every player can get the source of the running version.
+Golem follows its own license on the SkyTekx server. The command `/golem source`, the server list
+text and the field `server.source` of the GraphQL API name the repository and the exact commit that
+runs, so every player can get the source of the running version.
 
 The license is written into the code itself.
 
@@ -180,9 +184,9 @@ This is a reading of the licenses and not legal advice.
 ## Commit and code style
 
 Golem follows the Linux kernel's rules for commits and code, from its
-`Documentation/process/submitting-patches.rst` and `Documentation/process/coding-style.rst`, with the
-subject of a Conventional Commit as Commitizen writes it. [CONTRIBUTING.md](../CONTRIBUTING.md) holds
-the rules as they are checked.
+`Documentation/process/submitting-patches.rst` and `Documentation/process/coding-style.rst`, with
+the subject of a Conventional Commit as Commitizen writes it. [CONTRIBUTING.md](../CONTRIBUTING.md)
+holds the rules as they are checked.
 
 ### Commits
 
@@ -219,9 +223,9 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 ### Code
 
 - The first line of every file is its SPDX line, see [License](#license).
-- Rust is formatted with `rustfmt` and passes `clippy` with warnings as errors, as the Rust code of the
-  kernel does. Every `unsafe` block, which the JNI host needs, carries a `// SAFETY:` comment that says
-  why it is sound, as the kernel requires.
+- Rust is formatted with `rustfmt` and passes `clippy` with warnings as errors, as the Rust code of
+  the kernel does. Every `unsafe` block, which the JNI host needs, carries a `// SAFETY:` comment
+  that says why it is sound, as the kernel requires.
 - C, if any is ever needed, follows the kernel coding style with tabs of 8 columns and the kernel's
   `.clang-format`. The Java of the bridge mod takes the same rules where they fit: tabs, K&R braces,
   lines of at most 100 columns, short functions and no clever tricks.
@@ -233,26 +237,27 @@ These hold for everyone who works on `skytekx/golem`, human or agent.
 
 - Push every commit at once, the same minute it is made. This is the most important rule of the
   repository. Dev environments end without warning: a cloud container is reclaimed, a session times
-  out, or the usage or credit of an agent runs out in the middle of the work. Whatever is only local at
-  that moment is gone.
+  out, or the usage or credit of an agent runs out in the middle of the work. Whatever is only local
+  at that moment is gone.
 - Commit often, at every step that works or that would hurt to redo, not only at the end of a task.
   Uncommitted work is lost the same way.
 - Work happens on a personal work branch that is pushed after every commit. On that branch commits
   may be work in progress that does not build yet. Before a merge into `main` the branch is cleaned
-  into commits of [Commit and code style](#commit-and-code-style), and only then may it be force pushed
-  with `--force-with-lease`, and only on that own branch.
+  into commits of [Commit and code style](#commit-and-code-style), and only then may it be force
+  pushed with `--force-with-lease`, and only on that own branch.
 - If a push fails because of the network, retry it at once and keep retrying with growing pauses. A
   push that still fails is the first thing to report, before any other work goes on.
 - An agent ends no session and no answer with an unpushed commit or uncommitted changes. Before it
   stops it checks that `git status` is clean and that `git log @{u}..` is empty.
 - The repository ships an optional `post-commit` hook in `tools/hooks/` that pushes after every
   commit, for people who want it automatic.
-- Keep the OKF wiki in `okf/` of the Golem repository, in the same Open Knowledge Format as this wiki:
-  front matter with `type`, `title`, `description`, `tags` and `timestamp`, an `index.md` with the
-  state and a page map, a change log, a decisions page and open items. A change that alters behaviour,
-  config, the API, a ported command or a plugin's data updates the matching wiki page in the same pull
-  request. Every quirk and security issue of [Quirks and security](#quirks-and-security) gets a line on
-  the wiki page of its plugin with the link to its issue.
+- Keep the OKF wiki in `okf/` of the Golem repository, in the same Open Knowledge Format as this
+  wiki: front matter with `type`, `title`, `description`, `tags` and `timestamp`, an `index.md` with
+  the state and a page map, a change log, a decisions page and open items. A change that alters
+  behaviour, config, the API, a ported command or a plugin's data updates the matching wiki page in
+  the same pull request. Every quirk and security issue of [Quirks and
+  security](#quirks-and-security) gets a line on the wiki page of its plugin with the link to its
+  issue.
 - The Golem wiki holds the design and the operation of Golem itself. This wiki keeps the pages about
   the SkyTekx 3 server and links to the Golem wiki.
 
@@ -262,8 +267,8 @@ The port is a chance to fix what the plugins do wrong today. Golem does not copy
 because EssentialsX, LuckPerms, Spigot or Arclight have it.
 
 - A quirk is a behaviour that surprises players or operators, breaks a documented intent or needs a
-  workaround. A security issue is anything that lets a player or an outsider get access, data, items,
-  money or control they should not have, or take the server down.
+  workaround. A security issue is anything that lets a player or an outsider get access, data,
+  items, money or control they should not have, or take the server down.
 - Every quirk and every security issue found while porting gets its own GitHub issue in
   `skytekx/golem` before the fix, with the label `quirk` or `security`. The issue states the old
   behaviour, with evidence such as a log line, a config line or a test against the running plugin,
@@ -327,28 +332,31 @@ type Subscription {
 }
 ```
 
-The type `Server` carries TPS and MSPT, the uptime, the Forge and mod versions and the time budget of every
-plugin. Aosabi sends subscriptions as server sent events over HTTP, see the Aosabi Rust guide,
-section 11.
+The type `Server` carries TPS and MSPT, the uptime, the Forge and mod versions and the time budget
+of every plugin. Aosabi sends subscriptions as server sent events over HTTP, see the Aosabi Rust
+guide, section 11.
 
 ## Bukkit plugins
 
 The Bukkit plugins in use are ported, so Golem needs no Bukkit layer for this server. A Bukkit layer
 stays an option for later. It has to be Java, because plugins are Java, and it would build Bukkit
-events only for event types that a plugin listens to and create the Bukkit wrapper objects only when a
-plugin asks for them. That is 6 to 12 months of work and only worth it if the owner wants other
+events only for event types that a plugin listens to and create the Bukkit wrapper objects only when
+a plugin asks for them. That is 6 to 12 months of work and only worth it if the owner wants other
 Bukkit plugins.
 
 Dropping Bukkit is likely to pay off more through the mods it allows than through Arclight's own
 overhead. Arclight does not appear as a source in the worldgen profile of
-[Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md), but Radium crashed Arclight on 2026-06-27
-([Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md)). Without Arclight the server can try Radium or Canary and ServerCore
-again. The comparison under [Verification](#verification) measures both effects before the switch.
+[Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md),
+but Radium crashed Arclight on 2026-06-27
+([Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md)).
+Without Arclight the server can try Radium or Canary and ServerCore again. The comparison under
+[Verification](#verification) measures both effects before the switch.
 
 ## Plugin port
 
-The plugins come from [Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md). The Golem plugins keep the command names and
-aliases players know, so nobody has to learn new commands.
+The plugins come from
+[Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md). The
+Golem plugins keep the command names and aliases players know, so nobody has to learn new commands.
 
 ### EssentialsX 2.22.0
 
@@ -377,20 +385,22 @@ random teleport of `tpr.yml` is not in the default group and is only ported if t
 
 The port is `spawn` and `setspawn` with the alias `espawn`. Both listeners are off today
 (`respawn-listener-priority: none` and `spawn-join-listener-priority: none`), so respawns and first
-joins stay vanilla and Golem adds no listener for them. Until an operator sets a spawn, `spawn` leads
-to the world spawn of the Overworld.
+joins stay vanilla and Golem adds no listener for them. Until an operator sets a spawn, `spawn`
+leads to the world spawn of the Overworld.
 
 ### LuckPerms 5.5.71
 
-The port is `golem-permissions` with groups, inheritance, nodes with wildcards, values per player and
-a store in SQLite next to the world. It registers itself as the permission handler of Forge's
+The port is `golem-permissions` with groups, inheritance, nodes with wildcards, values per player
+and a store in SQLite next to the world. It registers itself as the permission handler of Forge's
 PermissionAPI, so mods that ask Forge for permissions see the same groups. Operators change groups
 in game with `/perm`, over the GraphQL API, or during the switch over RCON.
 
 ### Telemetry
 
-bStats, the MCStats leftover and the EssentialsX update check are not ported. That follows the owner's
-no telemetry rule that [Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md#metrics-and-update-checks) names.
+bStats, the MCStats leftover and the EssentialsX update check are not ported. That follows the
+owner's no telemetry rule that
+[Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md#metrics-and-update-checks)
+names.
 
 ### Data migration
 
@@ -405,15 +415,16 @@ store.
 | Files `plugins/Essentials/worth.yml`, `motd.txt` and the rules text | Golem config and text files |
 | LuckPerms export from `lp export` | Groups, nodes and player values |
 
-The tool prints counts per kind and fails on any entry it cannot place. The player data holds personal
-data, so it stays out of git as today, see [Secrets](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/secrets.md).
+The tool prints counts per kind and fails on any entry it cannot place. The player data holds
+personal data, so it stays out of git as today, see
+[Secrets](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/secrets.md).
 
 ## Spigot world settings
 
-Arclight applies `spigot.yml` and `bukkit.yml`. Most values there equal vanilla and need no port. That
-holds for the spawn limits and `ticks-per` of `bukkit.yml`, the growth modifiers, the hunger values,
-the despawn rates, the hopper values and the structure seeds. These differ from vanilla and move into
-the plugin `golem-world`.
+Arclight applies `spigot.yml` and `bukkit.yml`. Most values there equal vanilla and need no port.
+That holds for the spawn limits and `ticks-per` of `bukkit.yml`, the growth modifiers, the hunger
+values, the despawn rates, the hopper values and the structure seeds. These differ from vanilla and
+move into the plugin `golem-world`.
 
 | Setting | Value today | Port |
 |---|---|---|
@@ -424,45 +435,47 @@ the plugin `golem-world`.
 | Max tick time | 50 ms for block entities and entities | Ported only if the load test shows that it ever triggers |
 | Max TNT per tick | 100 | Bridge hook |
 
-Before the switch a pregenerated test region is compared between Arclight and Golem to prove that the
-structure seeds of `spigot.yml` were the vanilla salts. If a structure moves, Golem sets the salts.
+Before the switch a pregenerated test region is compared between Arclight and Golem to prove that
+the structure seeds of `spigot.yml` were the vanilla salts. If a structure moves, Golem sets the
+salts.
 
 ## Native acceleration
 
-This part follows the hot spots of [Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md). Chunk generation spends 50 to 62
-percent of its time in vanilla code, most of it in terrain noise. The scan shows that no Forge patch,
-no Arclight patch and no mod touches `SimplexNoise`, `ImprovedNoise`, `NormalNoise`, `Aquifer`, `Mth`
-or `RegionFile`.
+This part follows the hot spots of
+[Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md).
+Chunk generation spends 50 to 62 percent of its time in vanilla code, most of it in terrain noise.
+The scan shows that no Forge patch, no Arclight patch and no mod touches `SimplexNoise`,
+`ImprovedNoise`, `NormalNoise`, `Aquifer`, `Mth` or `RegionFile`.
 
-- Noise in Rust. The Java classes keep their exact signatures and call the Rust library in batches of
-  a whole chunk. Results must match Java bit for bit, so the Rust code avoids fused multiply add and
-  fast math. `PerlinNoise` is patched by Aether Redux and keeps its patched method in Java.
+- Noise in Rust. The Java classes keep their exact signatures and call the Rust library in batches
+  of a whole chunk. Results must match Java bit for bit, so the Rust code avoids fused multiply add
+  and fast math. `PerlinNoise` is patched by Aether Redux and keeps its patched method in Java.
 - Density functions compiled to Rust per dimension. Types that mods add, such as those of Draconic
   Evolution, stay Java callbacks. The Skylands datapack stays the single source and runs through the
   compiled path without changes.
-- Region file compression in Rust with libdeflate, in the same format. `NbtIo` is patched by Forge and
-  stays Java.
+- Region file compression in Rust with libdeflate, in the same format. `NbtIo` is patched by Forge
+  and stays Java.
 - Pathfinding in Rust only if the load test shows that it costs time. `PathFinder` is unpatched but
   reads world state from patched classes all the time, so it may not pay off.
 
-C2MEF, the Forge port of C2ME, spreads chunk work over several cores and stacks with the native code.
-It is tested in the measurement step. The expected gain of the native code is roughly 1.2 to 1.6 times
-faster chunk generation per core. That number is a judgement, not a measurement.
+C2MEF, the Forge port of C2ME, spreads chunk work over several cores and stacks with the native
+code. It is tested in the measurement step. The expected gain of the native code is roughly 1.2 to
+1.6 times faster chunk generation per core. That number is a judgement, not a measurement.
 
 ## Verification
 
-- A comparison with the same world copy, the same pregen and 20 simulated players: Arclight as today,
-  plain Forge, plain Forge with Radium or Canary and ServerCore, and later Golem. Each run records
-  Spark profiles, GC logs, MSPT and chunks per second.
-- Golden samples for the plugin port. Scenarios such as `tpa` with timeout, `back` after death, homes
-  across dimensions, mail to an offline player and `pay` run on Arclight with EssentialsX and on Golem,
-  and the resulting positions, messages and stored data must match.
-- Golden samples for the native code. A recorder logs inputs and outputs of the target methods during
-  real generation in every dimension, and a pregenerated region must be identical block for block
-  between vanilla and Golem.
+- A comparison with the same world copy, the same pregen and 20 simulated players: Arclight as
+  today, plain Forge, plain Forge with Radium or Canary and ServerCore, and later Golem. Each run
+  records Spark profiles, GC logs, MSPT and chunks per second.
+- Golden samples for the plugin port. Scenarios such as `tpa` with timeout, `back` after death,
+  homes across dimensions, mail to an offline player and `pay` run on Arclight with EssentialsX and
+  on Golem, and the resulting positions, messages and stored data must match.
+- Golden samples for the native code. A recorder logs inputs and outputs of the target methods
+  during real generation in every dimension, and a pregenerated region must be identical block for
+  block between vanilla and Golem.
 - A clean Golem boot reaches `Done` with 0 FATAL lines and no crash report. The Essentials warning
-  about the hybrid server leaves the boot error baseline of
-  [Logs and crashes](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/logs-and-crashes.md#boot-error-baseline).
+  about the hybrid server leaves the boot error baseline of [Logs and
+  crashes](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/logs-and-crashes.md#boot-error-baseline).
 
 ## Work plan
 
@@ -488,9 +501,10 @@ native code runs in parallel and ends about 8 to 10 months after the start.
 
 - Grep the Mac mini logs for `issued server command` to list the Essentials commands players and
   operators really use.
-- Scan the world's region files for signs whose first line is an Essentials sign tag such as `[Buy]`,
-  `[Sell]`, `[Warp]` or `[Balance]`.
-- Run the four way comparison above and record the numbers on [Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md).
+- Scan the world's region files for signs whose first line is an Essentials sign tag such as
+  `[Buy]`, `[Sell]`, `[Warp]` or `[Balance]`.
+- Run the four way comparison above and record the numbers on
+  [Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md).
 
 ## Risks
 
@@ -500,8 +514,8 @@ native code runs in parallel and ends about 8 to 10 months after the start.
   whole process, as they do today.
 - The JNI boundary costs time per call. All native calls run in batches, and the golden sample run
   also measures speed.
-- Golem stays bound to Minecraft 1.20.1 and Forge 47. A move to another version means new scans and a
-  new bridge.
+- Golem stays bound to Minecraft 1.20.1 and Forge 47. A move to another version means new scans and
+  a new bridge.
 
 ## Open decisions
 
@@ -510,6 +524,11 @@ native code runs in parallel and ends about 8 to 10 months after the start.
 - Whether a Bukkit layer is ever wanted for plugins beyond the ported ones.
 - Whether the economy of EssentialsX is in use at all, which the usage audit decides.
 
-Related: [Arclight runtime](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/arclight.md), [Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md),
-[Performance and worldgen profiling](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md), [Mac mini](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/macos.md),
-[Logs and crashes](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/logs-and-crashes.md).
+Related: [Arclight
+runtime](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/arclight.md),
+[Plugins](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/modpack/plugins.md),
+[Performance and worldgen
+profiling](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md),
+[Mac mini](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/macos.md), [Logs
+and
+crashes](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/logs-and-crashes.md).
