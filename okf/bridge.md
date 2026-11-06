@@ -185,7 +185,9 @@ the block below the feet carries a player on its full top face and is no block t
 blocks of the feet and the head have no collision shape, hold no fluid, are no portal of the tag
 `minecraft:portals`, the nether portal, the end portal and the end gateway, which would carry the
 player away, no cobweb, which would hold them, and do not hurt, the ground lies at or above the
-lowest block of the dimension, the head below its top, and the place inside the world border. A
+lowest block of the dimension, the head below its top, and a player in the middle of the block
+inside the world border, with half the width of a player, 0.3 blocks, to spare, since the border
+of `/worldborder center` runs through the middle of a block. A
 target below the logical height of its dimension, the lowest block plus `logical_height` of the
 type of the dimension, keeps the head below that height too, as EssentialsX does, so a search
 from under the bedrock roof of the Nether, whose logical height ends at y 128 while its blocks go

@@ -41,6 +41,9 @@ final class SafeLocation {
 	/** The largest radius of a search, in blocks. */
 	static final int MAX_RADIUS = 8;
 
+	/** Half the width of a player, by which the answer lies inside the world border. */
+	private static final double HALF_WIDTH = 0.3D;
+
 	/** Every offset within the largest radius, as dx, dy, dz and the square of the distance. */
 	private static final int[][] OFFSETS = offsets();
 
@@ -130,11 +133,14 @@ final class SafeLocation {
 
 	/**
 	 * Answers whether the ground lies above the void, the head below the top of the search and
-	 * the place inside the world border.
+	 * a player in the middle of the block, where the answer puts them, inside the world border.
+	 * The border of /worldborder center lies on the middle of a block, so a block that only
+	 * touches the inside would put half the player outside.
 	 */
 	private static boolean inside(ServerLevel level, BlockPos feet, int top) {
 		return feet.getY() - 1 >= level.getMinBuildHeight() && feet.getY() + 1 < top
-				&& level.getWorldBorder().isWithinBounds(feet);
+				&& level.getWorldBorder().isWithinBounds(feet.getX() + 0.5D, feet.getZ() + 0.5D,
+						-HALF_WIDTH);
 	}
 
 	/** Answers whether a player stands safely with the feet in a block of a loaded chunk. */
