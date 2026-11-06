@@ -13,7 +13,8 @@
 The client speaks protocol 763 in offline mode: the handshake, the login with the plugin
 requests of Forge answered as a vanilla client would, the keep alive, chat and commands without
 signatures, the respawn and the close. A thread reads its packets as they come and records every
-system chat message as raw text in `messages`, every place the server puts the player in
+system chat message as raw text in `messages`, the text of every chat message of a player in
+`chats`, every place the server puts the player in
 `positions`, the dimension of every respawn or change of dimension in `dimensions` and the name
 of every player in the player list in `list_names`. It confirms every teleport, as a vanilla
 client does. It is no game client: it sends no movement and loads no chunk, which a server in
@@ -117,7 +118,7 @@ class Client:
         self.stream = self.socket.makefile("rb")
         self.threshold, self.uuid = -1, None
         self.lock, self.messages, self.play = threading.Lock(), [], threading.Event()
-        self.positions, self.dimensions, self.list_names = [], [], {}
+        self.chats, self.positions, self.dimensions, self.list_names = [], [], [], {}
         self.closed = threading.Event()
 
     def send(self, packet: int, payload: bytes = b"") -> None:
@@ -173,6 +174,10 @@ class Client:
                     self.play.set()
                 elif packet == 0x64:
                     self.messages.append(payload.decode("utf-8", "replace"))
+                elif packet == 0x35:
+                    _, offset = parse_varint(payload, 16)
+                    signed, offset = payload[offset], offset + 1
+                    self.chats.append(parse_string(payload, offset + (256 if signed else 0))[0])
                 elif packet == 0x3C:
                     self.positions.append(struct.unpack(">dddff", payload[:32]))
                     self.send(0x00, varint(parse_varint(payload, 33)[0]))

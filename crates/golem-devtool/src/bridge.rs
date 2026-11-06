@@ -29,7 +29,7 @@
 //! parameter is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`,
 //! `serverStopped`, `tick` (with `nanos`, and `repeat` and `sleepMs` of the devtool),
 //! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` (with
-//! `level`, 4 when left out) and `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
+//! `level`, 4 when left out), `permission` and `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
 //! `install` (a fresh handler of the same script), `sleep` and `together`, which runs its
 //! `steps` each on a thread of its own, the next one `staggerMs` after the one before, as Forge
 //! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
@@ -42,7 +42,9 @@
 //! every other event, which the runtime must ignore. `panic` panics on the events named `on`
 //! and in its `commands`. `slow` sleeps `sleepMs` on the first `times` events named `on`.
 //! `reenter` calls the native `commandNames` from inside its handler on the events named `on`
-//! and broadcasts how many names it got. `mover` answers its `commands` with the helpers of the
+//! and broadcasts how many names it got. `grant` grants the nodes of its `grants` and denies
+//! those of its `denies`, and `panic` also panics on a permission when `on` is `permission`.
+//! `mover` answers its `commands` with the helpers of the
 //! context that teleport a player to its place `to` and name them in the player list.
 
 use std::{
@@ -187,6 +189,14 @@ enum PluginSpec {
     },
     /// A plugin that calls a native from inside the handler on the events of one name.
     Reenter { name: String, on: String },
+    /// A plugin that grants and denies nodes of the `PermissionAPI` of Forge.
+    Grant {
+        name: String,
+        #[serde(default)]
+        grants: Vec<String>,
+        #[serde(default)]
+        denies: Vec<String>,
+    },
     /// A plugin that teleports players and names them in the player list on its commands.
     Mover {
         name: String,
@@ -271,6 +281,10 @@ enum Step {
         #[serde(default = "max_level")]
         level: i32,
         arguments: Option<String>,
+    },
+    Permission {
+        uuid: Option<String>,
+        node: Option<String>,
     },
     Drain,
     Stats,
@@ -627,6 +641,10 @@ fn native(step: &Step) -> Option<Value> {
                 arguments.as_deref(),
             ),
         ),
+        Step::Permission { uuid, node } => answer(
+            "permission",
+            host::permission(uuid.as_deref(), node.as_deref()),
+        ),
         Step::Drain => drain(),
         Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
         Step::Sleep { ms } => done("sleep", || thread::sleep(Duration::from_millis(*ms))),
@@ -735,6 +753,15 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             left: times,
         }),
         PluginSpec::Reenter { name, on } => Box::new(Reenter { name, on }),
+        PluginSpec::Grant {
+            name,
+            grants,
+            denies,
+        } => Box::new(Grant {
+            name,
+            grants,
+            denies,
+        }),
         PluginSpec::Mover { name, commands, to } => Box::new(Mover {
             name,
             commands,
@@ -865,6 +892,49 @@ impl Plugin for Panic {
     ) -> Vec<String> {
         panic!("the test plugin {} panics in the command {name}", self.name);
     }
+
+    fn on_permission(
+        &mut self,
+        _uuid: &str,
+        node: &str,
+        _context: &mut Context<'_>,
+    ) -> Option<bool> {
+        assert!(
+            self.on != "permission",
+            "the test plugin {} panics on the permission {node}",
+            self.name
+        );
+        None
+    }
+}
+
+/// A test plugin that grants the nodes of `grants`, denies those of `denies` and leaves every
+/// other node to the next plugin.
+struct Grant {
+    name: String,
+    grants: Vec<String>,
+    denies: Vec<String>,
+}
+
+impl Plugin for Grant {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn on_permission(
+        &mut self,
+        _uuid: &str,
+        node: &str,
+        _context: &mut Context<'_>,
+    ) -> Option<bool> {
+        if self.grants.iter().any(|granted| granted == node) {
+            Some(true)
+        } else if self.denies.iter().any(|denied| denied == node) {
+            Some(false)
+        } else {
+            None
+        }
+    }
 }
 
 /// A test plugin that sleeps on the first events of one name.
@@ -985,6 +1055,10 @@ impl Handler for Panicking {
         _actions: &Actions,
     ) -> Vec<String> {
         panic!("the panicking handler panics in the command {name}");
+    }
+
+    fn permission(&mut self, _uuid: &str, node: &str, _actions: &Actions) -> Option<bool> {
+        panic!("the panicking handler panics on the permission {node}");
     }
 }
 

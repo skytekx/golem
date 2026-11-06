@@ -60,7 +60,12 @@ public final class Host {
 	public static native String[] commandNames();
 	public static native String[] command(String name, String senderUuid, String senderName,
 			int level, String arguments);
+	public static native int permission(String uuid, String node);
 	public static native String[] drain();
+
+	public static final int PERMISSION_TRUE = 1;
+	public static final int PERMISSION_FALSE = 0;
+	public static final int PERMISSION_NONE = -1;
 }
 ```
 
@@ -83,6 +88,7 @@ does not run, instead of failing on every event.
 | `respawn(uuid, name, dimension)` | On `PlayerRespawnEvent`, with the id of the dimension | None |
 | `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
 | `command(name, uuid, senderName, level, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
+| `permission(uuid, node)` | When a mod asks the PermissionAPI of Forge for a node of the type Boolean, on any thread | `PERMISSION_TRUE`, `PERMISSION_FALSE`, or `PERMISSION_NONE` for the default resolver of the node |
 | `drain()` | At the end of every server tick, after `tick` | The queued actions, oldest first |
 
 A UUID is in its usual form with dashes. A dimension is the id of its level, such as
@@ -128,6 +134,35 @@ whitespace cannot be typed as the first word of a command, so the mod skips it w
 When `command` throws, the sender reads that the command failed and the log of the
 server holds the exception.
 
+## Permissions
+
+Forge 47 asks one permission handler whether a player holds a node, when a mod calls
+`PermissionAPI.getPermission`. The mod offers the handler `golem:permissions` on
+`PermissionGatherEvent.Handler`, which Forge posts while the server starts, before
+`ServerStartingEvent`. Forge takes the handler that the key `permissionHandler` of the section
+`server` of `forge-server.toml` names, so a server under Golem must name it there:
+
+```toml
+[server]
+	permissionHandler = "golem:permissions"
+```
+
+`forge-server.toml` is a configuration of the world, in `world/serverconfig/`, and Forge copies it
+from `defaultconfigs/` of the server when a world has none, so a new world takes the handler from
+`defaultconfigs/forge-server.toml`. Without the key, or on a server whose mod is off, Forge uses its
+default handler `forge:default_handler` and logs that it could not find `golem:permissions`.
+
+| Node | What the handler answers |
+| --- | --- |
+| Type Boolean, the native answers `PERMISSION_TRUE` or `PERMISSION_FALSE` | That answer |
+| Type Boolean, the native answers anything else or throws | What the default resolver of the node answers, as under the default handler |
+| Another type: Integer, String or Component | What the default resolver of the node answers |
+
+The handler asks for an online player with `getPermission` and for an offline one with
+`getOfflinePermission`, both by the UUID, and the name of the node is that of `getNodeName()`,
+such as `forge.use_entity_selectors`, which Forge asks for a player below level 2 who uses a
+selector. Mods ask on any thread, so the native runs beside the server thread as well.
+
 ## Actions
 
 `drain()` answers each action as one string, its fields joined by the character U+001F, the unit
@@ -161,12 +196,13 @@ path is the same as an operator's at the console.
 ## The rules of the server thread
 
 - Every native method runs on the thread that calls it. That is the server thread for every
-  method of this page but three, as Forge 47.4.18 calls them and the notebook `05_bridge_build`
+  method of this page but four, as Forge 47.4.18 calls them and the notebook `05_bridge_build`
   records. `version()` runs on a thread of the mod loader, `modloading-worker-<n>`, while Forge
   constructs the mods. `commandNames()` runs on the main thread, `main`, when Forge builds the
   commands at the start, and on the server thread on a reload. `chat()` runs on a worker thread of
   Forge, `Worker-Main-<n>`, while the server thread goes on, since Forge fires `ServerChatEvent`
-  there.
+  there. `permission()` runs on the thread of the mod that asks Forge, which is the server thread
+  for the selectors of a command.
 - A handler in Rust answers before the event goes on, so it must be quick. The plugin runtime times
   every call against its budget.
 - Rust never touches game state from another thread. Whatever Rust wants done is an action. A

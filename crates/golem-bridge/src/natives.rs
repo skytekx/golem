@@ -53,7 +53,7 @@ const STRING_CLASS: &str = "java/lang/String";
 /// Every native method of the host class: its name, its descriptor and its function.
 ///
 /// The names and the descriptors are those of the host class in okf/bridge.md.
-fn table() -> [(&'static str, &'static str, *mut c_void); 14] {
+fn table() -> [(&'static str, &'static str, *mut c_void); 15] {
     [
         ("version", "()Ljava/lang/String;", version as *mut c_void),
         (
@@ -100,9 +100,19 @@ fn table() -> [(&'static str, &'static str, *mut c_void); 14] {
             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)[Ljava/lang/String;",
             command as *mut c_void,
         ),
+        (
+            "permission",
+            "(Ljava/lang/String;Ljava/lang/String;)I",
+            permission as *mut c_void,
+        ),
         ("drain", "()[Ljava/lang/String;", drain as *mut c_void),
     ]
 }
+
+/// The answers of the native permission, the constants of the same names of the host class.
+const PERMISSION_TRUE: jint = 1;
+const PERMISSION_FALSE: jint = 0;
+const PERMISSION_NONE: jint = -1;
 
 /// Answers the name and the descriptor of every native method that [`register`] registers.
 pub fn signatures() -> Vec<(&'static str, &'static str)> {
@@ -382,6 +392,28 @@ extern "system" fn command<'local>(
         );
         string_array(env, &lines)
     })
+}
+
+extern "system" fn permission<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    uuid: JString<'local>,
+    node: JString<'local>,
+) -> jint {
+    answer(
+        &mut env,
+        "permission",
+        |_| PERMISSION_NONE,
+        |env| {
+            let uuid = string(env, &uuid)?;
+            let node = string(env, &node)?;
+            Ok(match host::permission(uuid.as_deref(), node.as_deref()) {
+                Some(true) => PERMISSION_TRUE,
+                Some(false) => PERMISSION_FALSE,
+                None => PERMISSION_NONE,
+            })
+        },
+    )
 }
 
 extern "system" fn drain<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>) -> jobjectArray {

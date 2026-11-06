@@ -135,6 +135,17 @@ and every other sender by its level. A source that the mod passes wrong, a UUID 
 neither of them below level 4 or a level outside 0 to 4, is refused with an empty answer instead
 of running as the console, which may do more than any other source.
 
+## Permissions
+
+A mod that asks the PermissionAPI of Forge for a node of the type Boolean reaches the runtime
+through the native `permission`, as [Bridge](../bridge.md#permissions) says. The runtime asks the
+plugins in their order with `on_permission(uuid, node, context)`, and the first plugin that
+answers `Some` decides. A plugin that answers `None` leaves the node to the next one, and a
+plugin that panics is logged, counted and passed over. When no plugin answers, the node falls to
+its default resolver, which is what the default handler of Forge would answer. Every call is
+timed into the budget of its plugin, as a command is. Mods ask on any thread, so a plugin answers
+a permission from what it holds and never waits for the game.
+
 ## The context of a call
 
 A plugin never touches the game. It queues actions through its context, and the mod runs them on

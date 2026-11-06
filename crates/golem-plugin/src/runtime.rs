@@ -136,6 +136,8 @@ enum Call<'a> {
     Event(&'static str),
     /// A command, by its name.
     Command(&'a str),
+    /// A node of the `PermissionAPI` of Forge, by its name.
+    Permission(&'a str),
 }
 
 impl std::fmt::Display for Call<'_> {
@@ -143,6 +145,7 @@ impl std::fmt::Display for Call<'_> {
         match self {
             Self::Event(name) => write!(formatter, "the event {name}"),
             Self::Command(name) => write!(formatter, "the command {name}"),
+            Self::Permission(node) => write!(formatter, "the permission {node}"),
         }
     }
 }
@@ -161,6 +164,8 @@ struct Owner {
 /// [`Verdict::Cancel`]. Every other event reaches every plugin and passes, whatever they
 /// answer. A plugin that panics is logged and counted, and the chain goes on as if it passed.
 /// The first plugin that declares a command owns it, and the runtime routes the command to it.
+/// The first plugin that answers a permission decides it, and without one the node falls to
+/// its default resolver.
 pub struct Runtime {
     plugins: Vec<Slot>,
     commands: Vec<Owner>,
@@ -338,6 +343,15 @@ impl Handler for Runtime {
             vec![format!(
                 "The command {name} failed, and the log of the server holds the cause."
             )]
+        })
+    }
+
+    fn permission(&mut self, uuid: &str, node: &str, actions: &Actions) -> Option<bool> {
+        (0..self.plugins.len()).find_map(|index| {
+            self.call(index, Call::Permission(node), actions, |plugin, context| {
+                plugin.on_permission(uuid, node, context)
+            })
+            .flatten()
         })
     }
 }

@@ -185,4 +185,12 @@ pub trait Plugin: Send {
         let _ = (name, sender, arguments, context);
         Vec::new()
     }
+
+    /// Answers whether the player with `uuid` holds `node` of the `PermissionAPI` of Forge, such as
+    /// `forge.use_entity_selectors`, or `None` to let the next plugin decide. The default answers
+    /// `None`. Mods ask Forge on any thread, so this may run beside the server thread.
+    fn on_permission(&mut self, uuid: &str, node: &str, context: &mut Context<'_>) -> Option<bool> {
+        let _ = (uuid, node, context);
+        None
+    }
 }

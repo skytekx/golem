@@ -20,6 +20,18 @@ package com.skytekx.golem.host;
  * before it calls any of them.
  */
 public final class Host {
+	/** The answer of {@link #permission(String, String)} that grants the node. */
+	public static final int PERMISSION_TRUE = 1;
+
+	/** The answer of {@link #permission(String, String)} that denies the node. */
+	public static final int PERMISSION_FALSE = 0;
+
+	/**
+	 * The answer of {@link #permission(String, String)} that leaves the node to its default
+	 * resolver, as every answer but true and false does.
+	 */
+	public static final int PERMISSION_NONE = -1;
+
 	/** The answer of {@link #available()}, or null before its first call. */
 	private static Boolean available;
 
@@ -151,6 +163,15 @@ public final class Host {
 	 */
 	public static native String[] command(String name, String senderUuid, String senderName,
 			int level, String arguments);
+
+	/**
+	 * Asks the plugins whether a player holds a node of the PermissionAPI of Forge.
+	 *
+	 * @param uuid the UUID of the player in its usual form with dashes, online or not
+	 * @param node the name of the node, such as forge.use_entity_selectors
+	 * @return {@link #PERMISSION_TRUE}, {@link #PERMISSION_FALSE} or {@link #PERMISSION_NONE}
+	 */
+	public static native int permission(String uuid, String node);
 
 	/**
 	 * Answers the actions that Golem queued since the last call, oldest first.

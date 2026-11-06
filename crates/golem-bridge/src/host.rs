@@ -379,6 +379,23 @@ fn sender(uuid: Option<&str>, name: Option<&str>, level: i32, command: &str) -> 
     }
 }
 
+/// Answers whether the player with `uuid` holds the node of the `PermissionAPI` of Forge, or
+/// `None` for the default resolver of the node, which is also the pass value.
+pub fn permission(uuid: Option<&str>, node: Option<&str>) -> Option<bool> {
+    const NATIVE: &str = "permission";
+    guard(NATIVE, None, || {
+        let (Some(uuid), Some(node)) = (
+            required(NATIVE, "uuid", uuid),
+            required(NATIVE, "node", node),
+        ) else {
+            return None;
+        };
+        with_handler(NATIVE, None, |handler, actions| {
+            handler.permission(&uuid, &node, actions)
+        })
+    })
+}
+
 /// Takes every queued action, oldest first, each in its wire form.
 pub fn drain() -> Vec<String> {
     guard("drain", Vec::new(), || {

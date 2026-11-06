@@ -185,6 +185,15 @@ pub trait Handler: Send {
         arguments: &str,
         actions: &Actions,
     ) -> Vec<String>;
+
+    /// Answers whether the player with `uuid` holds `node` of the `PermissionAPI` of Forge, or
+    /// `None` to leave it to the default resolver of the node. The default answers `None`.
+    ///
+    /// Mods ask Forge on any thread, so this may run beside the server thread.
+    fn permission(&mut self, uuid: &str, node: &str, actions: &Actions) -> Option<bool> {
+        let _ = (uuid, node, actions);
+        None
+    }
 }
 
 /// Installs the handler that the native methods call, and answers the queue they drain.
