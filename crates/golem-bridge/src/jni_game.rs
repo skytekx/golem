@@ -6,21 +6,16 @@
  *
  * Each question runs in a local frame of its own, so a native that asks many questions leaves
  * no local reference behind, and converts the answer into Rust before the frame ends. A Java
- * exception that a question throws is printed and cleared here, so it never reaches the caller
- * of the native, and the question answers none. A question that fails, or an answer that does
- * not read, is logged the first time, the tenth, the hundredth and every further power of ten,
- * as the guard of the mod logs, so a plugin that asks on every tick cannot fill the log. The
- * safe wrapper of jni 0.21 covers every call here, so this module holds no unsafe code.
+ * exception or error that a question throws is taken and cleared here, so it never reaches the
+ * caller of the native, and the question answers none. A question that fails, or an answer that
+ * does not read, is logged the first time, the tenth, the hundredth and every further power of
+ * ten, as the guard of the mod logs, with the class and the message of what it threw, and its
+ * stack trace is printed for its first failure alone, so a plugin that asks on every tick
+ * cannot fill the log. The safe wrapper of jni 0.21 covers every call here, so this module holds
+ * no unsafe code.
  */
 
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    sync::{
-        Mutex,
-        PoisonError, //
-    }, //
-};
+use std::cell::RefCell;
 
 use jni::{
     JNIEnv,
@@ -29,6 +24,7 @@ use jni::{
         JObject,
         JObjectArray,
         JString,
+        JThrowable,
         JValue, //
     },
 };
@@ -42,6 +38,7 @@ use crate::{
     OnlinePlayer,
     SafePlace,
     Spawn,
+    Throttle,
     game::wire,
     log, //
 };
@@ -50,7 +47,7 @@ use crate::{
 const MAX_RADIUS: u32 = 8;
 
 /// How often each question failed, by the name of its method.
-static FAILURES: Mutex<Option<HashMap<&'static str, u64>>> = Mutex::new(None);
+static FAILURES: Throttle = Throttle::new();
 
 /// The game behind the object that the mod connected, asked with the `JNIEnv` of a native.
 pub(crate) struct JniGame<'a, 'local> {
@@ -85,8 +82,8 @@ impl<'a, 'local> JniGame<'a, 'local> {
         .flatten()
     }
 
-    /// Runs one question in a local frame of its own, and answers `None` with a line on the
-    /// log when it fails, after the exception it left is printed and cleared.
+    /// Runs one question in a local frame of its own, and answers `None` when it fails, after
+    /// the exception it left is taken and cleared and the failure is logged.
     fn ask<T>(
         &self,
         method: &'static str,
@@ -99,14 +96,77 @@ impl<'a, 'local> JniGame<'a, 'local> {
         match env.with_local_frame(8, |env| question(env, game)) {
             Ok(answer) => Some(answer),
             Err(error) => {
-                if env.exception_check().unwrap_or(false) {
-                    let _ = env.exception_describe();
-                    let _ = env.exception_clear();
-                }
-                throttled(method, format_args!("failed with \"{error}\""));
+                fault(&mut env, &FAILURES, method, &error, |count, fault| {
+                    log(format_args!(
+                        "the question {method} of the game {fault}, so it answers none, {count} times so far"
+                    ));
+                });
                 None
             }
         }
+    }
+}
+
+/// Takes and clears the exception that a failed call of the JNI left pending, so it never
+/// reaches the JVM, and counts the failure of `kind` in `throttle`.
+///
+/// When a line on the log is due, `report` gets the count and the fault: what the call threw,
+/// as `toString` of the throwable writes its class and message, or the error of the JNI when
+/// it threw nothing. The stack trace of the throwable is printed for the first failure of
+/// `kind` alone.
+pub(crate) fn fault(
+    env: &mut JNIEnv<'_>,
+    throttle: &Throttle,
+    kind: &'static str,
+    error: &jni::errors::Error,
+    report: impl FnOnce(u64, std::fmt::Arguments<'_>),
+) {
+    let thrown = take_exception(env);
+    if let Some(count) = throttle.count(kind) {
+        match &thrown {
+            Some(throwable) => {
+                let text = describe(env, throwable);
+                report(count, format_args!("threw {text}"));
+                if count == 1 {
+                    let _ = env.call_method(throwable, "printStackTrace", "()V", &[]);
+                    let _ = env.exception_clear();
+                }
+            }
+            None => report(count, format_args!("failed with \"{error}\"")),
+        }
+    }
+    if let Some(throwable) = thrown {
+        let _ = env.delete_local_ref(throwable);
+    }
+}
+
+/// Takes the pending exception and clears it, or answers `None` when none is pending.
+fn take_exception<'local>(env: &mut JNIEnv<'local>) -> Option<JThrowable<'local>> {
+    if !env.exception_check().unwrap_or(false) {
+        return None;
+    }
+    let throwable = env.exception_occurred().ok();
+    let _ = env.exception_clear();
+    throwable.filter(|throwable| !throwable.is_null())
+}
+
+/// Answers `toString` of a throwable, its class and its message, or its class alone when that
+/// throws as well.
+fn describe(env: &mut JNIEnv<'_>, throwable: &JThrowable<'_>) -> String {
+    let text = env
+        .call_method(throwable, "toString", "()Ljava/lang/String;", &[])
+        .and_then(jni::objects::JValueGen::l)
+        .and_then(|value| {
+            let value = JString::from(value);
+            let text = text(env, &value);
+            let _ = env.delete_local_ref(value);
+            text
+        });
+    if let Ok(Some(text)) = text {
+        text
+    } else {
+        let _ = env.exception_clear();
+        "a throwable whose toString fails".to_owned()
     }
 }
 
@@ -118,33 +178,14 @@ fn text(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Result<Option<String>> {
     Ok(Some(env.get_string(value)?.into()))
 }
 
-/// Logs a fault of the question `method` the first time, the tenth, the hundredth and every
-/// further power of ten.
-fn throttled(method: &'static str, fault: std::fmt::Arguments<'_>) {
-    let mut failures = FAILURES.lock().unwrap_or_else(PoisonError::into_inner);
-    let count = failures
-        .get_or_insert_with(HashMap::new)
-        .entry(method)
-        .or_insert(0);
-    *count += 1;
-    let mut rest = *count;
-    while rest.is_multiple_of(10) {
-        rest /= 10;
-    }
-    if rest == 1 {
+/// Logs an answer of the question `method` that does not read, at powers of ten, and answers
+/// `None`.
+fn unread<T>(method: &'static str, answer: &str) -> Option<T> {
+    if let Some(count) = FAILURES.count(method) {
         log(format_args!(
-            "the question {method} of the game {fault}, so it answers none, {} times so far",
-            *count
+            "the question {method} of the game answered {answer:?}, which does not read, so it answers none, {count} times so far"
         ));
     }
-}
-
-/// Logs an answer of the question `method` that does not read, and answers `None`.
-fn unread<T>(method: &'static str, answer: &str) -> Option<T> {
-    throttled(
-        method,
-        format_args!("answered {answer:?}, which does not read"),
-    );
     None
 }
 

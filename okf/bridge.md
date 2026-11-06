@@ -208,10 +208,13 @@ Every implementation reaches the handler behind the guard `ServerThread` of `gol
 The server thread is the thread of the first `serverStarting()`, and a question on any other
 thread, such as from a handler of `chat()`, answers none without asking the mod. The first such
 question of the process is logged. A question runs in a local frame of its own, so a native that
-asks many questions leaves no local reference behind. A Java exception that a question throws is
-printed and cleared, so it never crosses into the caller of the native, and the question answers
-none. A question that fails and an answer that does not read are logged the first time, the
-tenth, the hundredth and every further power of ten. The object of the mod checks the thread a
+asks many questions leaves no local reference behind. A Java exception or error that a question
+throws, such as a `StackOverflowError` of a listener of a mod, is taken and cleared, so it never
+crosses into the caller of the native, and the question answers none. A question that fails and
+an answer that does not read are logged the first time, the tenth, the hundredth and every
+further power of ten, with the class and the message of what the question threw, and the stack
+trace of a question is printed for its first failure alone. A native whose own call of the JNI
+fails is logged the same way. The object of the mod checks the thread a
 second time with `isSameThread` of the server and answers null on any other thread, so the game is
 read on its own thread alone, whatever Golem does.
 

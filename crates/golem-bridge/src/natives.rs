@@ -52,13 +52,20 @@ use crate::{
     HOST_CLASS,
     Location,
     NoGame,
+    Throttle,
     host,
-    jni_game::JniGame,
+    jni_game::{
+        self,
+        JniGame, //
+    },
     log, //
 };
 
 /// The object of the interface Game that the mod connected, which the natives ask.
 static GAME: Mutex<Option<GlobalRef>> = Mutex::new(None);
+
+/// How often each native failed in the JNI, by its name.
+static FAILURES: Throttle = Throttle::new();
 
 /// The class of the elements of every array the natives answer.
 const STRING_CLASS: &str = "java/lang/String";
@@ -142,8 +149,8 @@ pub fn signatures() -> Vec<(&'static str, &'static str)> {
 
 /// Registers every native method on the host class, which `FindClass` looks up.
 ///
-/// On an error the pending exception of the JVM is printed and cleared, so the caller may go
-/// on with the JVM.
+/// On an error the pending exception of the JVM is printed with its stack trace and cleared,
+/// so the caller may go on with the JVM.
 pub fn register(env: &mut JNIEnv<'_>) -> Result<()> {
     let methods: Vec<NativeMethod> = table()
         .into_iter()
@@ -154,40 +161,48 @@ pub fn register(env: &mut JNIEnv<'_>) -> Result<()> {
         })
         .collect();
     let registered = env.register_native_methods(HOST_CLASS, &methods);
-    if registered.is_err() {
-        clear_exception(env);
+    if let Err(error) = &registered {
+        jni_game::fault(env, &FAILURES, "register", error, |_, fault| {
+            log(format_args!("RegisterNatives {fault}"));
+        });
     }
     registered
 }
 
 /// Runs the body of a native and answers its value, or the pass value on a fault.
 ///
-/// A panic and an error of the JNI are logged with the name of the native, the exception they
-/// may have left pending is cleared, and `pass` makes the answer the contract names for a pass.
+/// An error of the JNI is logged with the name of the native and what it threw at powers of ten,
+/// with the stack trace of its first failure alone, and the exception it left pending is
+/// cleared. A panic is logged each time. `pass` makes the answer the contract names for a pass.
 fn answer<'local, T>(
     env: &mut JNIEnv<'local>,
-    native: &str,
+    native: &'static str,
     pass: fn(&mut JNIEnv<'local>) -> T,
     body: impl FnOnce(&mut JNIEnv<'local>) -> Result<T>,
 ) -> T {
     match panic::catch_unwind(AssertUnwindSafe(|| body(env))) {
         Ok(Ok(value)) => return value,
-        Ok(Err(error)) => log(format_args!(
-            "the native {native} failed in the JNI with \"{error}\", so it answers the pass value"
-        )),
-        Err(payload) => log(format_args!(
-            "the native {native} panicked with \"{}\", so it answers the pass value",
-            host::panic_message(payload.as_ref())
-        )),
+        Ok(Err(error)) => {
+            jni_game::fault(env, &FAILURES, native, &error, |count, fault| {
+                log(format_args!(
+                    "the native {native} {fault} in the JNI, so it answers the pass value, {count} times so far"
+                ));
+            });
+        }
+        Err(payload) => {
+            log(format_args!(
+                "the native {native} panicked with \"{}\", so it answers the pass value",
+                host::panic_message(payload.as_ref())
+            ));
+            clear_exception(env);
+        }
     }
-    clear_exception(env);
     pass(env)
 }
 
-/// Prints and clears the exception that a failed call of the JNI left pending, if any.
+/// Clears the exception that a failed call of the JNI left pending, if any.
 fn clear_exception(env: &mut JNIEnv<'_>) {
     if env.exception_check().unwrap_or(false) {
-        let _ = env.exception_describe();
         let _ = env.exception_clear();
     }
 }
