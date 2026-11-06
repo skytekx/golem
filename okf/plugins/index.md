@@ -19,8 +19,13 @@ server thread holds up the tick.
 Forge 47 calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, as
 the bridge page says. The handler sits behind one lock, so the runtime still runs one call at a
 time: a call of another thread waits until the call before it ends, and a chat message that
-arrives during a tick reaches the plugins after it. A call of a native from inside the handler
-answers its pass value at once with a line on the log, since it would wait for itself.
+arrives during a tick reaches the plugins after it. Once the server thread is known, a call of
+another thread waits at most one second, `golem_bridge::host::OFF_THREAD_WAIT`, and then answers
+its pass value, so the chat message passes unseen and a permission falls to its default resolver,
+with a line on the log at powers of ten. A question of the server thread may wait for a worker of
+the server, which may be the thread of that chat message, and a wait without end would keep both
+waiting. A call of a native from inside the handler answers its pass value at once with a line on
+the log, since it would wait for itself.
 
 | Part | Where | What it is |
 | --- | --- | --- |
@@ -227,6 +232,7 @@ server, behind the prefix `[golem]`.
 | `the plugin <p> declares the command <c>, which the plugin <o> owns, so the runtime ignores it` | A duplicate command |
 | `the native <n> panicked with "<message>", so it answers the pass value` | A panic that reached a native |
 | `the native <n> got null for <field>, so it answers the pass value` | A null where the contract names a string |
+| `the native <n> waited 1000 ms for the handler, which another call holds, so it answers the pass value, <count> times so far` | A call of another thread than the server thread that found the handler taken for a second, at powers of ten |
 
 ## Tests
 

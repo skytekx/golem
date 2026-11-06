@@ -264,3 +264,33 @@ pub fn log(message: std::fmt::Arguments<'_>) {
 
     let _ = writeln!(std::io::stderr().lock(), "[golem] {message}");
 }
+
+/// Counts the faults of each kind, so that a fault that repeats, such as on every tick, is
+/// logged the first time, the tenth, the hundredth and at every further power of ten, as the
+/// guard of the mod logs.
+pub(crate) struct Throttle(std::sync::Mutex<Option<std::collections::HashMap<&'static str, u64>>>);
+
+impl Throttle {
+    /// A throttle that has counted nothing.
+    pub(crate) const fn new() -> Self {
+        Self(std::sync::Mutex::new(None))
+    }
+
+    /// Counts one more fault of `kind`, and answers the count when a line on the log is due.
+    pub(crate) fn count(&self, kind: &'static str) -> Option<u64> {
+        let mut counts = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let count = counts
+            .get_or_insert_with(std::collections::HashMap::new)
+            .entry(kind)
+            .or_insert(0);
+        *count += 1;
+        let mut rest = *count;
+        while rest.is_multiple_of(10) {
+            rest /= 10;
+        }
+        (rest == 1).then_some(*count)
+    }
+}

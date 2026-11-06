@@ -19,11 +19,16 @@
 //! and a null `arguments` reads as the empty string.
 //!
 //! The handler sits behind a lock. The server thread takes it for most natives, but Forge 47
-//! calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, so a
-//! call that finds the lock taken by another thread waits for it, which takes no longer than one
-//! call of the handler. A call from inside the handler itself, on the thread that holds the
-//! lock, answers the pass value at once, since it would wait for itself forever, and the log
-//! names the first such call of each native.
+//! calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, and
+//! mods call `permission()` on any thread. The server thread waits for the lock as long as the
+//! call of another thread runs, which never waits for the server thread, since the game answers
+//! none off the server thread. A call of another thread waits at most [`OFF_THREAD_WAIT`] once
+//! the server thread is known, and then answers the pass value with a line on the log at powers
+//! of ten: a question of the server thread may wait for a worker of the server, such as the one
+//! that runs the chat message, and a wait without end would keep both waiting. A call from
+//! inside the handler itself, on the thread that holds the lock, answers the pass value at once,
+//! since it would wait for itself forever, and the log names the first such call of each
+//! native.
 //!
 //! Every function that calls the handler takes the game that the native may ask, and hands the
 //! handler that game behind [`ServerThread`], which answers none off the server thread. The
@@ -39,8 +44,10 @@ use std::{
     },
     sync::{
         Mutex,
+        MutexGuard,
         OnceLock,
         PoisonError,
+        TryLockError,
         atomic::{
             AtomicBool,
             Ordering, //
@@ -50,7 +57,10 @@ use std::{
         self,
         ThreadId, //
     },
-    time::Instant, //
+    time::{
+        Duration,
+        Instant, //
+    }, //
 };
 
 use crate::{
@@ -70,6 +80,7 @@ use crate::{
     SafePlace,
     Sender,
     Spawn,
+    Throttle,
     TickStats,
     TickWindow,
     Verdict,
@@ -79,10 +90,17 @@ use crate::{
 /// The version of Golem that `version()` answers.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// How long a call of another thread than the server thread waits for the handler before it
+/// answers the pass value.
+pub const OFF_THREAD_WAIT: Duration = Duration::from_secs(1);
+
+/// The place of the handler that [`install`] fills.
+type Slot = Option<Box<dyn Handler>>;
+
 /// What the native methods share: the handler, the queue of actions and the ticks.
 #[derive(Default)]
 struct Host {
-    handler: Mutex<Option<Box<dyn Handler>>>,
+    handler: Mutex<Slot>,
     actions: Actions,
     ticks: Mutex<TickWindow>,
 }
@@ -101,6 +119,9 @@ static OFF_THREAD_LOGGED: AtomicBool = AtomicBool::new(false);
 
 /// The natives whose call from inside the handler was already logged.
 static REENTRY_LOGGED: Mutex<Option<HashSet<&'static str>>> = Mutex::new(None);
+
+/// The calls of other threads that waited for the handler in vain, by their native.
+static WAITED: Throttle = Throttle::new();
 
 thread_local! {
     /// True while the handler runs on this thread, which tells a call from inside the handler
@@ -536,10 +557,12 @@ fn dispatch(native: &'static str, event: &Event, game: &dyn Game) -> Verdict {
     })
 }
 
-/// Calls the handler with the queue, or answers `pass` without a handler or from inside it.
+/// Calls the handler with the queue, or answers `pass` without a handler, from inside it, or
+/// when the handler stays taken.
 ///
 /// A call of another thread waits until the handler is free, so a chat message that arrives
-/// on a worker thread while a tick runs on the server thread still reaches the plugins.
+/// on a worker thread while a tick runs on the server thread still reaches the plugins, but at
+/// most [`OFF_THREAD_WAIT`] once the server thread is known.
 fn with_handler<T>(
     native: &'static str,
     pass: T,
@@ -558,12 +581,47 @@ fn with_handler<T>(
         return pass;
     }
     let host = host();
-    let mut slot = host.handler.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(mut slot) = lock_handler(native, host) else {
+        return pass;
+    };
     let Some(handler) = slot.as_deref_mut() else {
         return pass;
     };
     let _inside = Inside::enter();
     call(handler, &host.actions, &ServerThread(game))
+}
+
+/// Takes the lock of the handler for a call of `native`: at once or after the call that holds it
+/// on the server thread and before the server thread is known, and within [`OFF_THREAD_WAIT`]
+/// on any other thread, else `None` with a line on the log at powers of ten.
+fn lock_handler(native: &'static str, host: &'static Host) -> Option<MutexGuard<'static, Slot>> {
+    if SERVER_THREAD
+        .get()
+        .is_none_or(|server| *server == thread::current().id())
+    {
+        return Some(host.handler.lock().unwrap_or_else(PoisonError::into_inner));
+    }
+    let deadline = Instant::now() + OFF_THREAD_WAIT;
+    let mut pause = Duration::from_micros(50);
+    loop {
+        match host.handler.try_lock() {
+            Ok(slot) => return Some(slot),
+            Err(TryLockError::Poisoned(poisoned)) => return Some(poisoned.into_inner()),
+            Err(TryLockError::WouldBlock) => {}
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            if let Some(count) = WAITED.count(native) {
+                log(format_args!(
+                    "the native {native} waited {} ms for the handler, which another call holds, so it answers the pass value, {count} times so far",
+                    OFF_THREAD_WAIT.as_millis()
+                ));
+            }
+            return None;
+        }
+        thread::sleep(pause.min(deadline - now));
+        pause = (pause * 2).min(Duration::from_millis(1));
+    }
 }
 
 /// Answers the string of a field that the contract names, or logs its absence.

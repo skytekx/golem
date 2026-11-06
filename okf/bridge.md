@@ -286,6 +286,11 @@ path is the same as an operator's at the console.
   the server thread for the selectors of a command.
 - A handler in Rust answers before the event goes on, so it must be quick. The plugin runtime times
   every call against its budget.
+- The handler runs one call at a time. The server thread waits for a call of another thread as
+  long as it runs, since such a call gets no answer from the game and so never waits for the
+  server thread. A call of another thread waits at most one second for a call of the server
+  thread, and then answers what a pass would answer, since a question of the server thread may
+  wait for a worker of the server, such as the one that runs a chat message.
 - Rust never touches game state from another thread. Whatever Rust wants done is an action, and
   it reads the game only through `Game` while a native of the server thread runs. A handler of
   `chat()` runs beside the server thread, so it must be thread safe and may only answer and queue
