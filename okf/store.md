@@ -67,13 +67,23 @@ players.
 | Call | Thread | Waits for the disk |
 | --- | --- | --- |
 | Every read, such as `player`, `home`, `balance` or `permissions` | Any, the server thread first | No |
-| Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No |
+| Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No, but it waits for the writer behind `MAX_PENDING` changes |
 | `flush`, `close`, `check`, `ledger`, `durability` | Not the server thread | Yes |
 | `open` | The start of the program, before the server thread runs | Yes |
 
 `Store` is a handle that clones, so every plugin holds one, and it is `Send` and `Sync`. The lock
 of the cache is held for the length of one call and never while the writer works, so a call of
-the server thread never waits for the writer.
+the server thread never waits for the writer, with one exception.
+
+At most `MAX_PENDING`, 16384 changes or four batches, wait for the writer. A change that finds that
+many pending waits until the writer took its next batch, before it takes the lock of the cache, so
+every read and every other thread goes on meanwhile. So a thread that changes the store faster
+than the writer commits, such as a plugin in a loop or an import, goes at the pace of the writer,
+and the memory of the queue and the lag of the file stay bounded. The first such wait of a store
+logs `[golem] store: the writer of <path> is 16384 changes behind, so a change waits until it takes
+the next batch`, and `stats()` counts the waits and the most changes that were pending at once,
+which stays at `MAX_PENDING` or below while one thread at a time changes the store. On the server
+thread such a wait costs a tick, and only a burst of more than 16384 changes meets it.
 
 `check` copies the cache under that lock, so that it compares the file with the cache as the call
 found it, and every other call waits for that copy. Every table of the cache sits behind an `Arc`,
@@ -99,7 +109,7 @@ What this gives:
 
 - A change is in the file and synced once `flush` or `close` answers. Between a change and its
   commit lies the lag of the writer, which is one commit for a change now and then and longer
-  for a burst of thousands.
+  for a burst of thousands, at most the 16384 changes of `MAX_PENDING`.
 - A crash of the process or a kill at any moment, and a loss of power, which the sync of every
   commit covers as SQLite documents for WAL with `FULL`, leave the file with every change up to
   some point and none after it, in the order the store took them. At worst it misses the last
@@ -434,8 +444,9 @@ until the next change.
 | `Store::open(path)` | Opens or creates the file, migrates it, loads the cache, starts the writer |
 | `flush()` | Waits until every change before it is in the file and synced |
 | `close()` | Writes, checkpoints and closes the file and ends the writer, and every later close answers as the first |
-| `stats()` | The changes queued, written, lost and pending, the batches and the time of the writer |
+| `stats()` | The changes queued, written, lost and pending, the batches, the time of the writer, the changes that waited for room and the most changes that were pending at once. A change is pending once the store took it and until the writer wrote or dropped it |
 | `MAX_BATCH` | 4096, the most changes in one transaction of the writer |
+| `MAX_PENDING` | 16384, the most changes that wait for the writer before a change waits for room |
 | `durability()` | The settings of the table of [Durability](#durability) as the connection of the writer reports them, read through the writer |
 | `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache as the call found it, which a change of another thread during the check does not disturb |
 | `describe(path)` | The schema of a file that no process holds, as SQLite reports it. As every reader of SQLite it may leave the files `-wal` and `-shm` beside the store |

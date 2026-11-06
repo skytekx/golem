@@ -51,7 +51,7 @@
 //! | Call | Where | Waits for the disk |
 //! | --- | --- | --- |
 //! | Every read, such as [`Store::player`] and [`Store::balance`] | Any thread, the server thread first | No |
-//! | Every change, such as [`Store::set_home`] and [`Store::transfer`] | Any thread, the server thread first | No |
+//! | Every change, such as [`Store::set_home`] and [`Store::transfer`] | Any thread, the server thread first | No, but it waits for the writer behind [`MAX_PENDING`] changes |
 //! | [`Store::flush`], [`Store::close`], [`Store::check`], [`Store::ledger`], [`Store::durability`] | Not the server thread | Yes |
 //! | [`Store::open`] | The start of the program, before the server thread runs | Yes |
 //!
@@ -104,7 +104,10 @@ pub use crate::{
         Stats,
         Store, //
     },
-    writer::MAX_BATCH,
+    writer::{
+        MAX_BATCH,
+        MAX_PENDING, //
+    },
 };
 
 /// The version of `SQLite` that the store runs, the amalgamation that `libsqlite3-sys` bundles.

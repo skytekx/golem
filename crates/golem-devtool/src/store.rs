@@ -369,6 +369,8 @@ fn stats_json(stats: &Stats) -> Value {
         "batches": stats.batches,
         "largest_batch": stats.largest_batch,
         "busy_nanos": stats.busy_nanos,
+        "waits": stats.waits,
+        "largest_pending": stats.largest_pending,
         "failure": stats.failure,
         "closed": stats.closed,
     })
@@ -1462,7 +1464,14 @@ const CALLS: &[(&str, fn(&Store, &Round))] = &[
 ];
 
 /// Times `repeat` calls of every kind, each call on its own, and answers the summary of each.
-fn time_calls(store: &Store, players: usize, repeat: usize) -> BTreeMap<&'static str, Value> {
+///
+/// The bench flushes after each kind, so a kind of up to `MAX_PENDING` changes never waits for
+/// the writer behind the changes of the kinds before it, and each time is the cost of the call.
+fn time_calls(
+    store: &Store,
+    players: usize,
+    repeat: usize,
+) -> Result<BTreeMap<&'static str, Value>, StoreError> {
     let mut summaries = BTreeMap::new();
     for &(name, call) in CALLS {
         let mut nanos = Vec::with_capacity(repeat);
@@ -1478,8 +1487,9 @@ fn time_calls(store: &Store, players: usize, repeat: usize) -> BTreeMap<&'static
             nanos.push(u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
         }
         summaries.insert(name, summary(nanos));
+        store.flush()?;
     }
-    summaries
+    Ok(summaries)
 }
 
 /// Runs `work` while a second thread reads a balance in a loop, as the server thread would, and
@@ -1570,7 +1580,7 @@ fn bench(arguments: &[String]) -> i32 {
         let open = started.elapsed();
         let resident = resident_kib();
         let before = store.stats();
-        let calls = time_calls(&store, options.players, options.repeat);
+        let calls = time_calls(&store, options.players, options.repeat)?;
         let started = Instant::now();
         store.flush()?;
         let flush = started.elapsed();

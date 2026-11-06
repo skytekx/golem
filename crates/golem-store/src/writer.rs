@@ -19,7 +19,7 @@
 
 use std::{
     sync::{
-        Arc, Mutex,
+        Arc, Condvar, Mutex, PoisonError,
         atomic::{
             AtomicBool,
             AtomicU64,
@@ -56,6 +56,11 @@ use crate::{
 
 /// The most operations the writer applies in one transaction.
 pub const MAX_BATCH: usize = 4096;
+
+/// The most changes that wait for the writer, four batches. A change that finds this many waits
+/// until the writer took its next batch, so the memory of the queue and the lag of the file stay
+/// bounded however fast a thread changes the store.
+pub const MAX_PENDING: u64 = 4 * MAX_BATCH as u64;
 
 /// One change of the store, which the writer applies as one unit.
 #[derive(Debug)]
@@ -146,6 +151,16 @@ pub struct Shared {
     pub failed: AtomicBool,
     /// Why the writer failed.
     pub failure: Mutex<Option<String>>,
+    /// The changes that waited because [`MAX_PENDING`] changes were pending.
+    pub waits: AtomicU64,
+    /// The most changes that were pending at once.
+    pub largest_pending: AtomicU64,
+    /// Set once the thread of the writer left its loop, also on a panic.
+    pub ended: AtomicBool,
+    /// The lock of [`Shared::room`], which a change that waits for room holds while it looks.
+    pub room_lock: Mutex<()>,
+    /// Wakes the changes that wait for room, once the writer took a batch or ended.
+    pub room: Condvar,
 }
 
 impl Shared {
@@ -174,14 +189,64 @@ impl Shared {
         self.failed.store(true, Ordering::Release);
     }
 
+    /// The changes the store took that the writer has neither written nor dropped yet.
+    pub fn pending(&self) -> u64 {
+        let queued = self.queued.load(Ordering::Acquire);
+        let done = self.written.load(Ordering::Acquire) + self.lost.load(Ordering::Acquire);
+        queued.saturating_sub(done)
+    }
+
+    /// Waits until fewer than [`MAX_PENDING`] changes are pending, the writer ended or it
+    /// failed, and answers whether the call waited for the writer.
+    pub fn wait_for_room(&self) -> bool {
+        if self.pending() < MAX_PENDING {
+            return false;
+        }
+        let mut lock = self
+            .room_lock
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut waited = false;
+        while self.pending() >= MAX_PENDING
+            && !self.ended.load(Ordering::Acquire)
+            && !self.failed.load(Ordering::Acquire)
+        {
+            lock = self.room.wait(lock).unwrap_or_else(PoisonError::into_inner);
+            waited = true;
+        }
+        waited
+    }
+
+    /// Wakes the changes that wait for room. The writer counts what it wrote or dropped before,
+    /// and the lock keeps a change from missing the wake between its look and its wait.
+    fn free_room(&self) {
+        let _lock = self
+            .room_lock
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        self.room.notify_all();
+    }
+
     fn outcome(&self) -> Result<(), StoreError> {
         self.failure()
             .map_or(Ok(()), |reason| Err(StoreError::Failed(reason)))
     }
 }
 
+/// Marks the writer as ended when its thread leaves [`run`], also on a panic, and wakes every
+/// change that waits for room, so none waits for a writer that is gone.
+struct Ended<'a>(&'a Shared);
+
+impl Drop for Ended<'_> {
+    fn drop(&mut self) {
+        self.0.ended.store(true, Ordering::Release);
+        self.0.free_room();
+    }
+}
+
 /// The loop of the writer thread, until a stop or until every sender is gone.
 pub fn run(mut connection: Connection, messages: &Receiver<Message>, shared: &Arc<Shared>) {
+    let _ended = Ended(shared);
     let mut batch = Vec::new();
     loop {
         let Ok(first) = messages.recv() else {
@@ -204,6 +269,7 @@ pub fn run(mut connection: Connection, messages: &Receiver<Message>, shared: &Ar
         }
         if !batch.is_empty() {
             apply(&mut connection, &mut batch, shared);
+            shared.free_room();
         }
         match control {
             None => {}

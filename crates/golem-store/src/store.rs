@@ -22,7 +22,10 @@ use std::{
     },
     sync::{
         Arc, Condvar, Mutex, MutexGuard, PoisonError,
-        atomic::Ordering,
+        atomic::{
+            AtomicBool,
+            Ordering, //
+        },
         mpsc::{
             self,
             Sender, //
@@ -66,6 +69,7 @@ use crate::{
     },
     writer::{
         self,
+        MAX_PENDING,
         Message,
         Op,
         Shared, //
@@ -90,7 +94,8 @@ pub struct Stats {
     pub written: u64,
     /// The changes the writer dropped after a failure.
     pub lost: u64,
-    /// The changes on their way to the file.
+    /// The changes on their way to the file: taken by the store and neither written nor dropped
+    /// by the writer yet.
     pub pending: u64,
     /// The transactions the writer committed.
     pub batches: u64,
@@ -98,6 +103,11 @@ pub struct Stats {
     pub largest_batch: u64,
     /// The time the writer spent applying and committing, in nanoseconds.
     pub busy_nanos: u64,
+    /// The changes that waited because [`MAX_PENDING`] changes were pending.
+    pub waits: u64,
+    /// The most changes that were pending at once, which stays at [`MAX_PENDING`] or below while
+    /// one thread at a time changes the store.
+    pub largest_pending: u64,
     /// Why the writer failed, if it did.
     pub failure: Option<String>,
     /// Whether the store is closed.
@@ -167,6 +177,8 @@ struct Inner {
     writer: Mutex<Option<JoinHandle<()>>>,
     /// The answer of the close once the writer ended, which every close answers.
     outcome: Mutex<Option<Result<(), StoreError>>>,
+    /// Whether the store logged that a change waited for the writer, which it logs once.
+    warned: AtomicBool,
     /// Wakes the closes that wait for the one that stops the writer.
     ended: Condvar,
 }
@@ -308,6 +320,7 @@ impl Store {
                 shared,
                 writer: Mutex::new(Some(handle)),
                 outcome: Mutex::new(None),
+                warned: AtomicBool::new(false),
                 ended: Condvar::new(),
             }),
         })
@@ -329,10 +342,24 @@ impl Store {
 
     /// Runs a change: `change` checks its rules and changes the cache, or refuses and leaves it
     /// as it is, and its operation goes to the writer under the same lock.
+    ///
+    /// A change that finds [`MAX_PENDING`] changes pending first waits until the writer took its
+    /// next batch, before it takes the lock of the cache, so every read goes on meanwhile.
     fn change<T>(
         &self,
         change: impl FnOnce(&mut Cache) -> Result<(T, Option<Op>), Refusal>,
     ) -> Result<T, StoreError> {
+        let shared = &self.inner.shared;
+        if shared.wait_for_room() {
+            shared.waits.fetch_add(1, Ordering::Relaxed);
+            if !self.inner.warned.swap(true, Ordering::Relaxed) {
+                crate::log(format_args!(
+                    "the writer of {} is {MAX_PENDING} changes behind, so a change waits until it \
+                     takes the next batch",
+                    self.inner.path.display()
+                ));
+            }
+        }
         let mut state = self.lock();
         if state.sender.is_none() {
             return Err(StoreError::Closed);
@@ -342,7 +369,6 @@ impl Store {
         }
         let (value, op) = change(&mut state.cache)?;
         if let Some(op) = op {
-            let shared = &self.inner.shared;
             let sent = state
                 .sender
                 .as_ref()
@@ -356,7 +382,10 @@ impl Store {
                     .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason.clone());
                 return Err(StoreError::Failed(reason));
             }
-            shared.queued.fetch_add(1, Ordering::Relaxed);
+            shared.queued.fetch_add(1, Ordering::Release);
+            shared
+                .largest_pending
+                .fetch_max(shared.pending(), Ordering::Relaxed);
         }
         Ok(value)
     }
@@ -427,6 +456,8 @@ impl Store {
             batches: shared.batches.load(Ordering::Relaxed),
             largest_batch: shared.largest_batch.load(Ordering::Relaxed),
             busy_nanos: shared.busy_nanos.load(Ordering::Relaxed),
+            waits: shared.waits.load(Ordering::Relaxed),
+            largest_pending: shared.largest_pending.load(Ordering::Relaxed),
             failure: shared.failure(),
             closed: self.lock().sender.is_none(),
         }
