@@ -25,6 +25,10 @@ entries:
   - notebook: 02_commit_lint
     cell_timeout: 300
 
+  # The JVM host of Golem, argument by argument, held against the java launcher of Temurin 17.
+  - notebook: 03_launch_args
+    cell_timeout: 1200
+
   # The plugin runtime and the natives of the bridge, through golem-devtool and without a JVM.
   - notebook: 04_plugins
     cell_timeout: 1800
