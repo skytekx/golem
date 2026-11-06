@@ -131,10 +131,16 @@ The four ERROR lines are the same under the first three boots: the client mixin 
 Nostalgic Tweaks, the reflection of AllTheLeaks into Citadel, and the network registry of Forge,
 which lists the channels that turn away the vanilla client of the notebook. The fourth boot lacks
 the line of Nostalgic Tweaks, whose backup the boot before it left. Without the vanilla client and
-without Nostalgic Tweaks, which the live server moved out, the baseline of the server wiki
-remains: the line of AllTheLeaks, and on the live server the warning of EssentialsX about the
-hybrid. A first boot writes 1,705 WARN lines of the configuration of Forge, which fills in new
-files, and the fourth boot, on a world that exists, writes none of them.
+without Nostalgic Tweaks, which the live server moved out, the baseline of the server wiki remains:
+the line of AllTheLeaks, and on the live server the warning of EssentialsX about the hybrid. A first
+boot writes 1,705 WARN lines of the configuration of Forge, which fills in new files. The fourth
+boot starts on the files that the third left, and Forge still corrects `ticex-common.toml` there
+with two of those lines, as it does at every start of the live server: TiCEX defines
+`avaritia.condensingDropProbability` with a default of the type Float, the parser of TOML reads the
+0.003 of the file back as a Double, which the check of `define` refuses, so Forge logs that the file
+is not correct and corrects the key from 0.003 to its default, 0.003, and writes the same value
+again. The pack can fix it with a rule of `tools/patch_mods.py` that makes the default a Double, or
+TiCEX upstream.
 
 Golem reached `Done` before java in all six pairs of boots of the day: 128 against 156 seconds in
 the last run of the notebook, 137 against 206, 158 against 180 and 125 against 150 in the runs
