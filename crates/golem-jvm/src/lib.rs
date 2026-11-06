@@ -199,3 +199,13 @@ where
 {
     invocation::run(java_home, spec, register)
 }
+
+/// Answers whether the signal of number `signal` was ignored when the process started, as
+/// `nohup` leaves `SIGHUP`.
+///
+/// The JVM installs no handler of its own for a shutdown signal that is ignored, so a server that
+/// the java launcher starts under nohup keeps running on a hangup. The host asks this before it
+/// watches the shutdown signals itself, so that it keeps the same rule.
+pub fn signal_ignored(signal: i32) -> bool {
+    invocation::signal_ignored(signal)
+}

@@ -215,6 +215,19 @@ fn release_fault_signals() {
     }
 }
 
+/// Answers whether `signal` was ignored when the process started, as `nohup` leaves `SIGHUP`.
+///
+/// The JVM installs no handler of its own for a shutdown signal that is ignored, so a JVM under
+/// nohup keeps running on a hangup, and the host follows it.
+pub(crate) fn signal_ignored(signal: i32) -> bool {
+    let mut current = std::mem::MaybeUninit::<libc::sigaction>::zeroed();
+    // SAFETY: A null new action makes sigaction only write the current one into `current`, which
+    // is valid memory for one struct sigaction.
+    let read = unsafe { libc::sigaction(signal, ptr::null(), current.as_mut_ptr()) };
+    // SAFETY: sigaction answered 0, so it wrote the whole struct.
+    read == 0 && unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN
+}
+
 fn create_vm(
     create: CreateJavaVm,
     options: &[CString],

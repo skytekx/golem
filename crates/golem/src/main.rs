@@ -324,7 +324,20 @@ fn watch_signals(actions: Actions) -> Result<(), String> {
         SIGTERM, //
     };
 
-    let mut signals = signal_hook::iterator::Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT])
+    // A shutdown signal that the process started with ignored stays ignored, as HotSpot leaves
+    // it, so a server under nohup keeps running on a hangup.
+    let mut watched = vec![SIGQUIT];
+    for signal in [SIGINT, SIGTERM, SIGHUP] {
+        if golem_jvm::signal_ignored(signal) {
+            let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
+            log(format_args!(
+                "{name} is ignored, as the process started with it ignored, so it does not stop the server"
+            ));
+        } else {
+            watched.push(signal);
+        }
+    }
+    let mut signals = signal_hook::iterator::Signals::new(watched)
         .map_err(|error| format!("could not watch the signals: {error}"))?;
     std::thread::Builder::new()
         .name("golem-signals".to_owned())

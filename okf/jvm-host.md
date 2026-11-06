@@ -222,6 +222,9 @@ queue at the end of the next server tick and runs both commands as the console, 
 same as the one of an operator. A signal during the load of the worlds waits for the first tick. A
 later signal logs that the stop is already queued and changes nothing.
 
+A shutdown signal that golem started with ignored stays ignored, as HotSpot leaves it, so a server
+under `nohup` keeps running on a hangup, and golem logs that at the start.
+
 `SIGQUIT` stops nothing. The JVM prints the dump of every thread on it, but `-Xrs` takes that
 signal from the JVM too, and its default action would end the process without saving. So the thread
 `golem-signals` takes it as well and prints the dump on standard output itself, from the operation
