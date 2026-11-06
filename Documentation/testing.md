@@ -27,7 +27,7 @@ The harness runs in an environment of its own under `tests/.venv`, which git ign
 ```
 python3 -m venv tests/.venv
 tests/.venv/bin/python -m pip install papermill==2.7.0 nbclient==0.11.0 nbformat==5.11.1 \
-    ipykernel==7.3.0 jupyter_client==8.10.0 pyyaml==6.0.3 reuse==6.3.0
+    ipykernel==7.3.0 jupyter_client==8.10.0 pyyaml==6.0.3 reuse==6.3.0 commitizen==4.19.2
 tests/.venv/bin/python -m ipykernel install --sys-prefix --name golem --display-name golem
 
 tests/.venv/bin/python tests/run.py
@@ -77,3 +77,4 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | Notebook | Question |
 | --- | --- |
 | `01_license_lint` | Does the license lint pass this tree, refuse every break of its eight rules, and agree with `reuse lint`? |
+| `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, and agree with Commitizen? |

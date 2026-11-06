@@ -22,3 +22,9 @@ the texts under [LICENSES/](LICENSES/) and the work of others that [NOTICE](NOTI
 Every test of Golem is a Jupyter notebook under [tests/notebooks/](tests/notebooks/), run by
 papermill through `tests/run.py`, as in Aosabi. [Documentation/testing.md](Documentation/testing.md)
 says how to run them and how to write one.
+
+## Contributing
+
+[CONTRIBUTING.md](CONTRIBUTING.md) is the rulebook of a change. Every commit is pushed at once,
+signed off, and written as a Conventional Commit in the form of the Linux kernel, which
+[.cz.toml](.cz.toml) and the commit lint check.
