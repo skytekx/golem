@@ -27,7 +27,7 @@ The owner chose the AGPL on 2026-11-06 after a comparison with the GPL 2, the GP
   that is GPL 2 only could not take those parts.
 - Forge is LGPL-2.1 and LuckPerms is MIT. Both may be combined with AGPL code.
 - "Only" keeps Golem on the AGPL 3 that the owner read and chose. A later AGPL that the Free
-  Software Foundation might publish does not apply to Golem by itself; a move to it would be a
+  Software Foundation might publish does not apply to Golem by itself. A move to it would be a
   decision of its own, with the consent of every holder of code in Golem at that time. The owner
   ruled this on 2026-11-06, the same day as the choice of the AGPL.
 
@@ -128,9 +128,9 @@ that commit as well. A text that no file names any more leaves in the same way.
 A file written after the code of another project says so in a short comment in its header, in
 the form `Derived from <project> <version>, <file>, <license>. Changed by the Golem authors.`
 Its SPDX line names the AGPL of Golem together with the license of that project, joined by
-`AND`, since the part it takes stays under that license, as REUSE asks. [NOTICE](../NOTICE) names every such project with its
-version, the files that derive from it, its license and the copyright lines of its license file,
-and keeps the notice its license asks to retain.
+`AND`, since the part it takes stays under that license, as REUSE asks. [NOTICE](../NOTICE) names
+every such project with its version, the files that derive from it, its license and the copyright
+lines of its license file, and keeps the notice its license asks to retain.
 
 | File | SPDX line | Derived from |
 | --- | --- | --- |
