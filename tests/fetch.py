@@ -21,9 +21,9 @@ it is used, and lands under tests/.cache/, which git ignores. The pins are these
    tests/.cache/gradle-8.14.3. The bridge carries no Gradle wrapper, whose jar is a binary under
    another license.
 4. The SkyTekx 3 modpack as the live server runs it, from the repository of the server at one
-   commit, only with --only modpack, since it is about 1 GB. The script clones that commit into
-   tests/.cache/skytekx3-1201-server, or reads it from a checkout that --server-repo names and
-   leaves that checkout as it is. Every file comes from the commit itself, not from the work
+   commit, only with --only modpack, since it is about 1 GB. The script fetches that commit into
+   tests/.cache/skytekx3-1201-server without a work tree, or reads it from the checkout that
+   --server-repo names and leaves alone. Every file comes from the commit itself, not from the work
    tree of a checkout. It downloads the files of modrinth.index.json that the server requires
    into tests/.cache/modpack/mods, each checked by the SHA-512 and the size the index gives,
    from cdn.modrinth.com and github.com, which may redirect over https to the host of its
@@ -348,7 +348,9 @@ def fetch_server(cache: Path, given) -> Path:
     print("fetch: %s at %s" % (SERVER_REPOSITORY, SERVER_COMMIT), flush=True)
     git(["init", "--quiet"], repository)
     git(["fetch", "--quiet", "--depth", "1", "--no-tags", SERVER_REPOSITORY, SERVER_COMMIT], repository)
-    git(["checkout", "--quiet", "--detach", "FETCH_HEAD"], repository)
+    # The script reads the commit through git show and git archive alone, so the clone needs no
+    # work tree, and a branch keeps the commit through a gc.
+    git(["update-ref", "refs/heads/pin", "FETCH_HEAD"], repository)
     return repository
 
 
