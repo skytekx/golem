@@ -328,7 +328,8 @@ def server_files(index) -> tuple:
         size = entry.get("fileSize")
         if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
             raise Failure("the index names %s with the size %r, which is no positive number of bytes" % (name, size))
-        if env.get("server") != "required":
+        # The format makes env optional, and a file without it belongs on both sides.
+        if env.get("server", "required") != "required":
             left_out.append(name)
             continue
         url = downloads[0]
