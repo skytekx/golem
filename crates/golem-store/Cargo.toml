@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The store of Golem: the data of the plugins in one SQLite file beside the world, read from a
+# cache on the server thread and written in order by a thread of its own.
+
+[package]
+name = "golem-store"
+description = "The SQLite store of the Golem plugins, with a cache for the server thread and a writer thread."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+rusqlite.workspace = true
+serde.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

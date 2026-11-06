@@ -24,6 +24,7 @@ golem-bridge = { path = "crates/golem-bridge" }
 golem-jvm = { path = "crates/golem-jvm" }
 golem-permissions = { path = "crates/golem-permissions" }
 golem-plugin = { path = "crates/golem-plugin" }
+golem-store = { path = "crates/golem-store" }
 
 # The safe wrapper of the JNI, for every call into the JVM after it exists.
 jni = { version = "0.21.1", default-features = false }
@@ -38,6 +39,10 @@ serde_json = "1.0.145"
 toml = "0.8.23"
 # SIGINT, SIGTERM and SIGHUP reach the host, since -Xrs keeps the JVM away from them.
 signal-hook = "0.3.18"
+# SQLite for the store of the plugins, built from the amalgamation that libsqlite3-sys bundles, so
+# every host runs the same SQLite whatever its system has. The pin is exact, since a new SQLite
+# changes the engine under the file and its durability, which a commit of its own names.
+rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
 
 [workspace.lints.rust]
 # Unsafe code lives only where the JNI needs it, and each such module allows it by name.
