@@ -1,0 +1,23 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The post-commit hook of Golem. It pushes the branch after every commit, since a dev environment
+# can end without warning and a commit that is only local is lost with it. A push that fails is
+# retried with growing pauses, and a push that still fails is reported, so it is the first thing
+# to fix. Install it with:
+#
+#     git config core.hooksPath tools/hooks
+
+branch=$(git symbolic-ref --quiet --short HEAD) || exit 0
+pause=2
+for attempt in 1 2 3 4 5; do
+	if git push --quiet -u origin "$branch"; then
+		exit 0
+	fi
+	[ "$attempt" -eq 5 ] && break
+	sleep "$pause"
+	pause=$((pause * 2))
+done
+echo "post-commit: the push of $branch failed five times, push it by hand before anything else" >&2
+exit 1

@@ -1,0 +1,10 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The commit-msg hook of Golem. It refuses a commit whose message breaks the rules of
+# CONTRIBUTING.md, through the same commit lint that CI runs. Install it with:
+#
+#     git config core.hooksPath tools/hooks
+
+exec python3 -I "$(git rev-parse --show-toplevel)/.github/scripts/commit_lint.py" --message-file "$1"
