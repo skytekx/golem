@@ -35,7 +35,9 @@ above. Each stands until the owner rules otherwise.
 | --- | --- | --- |
 | How closely does `golem run` follow the java launcher? | Byte for byte, quirks included, so an argument file that `run.sh` accepts starts the same server. A NUL byte in an argument file is refused instead of cutting the argument | [JVM host](jvm-host.md) |
 | Which environment reaches the launch? | `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS`, which the JVM reads itself. `JDK_JAVA_OPTIONS` and `CLASSPATH` of the launcher are ignored, so the launch is the files of the server alone | [JVM host](jvm-host.md) |
-| How does a signal stop a server without the bridge? | Through `System.exit` with 128 plus the signal, so the shutdown hook of the server saves the worlds, as under java | [JVM host](jvm-host.md#the-stop-path) |
+| How does a signal stop a server without the bridge? | Through `System.exit` with 128 plus the signal, so the shutdown hook of the server saves the worlds, as under java. The rule that Golem never stops through a signal is about Arclight, whose shutdown thread worked on chunks beside the server thread. The hook of vanilla Forge only lets the server thread stop and save by itself, and without the bridge the only other way out is `SIGKILL`, which loses the worlds | [JVM host](jvm-host.md#the-stop-path) |
+| What does `SIGQUIT` do under `-Xrs`? | It prints the dump of every thread and stops nothing, as under java. `jcmd` attaches without it | [JVM host](jvm-host.md#the-stop-path) |
+| What does a shutdown signal do that golem started with ignored? | Nothing, as under java, so `nohup` keeps the server up on a hangup | [JVM host](jvm-host.md#the-stop-path) |
 | What does a native do when another thread holds the handler? | It waits, since Forge calls `chat()` beside the server thread. Only a call from inside the handler answers the pass value at once | [Plugins](plugins/index.md) |
 | How long is the budget of one plugin call? | 1 ms by default, `--budget-ms` changes it | [Plugins](plugins/index.md) |
 | May a command run as the console when the mod sends half a sender? | No. A sender with only one of the UUID and the name is refused | [Bridge](bridge.md) |

@@ -43,3 +43,10 @@ timestamp: 2026-11-06
   `PermissionAPI`, the members of the group admin, and a comparison of the seed with an `lp export`
   of the Mac mini.
 - The launcher on macOS, where the path of `libjvm.dylib` comes from reading the sources alone.
+- Actions that a plugin queues on `serverStopping()` or `serverStopped()` never run, since no tick
+  follows to drain them. The mod could drain once in its stopping listener, while the players are
+  still there.
+- A command block, a function and `/execute as` an entity reach a plugin as the console, as
+  [Bridge](bridge.md#commands) says, although an operator of level 2 runs them. Until the bridge
+  passes the permission level of the source, no plugin may grant the console more than an operator
+  of level 2 holds.

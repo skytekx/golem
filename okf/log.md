@@ -52,3 +52,16 @@ Oldest first. Times are UTC.
 - The commit lint now refuses trailers outside the last paragraph and looks up the commit that a
   Fixes trailer names, after a Fixes hash that named no commit went out. The history was rewritten
   again so that every trailer stands in the last block.
+- CI builds and lints the crates, runs cargo deny and runs all seven notebooks, with the downloads
+  of `tests/fetch.py` and caches for cargo, the downloads and Gradle. The first green run took six
+  minutes for the notebooks.
+- The issues [#1](https://github.com/skytekx/golem/issues/1) to
+  [#7](https://github.com/skytekx/golem/issues/7) record the quirks that the first milestone fixes:
+  three of the permissions, the stop path of Arclight and three of the java launcher.
+- An adversarial review of the merged milestone, six reviewers with a skeptic each, confirmed 20
+  findings and refuted 4. Each confirmed one is fixed with a notebook case where it had a behaviour:
+  the lock of the handler, `SIGSEGV` and `SIGBUS` chained to the handler of Rust, `SIGQUIT` that
+  ended the server, `SIGHUP` under nohup, the answers of plugin commands that `sendCommandFeedback`
+  hid, `-J-server` and a source file in upper case, a merge commit at the edge of a shallow clone,
+  the target directory of cargo, the include of macOS, the missing steps of CI and the pages that
+  said what was no longer true.
