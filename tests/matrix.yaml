@@ -33,6 +33,10 @@ entries:
   - notebook: 04_plugins
     cell_timeout: 1800
 
+  # The jars of the bridge against okf/bridge.md, and the mod on three stock Forge servers.
+  - notebook: 05_bridge_build
+    cell_timeout: 1800
+
   # The permissions of Golem, rule by rule and refusal by refusal, and the seed of SkyTekx.
   - notebook: 06_permissions
     cell_timeout: 1800
