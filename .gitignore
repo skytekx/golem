@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+
+# The executed notebooks and the report of a harness run
+tests/notebooks/out/
+
+# The Python environment of the harness
+tests/.venv/
+
+# Compiled Python bytecode
+__pycache__/
+
+# Notebook checkpoints of an editor
+.ipynb_checkpoints/
