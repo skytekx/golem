@@ -12,7 +12,10 @@
 
 use std::{
     cmp::Reverse,
-    collections::BTreeMap,
+    collections::{
+        BTreeMap,
+        BTreeSet, //
+    },
     path::{
         Path,
         PathBuf, //
@@ -142,8 +145,15 @@ pub struct Store {
     inner: Arc<Inner>,
 }
 
+/// The files of the stores that are open in this process, by their canonical path. `SQLite`
+/// refuses a second open of a file in the same process as it refuses one of another process, so
+/// the store keeps this list to name the second open in this process in its own words.
+static OPEN_FILES: Mutex<BTreeSet<PathBuf>> = Mutex::new(BTreeSet::new());
+
 struct Inner {
     path: PathBuf,
+    /// The canonical path of the file in [`OPEN_FILES`], until the writer closed it.
+    canonical: Option<PathBuf>,
     state: Mutex<State>,
     shared: Arc<Shared>,
     writer: Mutex<Option<JoinHandle<()>>>,
@@ -200,6 +210,12 @@ fn shutdown(inner: &Inner) -> Result<(), StoreError> {
         }
     };
     let outcome = stop(inner, sender);
+    if let Some(canonical) = &inner.canonical {
+        OPEN_FILES
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(canonical);
+    }
     *inner.outcome.lock().unwrap_or_else(PoisonError::into_inner) = Some(outcome.clone());
     inner.ended.notify_all();
     outcome
@@ -238,9 +254,21 @@ impl Store {
     /// the latest version, loads the cache and starts the writer thread `golem-store`.
     ///
     /// The open reads the whole file and is meant for the start of the server, before the
-    /// server thread runs. While the store is open, no other process can open the file.
+    /// server thread runs. While the store is open, no other process can open the file, and a
+    /// second open of it in this process is refused as such.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, StoreError> {
         let path = path.as_ref().to_owned();
+        // The opens of a process run one after the other, so two threads that open one file
+        // meet here and the second learns that the first holds it.
+        let mut open_files = OPEN_FILES.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Ok(canonical) = path.canonicalize()
+            && open_files.contains(&canonical)
+        {
+            return Err(StoreError::Open {
+                path,
+                reason: "the store is open in this process already".to_owned(),
+            });
+        }
         let connection = schema::open(&path)?;
         let cache = Cache::load(&connection).map_err(|error| StoreError::Open {
             path: path.clone(),
@@ -256,9 +284,15 @@ impl Store {
                 path: path.clone(),
                 reason: format!("the thread golem-store did not start: {error}"),
             })?;
+        // The file exists now, so its canonical path is known.
+        let canonical = path.canonicalize().ok();
+        if let Some(canonical) = &canonical {
+            open_files.insert(canonical.clone());
+        }
         Ok(Self {
             inner: Arc::new(Inner {
                 path,
+                canonical,
                 state: Mutex::new(State {
                     cache,
                     sender: Some(sender),

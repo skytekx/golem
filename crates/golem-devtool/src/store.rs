@@ -26,11 +26,12 @@
 //! A step is a call of `Store` by its name with its arguments by name, a location being
 //! `{"dimension", "x", "y", "z", "yaw", "pitch"}`, where a number may also be a string such as
 //! `"NaN"`. The devtool adds `close_concurrently`, which closes the store on two threads at once
-//! and answers both closes, `drop`, which drops the store without a close, `reopen`, which closes
-//! the store and opens the same file, `repeat`, which runs its `steps` `count` times with `{i}` in
-//! a string replaced by the round from 1 and prints one line for all rounds, `sleep` with `ms`,
-//! and `wait`, which prints its line and then waits until its standard input ends, for a notebook
-//! that kills the process there.
+//! and answers both closes, `drop`, which drops the store without a close, `open_beside` with
+//! `path`, which opens a second store beside the one of the script and closes it again, `reopen`,
+//! which closes the store and opens the same file, `repeat`, which runs its `steps` `count` times
+//! with `{i}` in a string replaced by the round from 1 and prints one line for all rounds, `sleep`
+//! with `ms`, and `wait`, which prints its line and then waits until its standard input ends, for
+//! a notebook that kills the process there.
 //!
 //! A store that no step closed closes at the end of the script, and the exit code is 1 when that
 //! close fails. A store that a step closed answered its close in that step and is not closed
@@ -548,6 +549,12 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
         "close" => session.close(),
         "close_concurrently" => session.close_concurrently(),
         "drop" => session.drop_store(),
+        "open_beside" => {
+            let path = PathBuf::from(arguments.text("path")?);
+            let beside = Store::open(&path)?;
+            beside.close()?;
+            Ok(Value::Null)
+        }
         "reopen" => {
             let path = session
                 .path

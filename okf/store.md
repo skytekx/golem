@@ -99,6 +99,8 @@ What this gives:
 - No second process can open the file while the store is open, a second Golem as little as the
   migration tool or the `sqlite3` shell, so the cache stays the truth of the file. The open of the
   second one answers `another process holds the file, so it is open in a second Golem or a tool`.
+  A second `Store::open` of the file in the same process answers `the store is open in this
+  process already`, since the store keeps the canonical paths of its open files.
 - When a transaction fails, because the disk is full or SQLite refuses a row, the writer rolls it
   back and applies its operations again one by one, each in a transaction of its own, until the one
   that fails. The file then holds every change before it. The writer drops every change after it,
@@ -296,6 +298,7 @@ file, to version 1.
 | A SQLite file with tables but no application id | `the file is a SQLite database with 1 tables and indexes but no store of Golem` |
 | No SQLite file | `the file is not a SQLite database` |
 | Held by another process | `another process holds the file, so it is open in a second Golem or a tool` |
+| Open in this process, under any path to it | `the store is open in this process already` |
 
 Each answer stands behind `cannot open the store <path>: `, and a refused file is never changed.
 
