@@ -30,13 +30,18 @@
 //! `serverStopped`, `tick` (with `nanos`, and `repeat` and `sleepMs` of the devtool),
 //! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` and
 //! `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
-//! `install` (a fresh handler of the same script) and `sleep`.
+//! `install` (a fresh handler of the same script), `sleep` and `together`, which runs its
+//! `steps` each on a thread of its own, the next one `staggerMs` after the one before, as Forge
+//! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
+//! method, `stats` or `sleep`.
 //!
 //! The test plugins are these. `echo` broadcasts the name of every event but a tick, unless it
 //! is `quiet`, and answers its `commands` with a line, a message to a player sender and a
 //! console command. `cancel` cancels a chat message that holds its `word` and answers cancel to
 //! every other event, which the runtime must ignore. `panic` panics on the events named `on`
 //! and in its `commands`. `slow` sleeps `sleepMs` on the first `times` events named `on`.
+//! `reenter` calls the native `commandNames` from inside its handler on the events named `on`
+//! and broadcasts how many names it got.
 
 use std::{
     fs,
@@ -177,6 +182,8 @@ enum PluginSpec {
         #[serde(default = "one")]
         times: u32,
     },
+    /// A plugin that calls a native from inside the handler on the events of one name.
+    Reenter { name: String, on: String },
 }
 
 /// The default of a count of the script.
@@ -247,6 +254,11 @@ enum Step {
     Install,
     Sleep {
         ms: u64,
+    },
+    Together {
+        #[serde(default)]
+        stagger_ms: u64,
+        steps: Vec<Step>,
     },
 }
 
@@ -401,63 +413,10 @@ impl Run {
 
     /// Runs one step and answers what its native answered.
     fn step(&mut self, step: Step) -> Value {
+        if let Some(answer) = native(&step) {
+            return answer;
+        }
         match step {
-            Step::Version => answer("version", host::version()),
-            Step::ServerStarting {
-                forge_version,
-                minecraft_version,
-            } => done("serverStarting", || {
-                host::server_starting(forge_version.as_deref(), minecraft_version.as_deref());
-            }),
-            Step::ServerStarted => done("serverStarted", host::server_started),
-            Step::ServerStopping => done("serverStopping", host::server_stopping),
-            Step::ServerStopped => done("serverStopped", host::server_stopped),
-            Step::Tick {
-                nanos,
-                repeat,
-                sleep_ms,
-            } => done("tick", || ticks(nanos, repeat, sleep_ms)),
-            Step::PlayerJoined { uuid, name } => done("playerJoined", || {
-                host::player_joined(uuid.as_deref(), name.as_deref());
-            }),
-            Step::PlayerLeft { uuid, name } => done("playerLeft", || {
-                host::player_left(uuid.as_deref(), name.as_deref());
-            }),
-            Step::Chat {
-                uuid,
-                name,
-                message,
-            } => answer(
-                "chat",
-                host::chat(uuid.as_deref(), name.as_deref(), message.as_deref()),
-            ),
-            Step::Death { uuid, name, cause } => done("death", || {
-                host::death(uuid.as_deref(), name.as_deref(), cause.as_deref());
-            }),
-            Step::Respawn {
-                uuid,
-                name,
-                dimension,
-            } => done("respawn", || {
-                host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref());
-            }),
-            Step::CommandNames => answer("commandNames", host::command_names()),
-            Step::Command {
-                name,
-                sender_uuid,
-                sender_name,
-                arguments,
-            } => answer(
-                "command",
-                host::command(
-                    name.as_deref(),
-                    sender_uuid.as_deref(),
-                    sender_name.as_deref(),
-                    arguments.as_deref(),
-                ),
-            ),
-            Step::Drain => drain(),
-            Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
             Step::Budgets => answer("budgets", self.budgets_json()),
             Step::Push { action } => {
                 self.actions.push(action.into());
@@ -467,7 +426,8 @@ impl Run {
                 self.install();
                 json!({"op": "install", "answer": null, "queued": self.actions.len()})
             }
-            Step::Sleep { ms } => done("sleep", || thread::sleep(Duration::from_millis(ms))),
+            Step::Together { stagger_ms, steps } => together(stagger_ms, &steps),
+            _ => unreachable!("native() answers every other step"),
         }
     }
 
@@ -493,6 +453,106 @@ impl Run {
             .collect();
         json!(rows)
     }
+}
+
+/// Runs a step that is a native method, `stats` or `sleep`, and answers what it answered, or
+/// None for a step of the devtool that needs the state of the script.
+fn native(step: &Step) -> Option<Value> {
+    Some(match step {
+        Step::Version => answer("version", host::version()),
+        Step::ServerStarting {
+            forge_version,
+            minecraft_version,
+        } => done("serverStarting", || {
+            host::server_starting(forge_version.as_deref(), minecraft_version.as_deref());
+        }),
+        Step::ServerStarted => done("serverStarted", host::server_started),
+        Step::ServerStopping => done("serverStopping", host::server_stopping),
+        Step::ServerStopped => done("serverStopped", host::server_stopped),
+        Step::Tick {
+            nanos,
+            repeat,
+            sleep_ms,
+        } => done("tick", || ticks(*nanos, *repeat, *sleep_ms)),
+        Step::PlayerJoined { uuid, name } => done("playerJoined", || {
+            host::player_joined(uuid.as_deref(), name.as_deref());
+        }),
+        Step::PlayerLeft { uuid, name } => done("playerLeft", || {
+            host::player_left(uuid.as_deref(), name.as_deref());
+        }),
+        Step::Chat {
+            uuid,
+            name,
+            message,
+        } => answer(
+            "chat",
+            host::chat(uuid.as_deref(), name.as_deref(), message.as_deref()),
+        ),
+        Step::Death { uuid, name, cause } => done("death", || {
+            host::death(uuid.as_deref(), name.as_deref(), cause.as_deref());
+        }),
+        Step::Respawn {
+            uuid,
+            name,
+            dimension,
+        } => done("respawn", || {
+            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref());
+        }),
+        Step::CommandNames => answer("commandNames", host::command_names()),
+        Step::Command {
+            name,
+            sender_uuid,
+            sender_name,
+            arguments,
+        } => answer(
+            "command",
+            host::command(
+                name.as_deref(),
+                sender_uuid.as_deref(),
+                sender_name.as_deref(),
+                arguments.as_deref(),
+            ),
+        ),
+        Step::Drain => drain(),
+        Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
+        Step::Sleep { ms } => done("sleep", || thread::sleep(Duration::from_millis(*ms))),
+        Step::Budgets | Step::Push { .. } | Step::Install | Step::Together { .. } => return None,
+    })
+}
+
+/// Runs `steps` each on a thread of its own, the next one `stagger_ms` after the one before,
+/// and answers their answers in the order of the steps, each with the milliseconds from the
+/// start of the first to its own end.
+fn together(stagger_ms: u64, steps: &[Step]) -> Value {
+    const REFUSED: &str = "together runs native methods, stats and sleep alone";
+    let start = Instant::now();
+    let answers: Vec<Value> = thread::scope(|scope| {
+        let threads: Vec<_> = steps
+            .iter()
+            .zip(0u32..)
+            .map(|(step, index)| {
+                let delay = Duration::from_millis(stagger_ms) * index;
+                thread::Builder::new()
+                    .name(format!("devtool-{index}"))
+                    .spawn_scoped(scope, move || {
+                        thread::sleep(delay);
+                        let mut answer = native(step).unwrap_or_else(
+                            || json!({"op": "refused", "answer": null, "error": REFUSED}),
+                        );
+                        answer["endMs"] = json!(start.elapsed().as_secs_f64() * 1000.0);
+                        answer
+                    })
+            })
+            .collect();
+        threads
+            .into_iter()
+            .map(|thread| match thread {
+                Ok(thread) => thread.join().unwrap_or(Value::Null),
+                Err(error) => json!({"op": "refused", "answer": null, "error": error.to_string()}),
+            })
+            .collect()
+    });
+    json!({"op": "together", "answer": answers})
 }
 
 /// Answers the step `op` with the answer of its native, null for nothing.
@@ -560,6 +620,7 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             sleep: Duration::from_millis(sleep_ms),
             left: times,
         }),
+        PluginSpec::Reenter { name, on } => Box::new(Reenter { name, on }),
     }
 }
 
@@ -696,6 +757,27 @@ impl Plugin for Slow {
         if self.left > 0 && event.name() == self.on {
             self.left -= 1;
             thread::sleep(self.sleep);
+        }
+        Verdict::Pass
+    }
+}
+
+/// A test plugin that calls the native `commandNames` from inside the handler, which must
+/// answer the pass value at once instead of waiting for the lock it runs under.
+struct Reenter {
+    name: String,
+    on: String,
+}
+
+impl Plugin for Reenter {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn on_event(&mut self, event: &Event, context: &mut Context<'_>) -> Verdict {
+        if event.name() == self.on {
+            let names = host::command_names();
+            context.broadcast(&format!("{} got {} names", self.name, names.len()));
         }
         Verdict::Pass
     }
