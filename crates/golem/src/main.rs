@@ -37,6 +37,7 @@ use golem_jvm::{
 };
 use golem_plugin::{
     CorePlugin,
+    DEFAULT_BUDGET,
     Runtime,
     Source, //
 };
@@ -52,9 +53,6 @@ const COMMIT: &str = env!("GOLEM_COMMIT");
 
 /// The jar of the host class, which the bridge mod calls.
 const HOST_JAR: &str = "golem-host.jar";
-
-/// The budget of a call into a plugin when --budget-ms is not given.
-const DEFAULT_BUDGET: Duration = Duration::from_millis(2);
 
 const USAGE: &str = "usage: golem <command>
 

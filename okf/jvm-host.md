@@ -34,7 +34,7 @@ golem run [--server <dir>] [--java-home <dir>] [--host-jar <file>] [--budget-ms 
 | `--server` | The current directory | The directory of the Forge server |
 | `--java-home` | `$JAVA_HOME` | The Java home whose `libjvm` runs the server |
 | `--host-jar` | See [The host jar](#the-host-jar) | The jar of the host class of the bridge |
-| `--budget-ms` | 2 | The budget of one call into a plugin, in milliseconds |
+| `--budget-ms` | 1 | The budget of one call into a plugin, in milliseconds, `DEFAULT_BUDGET` of `golem-plugin` |
 | `-- <arg>...` | None | Arguments of main behind those of `unix_args.txt`, such as `nogui` |
 
 Every option also takes the form `--name=value`. `golem run` resolves the server directory, the
