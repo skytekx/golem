@@ -23,7 +23,8 @@
 # Documentation/testing.md describes. The notebooks build the crates with cargo and the bridge
 # with Gradle, and boot the Forge server that tests/fetch.py installs, so the job caches the
 # downloads, the registry and the target of cargo, and the cache of Gradle, whose first build
-# remaps Minecraft.
+# remaps Minecraft. Notebook 08 boots the modpack of the live server three times, so the job
+# fetches the pack with tests/fetch.py --only modpack and caches it by the commit it pins.
 #
 # Every action is pinned to the commit of a release, with its tag beside it. No job reads a
 # secret, and the token of every job can only read the repository.
@@ -173,7 +174,7 @@ jobs:
   notebooks:
     name: Notebooks
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 120
     steps:
       - name: Check out the tree
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,6 +205,24 @@ jobs:
             tests/.cache/forge-server
             tests/.cache/gradle-8.14.3
           key: fetch-${{ runner.os }}-${{ hashFiles('tests/fetch.py') }}
+
+      # The pack of notebook 08 and the clone of the server repository it comes from, about
+      # 1.4 GB, keyed by the commit of the server that tests/fetch.py pins, so a new pin fetches
+      # the pack again.
+      - name: Read the pin of the modpack
+        id: modpack
+        run: |
+          commit=$(sed -n 's/^SERVER_COMMIT = "\(.*\)"$/\1/p' tests/fetch.py)
+          test -n "$commit"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the modpack
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            tests/.cache/modpack
+            tests/.cache/skytekx3-1201-server
+          key: modpack-${{ steps.modpack.outputs.commit }}
 
       - name: Cache Gradle
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -242,6 +261,11 @@ jobs:
       # test server alone, on behalf of the owner, as its text says.
       - name: Download the JDK, the Forge server and Gradle
         run: python3 -I tests/fetch.py
+
+      # The jars of the pack come from Modrinth and GitHub, each checked by the SHA-512 of the
+      # index, and a pack in place downloads nothing.
+      - name: Download the modpack of the live server
+        run: python3 -I tests/fetch.py --only modpack
 
       - name: Run the notebooks
         run: tests/.venv/bin/python tests/run.py
