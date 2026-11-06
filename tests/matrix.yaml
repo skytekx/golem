@@ -40,3 +40,7 @@ entries:
   # The permissions of Golem, rule by rule and refusal by refusal, and the seed of SkyTekx.
   - notebook: 06_permissions
     cell_timeout: 1800
+
+  # Golem itself: Forge under golem run with the bridge, a player, the core plugin and the stop paths.
+  - notebook: 07_forge_boot
+    cell_timeout: 1800
