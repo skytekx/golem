@@ -188,35 +188,54 @@ const MIGRATIONS: &[&str] = &[SCHEMA_1];
 /// Opens the file at `path` for the writer of the store, creating it when it does not exist,
 /// and brings its schema to [`SCHEMA_VERSION`].
 ///
-/// The open first reads what the file is and refuses a file that is no store of this Golem
-/// before it changes anything, so a refused file stays as it was. The connection holds the file
-/// in the exclusive locking mode of `SQLite`, so no other process, a second Golem or the
-/// migration tool, can read or write it while the store is open. The cache of the store is then
-/// the truth of the file, which a second writer would break.
+/// The open first reads what the file is through a connection that only reads, and refuses a
+/// file that is no store of this Golem before it opens one that may write. A connection that may
+/// write checkpoints the log of a database in the journal mode WAL into the file when it closes
+/// and deletes the log, also on a file it refused, while one that only reads never does, so a
+/// refused file and its log `-wal` stay as they were. `SQLite` may leave the index of that log,
+/// a file `-shm`, beside them. The connection of the writer holds the file in the exclusive
+/// locking mode of `SQLite`, so no other process, a second Golem or the migration tool, can read
+/// or write it while the store is open. The cache of the store is then the truth of the file,
+/// which a second writer would break.
 pub fn open(path: &Path) -> Result<Connection, StoreError> {
     let refuse = |reason: String| StoreError::Open {
         path: path.to_owned(),
         reason,
     };
     let sqlite = |error: rusqlite::Error| refuse(describe_error(&error));
+    let identity = |reason| match reason {
+        Identity::Refused(reason) => refuse(reason),
+        Identity::Sqlite(error) => sqlite(error),
+    };
+    // A busy timeout of zero answers a file that another process holds at once.
+    if path.exists() {
+        let reader = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(sqlite)?;
+        reader
+            .busy_timeout(std::time::Duration::ZERO)
+            .map_err(sqlite)?;
+        identify(&reader).map_err(identity)?;
+        reader.close().map_err(|(_, error)| sqlite(error))?;
+    }
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | OpenFlags::SQLITE_OPEN_CREATE
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let connection = Connection::open_with_flags(path, flags).map_err(sqlite)?;
-    // A busy timeout of zero answers a file that another process holds at once. The exclusive
-    // locking mode, set before the first read, holds every lock the connection takes until it
-    // closes, and in the journal mode WAL it keeps the index of the log in the memory of the
-    // process instead of a shared file.
+    // The exclusive locking mode, set before the first read, holds every lock the connection
+    // takes until it closes, and in the journal mode WAL it keeps the index of the log in the
+    // memory of the process instead of a shared file.
     connection
         .busy_timeout(std::time::Duration::ZERO)
         .map_err(sqlite)?;
     connection
         .pragma_update(None, "locking_mode", "EXCLUSIVE")
         .map_err(sqlite)?;
-    let version = identify(&connection).map_err(|reason| match reason {
-        Identity::Refused(reason) => refuse(reason),
-        Identity::Sqlite(error) => sqlite(error),
-    })?;
+    // The file was accepted above, and this reads its version again on the connection of the
+    // writer.
+    let version = identify(&connection).map_err(identity)?;
     configure(&connection).map_err(sqlite)?;
     migrate(&connection, version).map_err(refuse)?;
     Ok(connection)

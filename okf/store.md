@@ -309,6 +309,12 @@ file, to version 1.
 | Open in this process, under any path to it | `the store is open in this process already` |
 
 Each answer stands behind `cannot open the store <path>: `, and a refused file is never changed.
+The open reads what a file is through a connection that only reads, and opens the file for the
+writer only once it accepted it, since a connection that may write checkpoints the log of a
+database in the journal mode WAL into the file when it closes and deletes the log. So a refused
+file and its log `-wal` stay as they were, byte for byte, also the log that a crash of another
+program left behind. The connection that reads may leave the index of the log, a file `-shm`,
+beside them, as every reader of SQLite does.
 
 ## The API
 
@@ -466,9 +472,10 @@ The store is not wired into `golem run` yet. The ports wire it in this way.
    `golem_jvm::run`, so `golem-jvm` needs a callback in its exit hook that runs `close` there. The
    hook logs alone today, see [JVM host](jvm-host.md#the-hooks).
 
-The file holds player data, so the repository of the server ignores `golem-store.db` and its log
-`golem-store.db-wal`, which fixes the quirk of the plan that the player data of Essentials sits in
-a tracked folder.
+The file holds player data, so the repository of the server ignores `golem-store.db`, its log
+`golem-store.db-wal` and the index of the log `golem-store.db-shm`, which the open leaves beside the
+file when it reads what the file is. That fixes the quirk of the plan that the player data of
+Essentials sits in a tracked folder.
 
 ## The cost on the server thread
 
