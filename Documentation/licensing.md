@@ -136,14 +136,54 @@ lines of its license file, and keeps the notice its license asks to retain.
 | --- | --- | --- |
 | `.github/scripts/license_lint.py` | `AGPL-3.0-only AND MIT` | Aosabi 0.1.0, `.github/scripts/license_lint.py`, MIT |
 
-## 6. What Golem never carries
+## 6. The ports, and what Golem never carries
+
+A Golem plugin that ports a Bukkit plugin keeps the license of that plugin and names its holders,
+as the owner ruled on 2026-11-06. [ports.toml](../ports.toml) lists every port with its path, its
+upstream, the source of that version, its license and the holders of the upstream.
+
+| Port | Upstream | License | Holders of the upstream |
+| --- | --- | --- | --- |
+| `crates/golem-permissions` | LuckPerms 5.5.71 | `MIT` | lucko (Luck), LuckPerms contributors |
+| `crates/golem-essentials` | EssentialsX 2.22.0 | `GPL-3.0-or-later` | Essentials Team, EssentialsX contributors |
+| `crates/golem-essentials-spawn` | EssentialsXSpawn 2.22.0 | `GPL-3.0-or-later` | Essentials Team, EssentialsX contributors |
+
+The license of EssentialsX is the GPL 3 or any later version, as the header of `Essentials.java`
+of release 2.22.0 states, with the LICENSE file of that release, which is
+`LICENSES/GPL-3.0-or-later.txt` byte for byte. LuckPerms is under the MIT license of its
+`LICENSE.txt`. Every file of a port carries the license of its upstream on its first line and a
+copyright line for each holder of the upstream beside the one of Florian Kleber, for example in
+`golem-essentials`:
+
+<!-- REUSE-IgnoreStart -->
+
+```text
+// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: 2011 Essentials Team
+// SPDX-FileCopyrightText: EssentialsX contributors
+```
+
+<!-- REUSE-IgnoreEnd -->
+
+Its `Cargo.toml` states the license itself instead of the one of the workspace, and
+[NOTICE](../NOTICE) has a section on its upstream with the notice its license asks to keep. Since
+a port stays under the license of its upstream, it may translate the code, the messages and the
+texts of that upstream into Golem. The code of Golem itself, the crates `golem`, `golem-jvm`,
+`golem-bridge`, `golem-plugin`, `golem-store` and `golem-devtool` and the bridge mod, takes no code
+of an upstream and stays under the AGPL 3 only.
+
+The GPL 3 and the AGPL 3 each allow, in their section 13, to combine a work under one with a work
+under the other into one program, and the MIT license combines with both. The program `golem`
+links its own crates with the ports that way. Each part keeps its license, and since the
+combination holds AGPL code, whoever runs it for players must offer them the source of all of it,
+which `/golem source` does.
+
+Golem never carries these:
 
 - Minecraft. The server jar comes from Mojang's download, as it does today, and Golem never ships
   it.
-- Code of Arclight and CraftBukkit.
-- Code of EssentialsX, which is GPL-3.0 and would be compatible, and of LuckPerms. The ports are
-  written from the documented behaviour and from tests against the running plugins, never by
-  copying or translating their code.
+- Code of Arclight and CraftBukkit, which Golem replaces instead of porting.
 
 ## 7. Dependencies
 
@@ -175,8 +215,9 @@ reuse lint
   open: that the SPDX line stands on the first line, that `LICENSE` is the same bytes as
   `LICENSES/AGPL-3.0-only.txt`, that every file names Florian Kleber as a holder, that every
   `Cargo.toml` states a license, that every package under `third_party/` keeps its own license
-  file, and that NOTICE exists once a file names a license other than the AGPL. Its rules are
-  written in the docstring of the script.
+  file, that NOTICE exists once a file names a license other than the AGPL, and that every port
+  of `ports.toml` keeps the license and the holders of its upstream. Its rules are written in the
+  docstring of the script.
 
 ## 10. Contributing
 

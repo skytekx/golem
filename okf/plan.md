@@ -179,6 +179,13 @@ Each SPDX line is followed by the `SPDX-FileCopyrightText` line of REUSE that na
 - CI runs `reuse lint` and the license lint of Golem so that no file lacks its SPDX lines, and
   `cargo deny` so that no dependency has an incompatible license.
 
+A later ruling of the same day: every Golem plugin that ports a Bukkit plugin keeps the license of
+that plugin and names its holders. So `golem-essentials` and `golem-essentials-spawn` are under the
+GPL 3 or later of EssentialsX 2.22.0, and `golem-permissions` is under the MIT license of LuckPerms.
+They combine with the AGPL code of Golem under section 13 of the GPL 3 and the AGPL 3.
+`ports.toml` lists the ports, and [Documentation/licensing.md](../Documentation/licensing.md)
+section 6 has the rule.
+
 This is a reading of the licenses and not legal advice.
 
 ## Commit and code style
