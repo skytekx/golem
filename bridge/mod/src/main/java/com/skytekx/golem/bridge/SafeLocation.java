@@ -7,7 +7,9 @@
  * one standing on it, the blocks of the feet and the head let a player through and hold no
  * fluid, no portal, which would carry the player away, no cobweb, which would hold them, and
  * nothing that hurts, the ground lies above the void and the head below the top of the world,
- * and the place lies inside the world border. A block of a mod hurts when its type of path for
+ * and the place lies inside the world border. A target below the logical height of its
+ * dimension keeps the head below that height as well, as EssentialsX does, so a search from
+ * under the roof of the Nether never lands on top of it. A block of a mod hurts when its type of path for
  * the mobs of Forge names a danger, as the mobs of the game avoid it. The search looks at the blocks within a
  * sphere around the block of the target, the nearest first, and at the same distance the higher
  * first, then the lower x, then the lower z, so the same world always gives the same answer.
@@ -72,6 +74,7 @@ final class SafeLocation {
 	static Answer find(ServerLevel level, double x, double y, double z, int radius) {
 		int limit = Math.max(0, Math.min(radius, MAX_RADIUS));
 		BlockPos target = BlockPos.containing(x, y, z);
+		int top = top(level, target.getY());
 		ServerChunkCache chunks = level.getChunkSource();
 		BlockPos.MutableBlockPos feet = new BlockPos.MutableBlockPos();
 		for (int[] offset : OFFSETS) {
@@ -80,7 +83,7 @@ final class SafeLocation {
 			}
 			feet.set(target.getX() + offset[0], target.getY() + offset[1],
 					target.getZ() + offset[2]);
-			if (!inside(level, feet)) {
+			if (!inside(level, feet, top)) {
 				continue;
 			}
 			// The ground, the feet and the head share one column and so one chunk.
@@ -114,10 +117,23 @@ final class SafeLocation {
 		return offsets.toArray(new int[0][]);
 	}
 
-	/** Answers whether the ground and the head lie within the heights and the world border. */
-	private static boolean inside(ServerLevel level, BlockPos feet) {
-		return feet.getY() - 1 >= level.getMinBuildHeight()
-				&& feet.getY() + 1 < level.getMaxBuildHeight()
+	/**
+	 * Answers the y above the highest head of a search from the height of the target: the top
+	 * of the logical height of the dimension when the target lies below it, such as y 128 under
+	 * the roof of the Nether, and else the top of the world.
+	 */
+	private static int top(ServerLevel level, int target) {
+		int logical = Math.min(level.getMaxBuildHeight(),
+				level.getMinBuildHeight() + level.getLogicalHeight());
+		return target < logical ? logical : level.getMaxBuildHeight();
+	}
+
+	/**
+	 * Answers whether the ground lies above the void, the head below the top of the search and
+	 * the place inside the world border.
+	 */
+	private static boolean inside(ServerLevel level, BlockPos feet, int top) {
+		return feet.getY() - 1 >= level.getMinBuildHeight() && feet.getY() + 1 < top
 				&& level.getWorldBorder().isWithinBounds(feet);
 	}
 
