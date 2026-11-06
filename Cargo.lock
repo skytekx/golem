@@ -53,6 +53,7 @@ dependencies = [
  "golem-bridge",
  "golem-jvm",
  "golem-plugin",
+ "jni",
  "signal-hook",
 ]
 

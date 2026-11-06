@@ -22,6 +22,7 @@ use std::{
         PathBuf, //
     },
     process::ExitCode,
+    sync::OnceLock,
     time::Duration,
 };
 
@@ -195,11 +196,48 @@ fn install_plugins(budget: Duration) -> Actions {
     golem_bridge::install(Box::new(runtime))
 }
 
+/// The JVM once it exists, for the stop of a server that the bridge does not reach.
+static JVM: OnceLock<jni::JavaVM> = OnceLock::new();
+
+/// Registers the natives of the bridge and keeps the JVM, on the thread of the JVM before the
+/// main class runs.
+fn register(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<()> {
+    let _ = JVM.set(env.get_java_vm()?);
+    golem_bridge::register_natives(env)
+}
+
+/// Ends the JVM as the java launcher does on a signal, with System.exit and the exit status
+/// 128 plus the number of the signal, so the shutdown hook of the server stops it and saves the
+/// worlds. Before the JVM exists there is nothing to save, and golem exits at once.
+fn exit_through_jvm(status: i32) {
+    let Some(vm) = JVM.get() else {
+        log(format_args!(
+            "the JVM does not run yet, so golem exits with {status}"
+        ));
+        std::process::exit(status);
+    };
+    let exited = vm.attach_current_thread_as_daemon().and_then(|mut env| {
+        env.call_static_method(
+            "java/lang/System",
+            "exit",
+            "(I)V",
+            &[jni::objects::JValue::Int(status)],
+        )
+        .map(drop)
+    });
+    // System.exit returns only when it could not run, for example while the JVM ends.
+    if let Err(error) = exited {
+        log(format_args!("the JVM did not take System.exit: {error}"));
+    }
+}
+
 /// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own.
 ///
-/// The first signal queues save-all flush and stop, which the mod runs on the server thread at
-/// the end of the next tick. A later signal changes nothing, since the stop is already on its
-/// way and a second stop would only race it.
+/// When the bridge is connected, the first signal queues save-all flush and stop, which the mod
+/// runs on the server thread at the end of the next tick. Without the bridge no tick drains the
+/// queue, so the first signal ends the JVM through System.exit, which runs the shutdown hook of
+/// the server as a signal does under java. A later signal changes nothing, since the stop is
+/// already on its way and a second stop would only race it.
 fn watch_signals(actions: Actions) -> Result<(), String> {
     use signal_hook::consts::{
         SIGHUP,
@@ -221,12 +259,19 @@ fn watch_signals(actions: Actions) -> Result<(), String> {
                     ));
                     continue;
                 }
-                actions.push(Action::Command("save-all flush".to_owned()));
-                actions.push(Action::Command("stop".to_owned()));
                 queued = true;
-                log(format_args!(
-                    "{name}: queued save-all flush and stop on the server thread"
-                ));
+                if golem_bridge::connected() {
+                    actions.push(Action::Command("save-all flush".to_owned()));
+                    actions.push(Action::Command("stop".to_owned()));
+                    log(format_args!(
+                        "{name}: queued save-all flush and stop on the server thread"
+                    ));
+                } else {
+                    log(format_args!(
+                        "{name}: the bridge is not connected, so the JVM exits through the shutdown hook of the server"
+                    ));
+                    exit_through_jvm(128 + signal);
+                }
             }
         })
         .map_err(|error| format!("could not start the thread golem-signals: {error}"))?;
@@ -292,11 +337,7 @@ fn run(arguments: &[String]) -> Result<ExitCode, String> {
         server.display(),
         java_home.0.display()
     ));
-    Ok(report(golem_jvm::run(
-        &java_home,
-        &spec,
-        golem_bridge::register_natives,
-    )))
+    Ok(report(golem_jvm::run(&java_home, &spec, register)))
 }
 
 fn main() -> ExitCode {

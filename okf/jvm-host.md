@@ -207,16 +207,24 @@ since the process ends.
 ## The stop path
 
 Golem never stops the server with a signal. `-Xrs` keeps the JVM away from `SIGINT`, `SIGTERM` and
-`SIGHUP`, and a thread `golem-signals` of the host waits for them with `signal-hook`. The first of
-them queues the actions `command save-all flush` and `command stop` and logs
+`SIGHUP`, and a thread `golem-signals` of the host waits for them with `signal-hook`. Once the bridge
+mod has called `version()`, which it does while Forge constructs it, the bridge counts as connected,
+and the first signal queues the actions `command save-all flush` and `command stop` and logs
 `[golem] SIGTERM: queued save-all flush and stop on the server thread`. The bridge mod drains the
 queue at the end of the next server tick and runs both commands as the console, so the stop is the
-same as the one of an operator. A later signal logs that the stop is already queued and changes
-nothing.
+same as the one of an operator. A signal during the load of the worlds waits for the first tick. A
+later signal logs that the stop is already queued and changes nothing.
 
-When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run` exits with 0. A
-server without the bridge mod in `mods/` drains no queue, so a signal does not stop it: the console
-command `stop` on standard input still does, and `SIGKILL` ends the process without saving.
+When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run` exits with 0.
+
+A server without the bridge mod in `mods/`, or a signal before Forge constructs the mod, has no
+tick that drains the queue. The first signal then logs
+`[golem] SIGTERM: the bridge is not connected, so the JVM exits through the shutdown hook of the server`
+and calls `System.exit` with 128 plus the number of the signal on a thread that it attaches to the
+JVM. That is what the java launcher does on a signal: the shutdown hook of the server stops it and
+saves the worlds, and the exit hook ends the process with the status, 143 for `SIGTERM`. A signal
+before the JVM exists ends golem at once with that status, since nothing is loaded that could be
+saved.
 
 ## The errors
 

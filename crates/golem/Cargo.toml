@@ -19,6 +19,7 @@ publish = false
 golem-bridge.workspace = true
 golem-jvm.workspace = true
 golem-plugin.workspace = true
+jni.workspace = true
 signal-hook.workspace = true
 
 [lints]
