@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+# SPDX-FileCopyrightText: 2011 Essentials Team
+# SPDX-FileCopyrightText: EssentialsX contributors
+#
+# The port of EssentialsX 2.22.0 to Golem. It keeps the license of EssentialsX, the GPL 3 or any
+# later version, and names its holders, as every port of a Bukkit plugin does, see ports.toml. The
+# commands of EssentialsX that the server uses: teleport requests, back, homes, warps, messages,
+# mail, the ignore list, the informational commands, AFK, the economy and the admin commands.
+
+[package]
+name = "golem-essentials"
+description = "The port of EssentialsX 2.22.0 to Golem."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-or-later"
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -77,6 +77,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "golem-essentials"
+version = "0.1.0"
+
+[[package]]
+name = "golem-essentials-spawn"
+version = "0.1.0"
+
+[[package]]
 name = "golem-jvm"
 version = "0.1.0"
 dependencies = [

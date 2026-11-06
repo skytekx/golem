@@ -24,6 +24,17 @@ allow = [
     "Unicode-3.0",
 ]
 
+# The ports of Bukkit plugins keep the license of their upstream (ports.toml), so these crates of
+# the workspace carry a license that no dependency may bring. The GPL 3 or later combines with
+# the AGPL 3 under section 13 of both.
+[[licenses.exceptions]]
+crate = "golem-essentials"
+allow = ["GPL-3.0-or-later"]
+
+[[licenses.exceptions]]
+crate = "golem-essentials-spawn"
+allow = ["GPL-3.0-or-later"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

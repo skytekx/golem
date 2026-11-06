@@ -24,3 +24,19 @@ upstream = "LuckPerms 5.5.71"
 source = "https://github.com/LuckPerms/LuckPerms"
 license = "MIT"
 holders = ["lucko (Luck) <luck@lucko.me>", "LuckPerms contributors"]
+
+[[port]]
+name = "golem-essentials"
+path = "crates/golem-essentials"
+upstream = "EssentialsX 2.22.0"
+source = "https://github.com/EssentialsX/Essentials/tree/2.22.0/Essentials"
+license = "GPL-3.0-or-later"
+holders = ["Essentials Team", "EssentialsX contributors"]
+
+[[port]]
+name = "golem-essentials-spawn"
+path = "crates/golem-essentials-spawn"
+upstream = "EssentialsXSpawn"
+source = "https://github.com/EssentialsX/Essentials/tree/2.22.0/EssentialsSpawn"
+license = "GPL-3.0-or-later"
+holders = ["Essentials Team", "EssentialsX contributors"]

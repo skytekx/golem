@@ -90,3 +90,46 @@ keeps its license. The MIT License asks that its notice be kept with the code:
     CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
     TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+EssentialsX
+===========
+
+Project: EssentialsX
+URL: https://github.com/EssentialsX/Essentials
+Version: 2.22.0, commit 100f575293afff1c2bc8e1468ce1cffc153319fc
+Files: crates/golem-essentials
+License: GPL-3.0-or-later
+Copyright (C) 2011 Essentials Team
+Copyright the EssentialsX contributors
+
+The crate golem-essentials is the port of EssentialsX 2.22.0 to Golem and
+keeps its license, which the header of Essentials.java of that release states:
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+The text of the license is LICENSES/GPL-3.0-or-later.txt, the LICENSE file of
+EssentialsX 2.22.0 byte for byte.
+
+
+EssentialsXSpawn
+================
+
+Project: EssentialsXSpawn, the spawn module of EssentialsX
+URL: https://github.com/EssentialsX/Essentials/tree/2.22.0/EssentialsSpawn
+Version: 2.22.0, commit 100f575293afff1c2bc8e1468ce1cffc153319fc
+Files: crates/golem-essentials-spawn
+License: GPL-3.0-or-later
+Copyright (C) 2011 Essentials Team
+Copyright the EssentialsX contributors
+
+The crate golem-essentials-spawn is the port of EssentialsXSpawn to Golem and
+keeps the license of EssentialsX, under which the module is published.
