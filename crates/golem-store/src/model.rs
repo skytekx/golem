@@ -427,8 +427,11 @@ fn token_problem(token: &str) -> Option<String> {
         .map(|bad| format!("holds the character {bad:?}"))
 }
 
-/// Checks a location: a dimension of [`check_token`] and finite numbers.
-pub(crate) fn check_location(what: &'static str, location: &Location) -> Result<(), Refusal> {
+/// Checks a location, a dimension of [`check_token`] and finite numbers, and answers it as the
+/// file keeps it. `SQLite` writes a REAL without a fraction as an integer, so a -0.0 comes back
+/// from the file as 0.0. The store takes every zero as 0.0, so the cache answers before a restart
+/// what the file answers after it.
+pub(crate) fn take_location(what: &'static str, location: Location) -> Result<Location, Refusal> {
     if let Some(problem) = token_problem(&location.dimension) {
         return Err(Refusal::Invalid {
             what,
@@ -451,5 +454,13 @@ pub(crate) fn check_location(what: &'static str, location: &Location) -> Result<
             why: format!("has the {axis} {value}, which is not a finite number"),
         });
     }
-    Ok(())
+    // Adding 0.0 turns -0.0 into 0.0 and leaves every other finite number as it is.
+    Ok(Location {
+        x: location.x + 0.0,
+        y: location.y + 0.0,
+        z: location.z + 0.0,
+        yaw: location.yaw + 0.0,
+        pitch: location.pitch + 0.0,
+        ..location
+    })
 }

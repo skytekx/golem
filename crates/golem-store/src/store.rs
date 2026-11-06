@@ -50,10 +50,10 @@ use crate::{
         Transfer,
         Uuid,
         Warp,
-        check_location,
         check_name,
         check_text,
-        check_token, //
+        check_token,
+        take_location, //
     },
     permissions::{
         PermissionSet,
@@ -508,7 +508,7 @@ impl Store {
 
     /// Records that a player quit at `at`, standing at `logout`.
     pub fn quit(&self, uuid: Uuid, logout: Location, at: i64) -> Result<(), StoreError> {
-        check_location("the logout location", &logout)?;
+        let logout = take_location("the logout location", logout)?;
         self.edit_player(uuid, |record| {
             record.logout = Some(logout);
             record.last_seen = at;
@@ -517,9 +517,9 @@ impl Store {
 
     /// Sets the place `/back` returns the player to, or clears it.
     pub fn set_back(&self, uuid: Uuid, back: Option<Location>) -> Result<(), StoreError> {
-        if let Some(back) = &back {
-            check_location("the back location", back)?;
-        }
+        let back = back
+            .map(|back| take_location("the back location", back))
+            .transpose()?;
         self.edit_player(uuid, |record| record.back = back)
     }
 
@@ -544,17 +544,19 @@ impl Store {
 
     /// Puts the whole record of a player in place of the one before, or creates it, keeping
     /// their homes, mail, ignore list and account. This is the call of the migration tool.
-    pub fn put_player(&self, record: Player) -> Result<(), StoreError> {
+    pub fn put_player(&self, mut record: Player) -> Result<(), StoreError> {
         check_name("the name of a player", &record.name)?;
         if let Some(nickname) = &record.nickname {
             check_name("a nickname", nickname)?;
         }
-        if let Some(logout) = &record.logout {
-            check_location("the logout location", logout)?;
-        }
-        if let Some(back) = &record.back {
-            check_location("the back location", back)?;
-        }
+        record.logout = record
+            .logout
+            .map(|logout| take_location("the logout location", logout))
+            .transpose()?;
+        record.back = record
+            .back
+            .map(|back| take_location("the back location", back))
+            .transpose()?;
         self.change(|cache| {
             cache.put_player(record.clone());
             Ok(((), Some(Op::PutPlayer(Box::new(record)))))
@@ -606,7 +608,7 @@ impl Store {
     /// Sets the home `name` of a player, and answers whether it replaced one.
     pub fn set_home(&self, uuid: Uuid, name: &str, location: Location) -> Result<bool, StoreError> {
         check_name("the name of a home", name)?;
-        check_location("the location of a home", &location)?;
+        let location = take_location("the location of a home", location)?;
         self.change(|cache| {
             let entry = cache
                 .player_mut(&uuid)
@@ -680,7 +682,7 @@ impl Store {
         permission: Option<&str>,
     ) -> Result<bool, StoreError> {
         check_name("the name of a warp", name)?;
-        check_location("the location of a warp", &location)?;
+        let location = take_location("the location of a warp", location)?;
         if let Some(permission) = permission {
             check_token("the permission of a warp", permission)?;
         }
@@ -729,7 +731,7 @@ impl Store {
     /// whether it replaced one.
     pub fn set_spawn(&self, group: &str, location: Location) -> Result<bool, StoreError> {
         check_token("the group of a spawn", group)?;
-        check_location("the location of a spawn", &location)?;
+        let location = take_location("the location of a spawn", location)?;
         self.change(|cache| {
             let replaced = Arc::make_mut(&mut cache.spawns)
                 .insert(group.to_owned(), location.clone())

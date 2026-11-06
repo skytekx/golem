@@ -443,7 +443,10 @@ for at all.
 The rules of a value: a name of a player, a home, a warp, a setting key, a nickname or the sender of
 a mail has 1 to 64 characters and no control character. A node, a group or a dimension has 1 to 256
 bytes and no white space or control character. A text of a mail, a note or a setting value has at
-most 65536 bytes and no NUL, and a mail is not empty. A location is finite.
+most 65536 bytes and no NUL, and a mail is not empty. A location is finite, and the store takes a
+coordinate or an angle of -0.0 as 0.0, since SQLite writes a REAL without a fraction as an integer
+and the file gives the zero back without its sign. A read then answers the same before a restart
+and after it.
 
 ## The place in the program golem
 
