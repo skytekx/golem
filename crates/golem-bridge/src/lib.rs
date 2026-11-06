@@ -23,12 +23,14 @@
 //! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
 //! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
 //! | [`host`] | The global state and one plain function per native method |
+//! | `natives` | The functions the JVM calls, thin wrappers over [`host`], and their registration |
 //!
 //! The crate holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
 //! `tests/notebooks/04_plugins.ipynb` drives the functions of [`host`] through golem-devtool.
 
 mod actions;
 pub mod host;
+mod natives;
 mod ticks;
 
 pub use crate::{
@@ -180,9 +182,17 @@ pub fn install(handler: Box<dyn Handler>) -> Actions {
 /// Registers the native methods of the host class on the JVM of `env`.
 ///
 /// The host calls this on its own thread after the JVM exists and before the main class runs.
+/// `FindClass` looks the host class up, which on a thread of the invocation API goes through the
+/// system class loader. On an error the pending exception of the JVM is printed and cleared, so
+/// the caller may go on with the JVM.
 pub fn register_natives(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<()> {
-    let _ = env;
-    todo!("golem-bridge: register_natives")
+    natives::register(env)
+}
+
+/// Answers the name and the JNI descriptor of every native method that [`register_natives`]
+/// registers, in the order of okf/bridge.md.
+pub fn native_signatures() -> Vec<(&'static str, &'static str)> {
+    natives::signatures()
 }
 
 /// The tick statistics so far, over the ticks that the native method `tick()` recorded.

@@ -128,6 +128,15 @@ impl Actions {
         self.lock().drain(..).collect()
     }
 
+    /// Puts drained actions back in front of the queue, in their order, for a drain whose
+    /// answer never reached the mod.
+    pub(crate) fn requeue(&self, actions: Vec<Action>) {
+        let mut queue = self.lock();
+        for action in actions.into_iter().rev() {
+            queue.push_front(action);
+        }
+    }
+
     /// Answers how many actions wait.
     pub fn len(&self) -> usize {
         self.lock().len()

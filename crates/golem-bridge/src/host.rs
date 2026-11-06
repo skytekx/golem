@@ -294,6 +294,22 @@ pub fn drain() -> Vec<String> {
     })
 }
 
+/// Puts the actions of a drain whose answer never reached the mod back in front of the queue.
+///
+/// The native `drain()` calls it when it cannot hand its array to the JVM, so a failed call of
+/// the JNI loses no action, such as the stop of the server.
+pub(crate) fn requeue(lines: &[String]) {
+    let actions: Vec<Action> = lines
+        .iter()
+        .filter_map(|line| Action::decode(line))
+        .collect();
+    log(format_args!(
+        "the native drain could not answer {} actions, so they wait for the next tick",
+        actions.len()
+    ));
+    host().actions.requeue(actions);
+}
+
 /// Hands `event` to the handler and answers its verdict, or a pass without a handler.
 fn dispatch(native: &str, event: &Event) -> Verdict {
     with_handler(native, Verdict::Pass, |handler, actions| {
