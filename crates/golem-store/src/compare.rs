@@ -5,7 +5,14 @@
  * and against the cache, and the log of the accounts, which the cache does not hold.
  */
 
-use std::{collections::BTreeMap, sync::Arc, time::Instant};
+use std::{
+    collections::{
+        BTreeMap,
+        HashMap, //
+    },
+    sync::Arc,
+    time::Instant,
+};
 
 use rusqlite::{
     Connection,
@@ -144,25 +151,7 @@ pub fn check(connection: &Connection, cache: &Snapshot) -> Result<Check, StoreEr
             row.get(0)
         })
         .map_err(sqlite)?;
-    let mut statement = connection
-        .prepare(
-            "SELECT a.player, a.balance, \
-             coalesce((SELECT sum(amount) FROM transfers WHERE target = a.player), 0) \
-             - coalesce((SELECT sum(amount) FROM transfers WHERE source = a.player), 0) \
-             FROM accounts AS a ORDER BY a.player",
-        )
-        .map_err(sqlite)?;
-    let mut ledger_mismatches = Vec::new();
-    let mut rows = statement.query([]).map_err(sqlite)?;
-    while let Some(row) = rows.next().map_err(sqlite)? {
-        let player: String = row.get(0).map_err(sqlite)?;
-        let balance: i64 = row.get(1).map_err(sqlite)?;
-        let sum: i64 = row.get(2).map_err(sqlite)?;
-        if balance != sum {
-            let uuid = Uuid::parse(&player).unwrap_or(Uuid(0));
-            ledger_mismatches.push((uuid, balance, sum));
-        }
-    }
+    let ledger_mismatches = ledger_mismatches(connection).map_err(sqlite)?;
     let file = into_snapshot(Cache::load(connection).map_err(sqlite)?);
     let mut statement = connection
         .prepare(
@@ -195,6 +184,41 @@ pub fn check(connection: &Connection, cache: &Snapshot) -> Result<Check, StoreEr
         rows: counts,
         copy_nanos: cache.copy_nanos,
     })
+}
+
+/// The accounts whose balance is not what reached them less what left them, each with its
+/// balance and that sum.
+///
+/// The sums run in Rust as `i128`. The `sum` of `SQLite` fails with `integer overflow` once the
+/// amounts it adds pass `i64::MAX`, which a valid log reaches: a starting balance of `i64::MAX`
+/// cents, a withdrawal of one cent and a deposit of one cent.
+fn ledger_mismatches(connection: &Connection) -> rusqlite::Result<Vec<(Uuid, i64, i128)>> {
+    let mut sums: HashMap<String, i128> = HashMap::new();
+    let mut statement = connection.prepare("SELECT source, target, amount FROM transfers")?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let amount = i128::from(row.get::<_, i64>(2)?);
+        if let Some(source) = row.get::<_, Option<String>>(0)? {
+            *sums.entry(source).or_default() -= amount;
+        }
+        if let Some(target) = row.get::<_, Option<String>>(1)? {
+            *sums.entry(target).or_default() += amount;
+        }
+    }
+    let mut statement =
+        connection.prepare("SELECT player, balance FROM accounts ORDER BY player")?;
+    let mut rows = statement.query([])?;
+    let mut mismatches = Vec::new();
+    while let Some(row) = rows.next()? {
+        let player: String = row.get(0)?;
+        let balance: i64 = row.get(1)?;
+        let sum = sums.get(&player).copied().unwrap_or(0);
+        if i128::from(balance) != sum {
+            let uuid = Uuid::parse(&player).unwrap_or(Uuid(0));
+            mismatches.push((uuid, balance, sum));
+        }
+    }
+    Ok(mismatches)
 }
 
 /// The last `limit` entries of the log, the newest first, of one account or of all.

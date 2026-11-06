@@ -371,7 +371,11 @@ fn check_json(check: &Check) -> Value {
     let mismatches: Vec<Value> = check
         .ledger_mismatches
         .iter()
-        .map(|(uuid, balance, sum)| json!({"account": uuid.to_string(), "balance": balance, "log": sum}))
+        .map(|(uuid, balance, sum)| {
+            // A sum past the 64 bits of a number of serde_json is written as text.
+            let log = i64::try_from(*sum).map_or_else(|_| json!(sum.to_string()), |sum| json!(sum));
+            json!({"account": uuid.to_string(), "balance": balance, "log": log})
+        })
         .collect();
     json!({
         "passed": check.passed(),

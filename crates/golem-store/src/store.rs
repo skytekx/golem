@@ -108,8 +108,10 @@ pub struct Check {
     pub integrity: Vec<String>,
     /// The rows that name a row of another table that does not exist.
     pub foreign_key_violations: i64,
-    /// The accounts whose balance is not the sum of the log, each with its balance and that sum.
-    pub ledger_mismatches: Vec<(Uuid, i64, i64)>,
+    /// The accounts whose balance is not the sum of the log, each with its balance and that sum,
+    /// which is an `i128`, since the amounts of a valid log may add up past `i64::MAX` on their
+    /// way to a balance that fits.
+    pub ledger_mismatches: Vec<(Uuid, i64, i128)>,
     /// The parts in which the file and the cache differ, which is none once every change is in
     /// the file.
     pub cache_differences: Vec<String>,
