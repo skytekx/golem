@@ -53,6 +53,7 @@ import hashlib
 import http.client
 import json
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -288,16 +289,29 @@ def server_files(index: dict) -> tuple:
     return required, left_out
 
 
+def continues(response, offset: int) -> bool:
+    """Whether `response` answers a range request with the bytes from `offset` on."""
+    if response.status != 206:
+        return False
+    found = re.fullmatch(r"bytes (\d+)-\d+/(\d+|\*)", (response.headers.get("Content-Range") or "").strip())
+    return found is not None and int(found[1]) == offset
+
+
 def fetch_jar(entry: dict, mods: Path) -> bool:
     """Download one jar of the index into `mods`, answering whether it had to be downloaded.
 
     A jar whose size and SHA-512 match stays. A partial download goes on with a range request
-    where it stopped, and starts over when the server answers with the whole file instead.
+    where it stopped, but only when the server answers with the bytes from that point on, and
+    starts over from the first byte when it answers with anything else. A download that went on
+    from a partial one and misses the hash held wrong bytes before that point, so the next try
+    starts over from the first byte. Only a download from the first byte that misses fails at
+    once.
     """
     target = mods / entry["file"]
     if target.is_file() and target.stat().st_size == entry["size"] and digest(target, "sha512") == entry["sha512"]:
         return False
     partial = target.with_name(target.name + ".part")
+    reason = "broke off"
     for attempt in range(1, MODPACK_TRIES + 1):
         offset = partial.stat().st_size if partial.is_file() else 0
         if offset >= entry["size"]:
@@ -310,22 +324,26 @@ def fetch_jar(entry: dict, mods: Path) -> bool:
         try:
             request = urllib.request.Request(entry["url"], headers=headers)
             with urllib.request.urlopen(request, timeout=300) as response:
-                resumed = offset > 0 and response.status == 206
+                resumed = offset > 0 and continues(response, offset)
                 with open(partial, "ab" if resumed else "wb") as stream:
                     shutil.copyfileobj(response, stream)
         except (OSError, http.client.HTTPException) as broken:
             if attempt == MODPACK_TRIES:
                 raise Failure("%s: %s" % (entry["url"], broken)) from broken
+            reason = "broke off"
             continue
         if partial.stat().st_size < entry["size"]:
+            reason = "broke off"
             continue
         found = digest(partial, "sha512")
         if partial.stat().st_size == entry["size"] and found == entry["sha512"]:
             partial.replace(target)
             return True
         partial.unlink()
-        raise Failure("%s has SHA-512 %s, the index names %s" % (entry["url"], found, entry["sha512"]))
-    raise Failure("%s broke off %d times" % (entry["url"], MODPACK_TRIES))
+        if not offset:
+            raise Failure("%s has SHA-512 %s, the index names %s" % (entry["url"], found, entry["sha512"]))
+        reason = "went on from byte %d and missed the SHA-512" % offset
+    raise Failure("%s: all %d tries failed, the last %s" % (entry["url"], MODPACK_TRIES, reason))
 
 
 def replace(source: Path, target: Path) -> None:
