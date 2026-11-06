@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The seed of the permissions of SkyTekx: the groups and their nodes that golem-permissions reads
+# on a host whose store holds none. okf/plugins/permissions.md describes the format, the rules of
+# resolution and how this file maps from LuckPerms.
+#
+# The nodes keep the names of EssentialsX, such as essentials.home, so that a node of a LuckPerms
+# export maps one to one and every command keeps the node a player knows. The commands of Golem
+# itself take nodes under golem.
+#
+# The file names no player. The UUID of a player is player data, which stays out of the
+# repository (CONTRIBUTING.md section 9), so the store says who is in the group admin.
+
+# Every player is in the group default. It holds the 39 nodes of EssentialsX that the group
+# default of LuckPerms on the Mac mini holds, as the wiki of the server lists them in
+# okf/modpack/plugins.md, section Permissions, lines 64 to 69 of skytekx3-1201-server.
+#
+# Unknown: the group lives only in an H2 database on the Mac mini, and no export of it exists, so
+# this list is the set the wiki names and was not read from the database. The same wiki counts
+# 38 nodes in its open points (line 125) and its change log (okf/log.md line 369), both written
+# before essentials.home.bed joined on 2026-11-02.
+[groups.default]
+weight = 0
+nodes = [
+    # Teleport requests.
+    "essentials.tpa",
+    "essentials.tpaccept",
+    "essentials.tpdeny",
+    "essentials.tpahere",
+    "essentials.tpacancel",
+    "essentials.tpauto",
+    # Homes. Without essentials.home.bed, /home of a player with no home ignores the bed.
+    "essentials.home",
+    "essentials.home.bed",
+    "essentials.sethome",
+    "essentials.sethome.multiple",
+    "essentials.delhome",
+    # The way back after a teleport and after a death.
+    "essentials.back",
+    "essentials.back.ondeath",
+    # The spawn of EssentialsXSpawn.
+    "essentials.spawn",
+    # Warps.
+    "essentials.warp",
+    "essentials.warp.list",
+    # Messages.
+    "essentials.msg",
+    "essentials.mail",
+    "essentials.mail.send",
+    "essentials.ignore",
+    "essentials.me",
+    # Status.
+    "essentials.afk",
+    # Information.
+    "essentials.list",
+    "essentials.seen",
+    "essentials.realname",
+    "essentials.motd",
+    "essentials.rules",
+    "essentials.help",
+    "essentials.helpop",
+    "essentials.ping",
+    "essentials.getpos",
+    "essentials.compass",
+    "essentials.depth",
+    # Other.
+    "essentials.suicide",
+    # Economy.
+    "essentials.balance",
+    "essentials.balancetop",
+    "essentials.pay",
+    "essentials.worth",
+    # The signs of Essentials, every kind of them.
+    "essentials.signs.use.*",
+]
+
+# The operators. The live server has no such group. Its admin commands stay with the operators,
+# who hold them through the defaults of Bukkit, as the wiki of the server says in
+# okf/modpack/plugins.md lines 55 to 57, 69 and 94. Golem knows no operator in its permissions, so
+# this group stands for them, with every node of Essentials and every node of Golem itself, such
+# as the commands that change the permissions.
+#
+# Unknown: which admin commands the operators really use. The usage audit of the plan answers
+# that, and the group may then grant less than every node of Essentials.
+[groups.admin]
+weight = 100
+inherits = ["default"]
+nodes = [
+    "essentials.*",
+    "golem.*",
+]
