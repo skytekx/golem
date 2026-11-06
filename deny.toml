@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The policy of cargo deny for the dependencies of Golem. CI runs cargo deny check on every push,
+# as Documentation/licensing.md section 7 says.
+#
+# A dependency may only come under a license that can be combined with the AGPL 3 only. The list
+# below holds those the dependencies use today, each of them permissive or GPL compatible. A new
+# license joins the list in the same commit as the crate that brings it, with a line that says
+# why it is compatible.
+
+[graph]
+all-features = true
+
+[licenses]
+confidence-threshold = 0.93
+allow = [
+    # The license of Golem itself.
+    "AGPL-3.0-only",
+    # Permissive licenses that the GPL 3 family takes, as the FSF lists them.
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# The crates of the workspace name each other by path, which is no wildcard.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+[advisories]
+yanked = "deny"
