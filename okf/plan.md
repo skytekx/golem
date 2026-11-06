@@ -308,6 +308,11 @@ without rate limits.
 
 ## The GraphQL API
 
+A later ruling of 2026-11-06 makes this schema the plugin API of Golem: a plugin reads the game with
+queries, changes it with mutations and hears events through subscriptions, and the schema covers an
+equivalent of the whole Bukkit API, see [Bukkit plugins](#bukkit-plugins). The schema below is the
+first sketch for operators and tools, before that ruling.
+
 A first schema, to be refined while the bridge grows.
 
 ```graphql
