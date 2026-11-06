@@ -78,7 +78,10 @@ A notebook follows the form of the notebooks of Aosabi.
 5. A last cell that prints the verdict. A run that reaches it passed.
 
 A notebook is committed without outputs, writes only below `tests/notebooks/out/` or a temporary
-directory, and prints repository relative paths, so no machine path enters a committed file. It
+directory, and prints repository relative paths, so no machine path enters a committed file. The
+builds it runs are the exception: cargo writes its target directory, `target/` unless
+`CARGO_TARGET_DIR` moves it, and Gradle fills its cache in `~/.gradle` unless `GRADLE_USER_HOME`
+moves it, as every build of the tree does. It
 gets an entry in `tests/matrix.yaml`. A notebook is JSON and cannot hold a comment, so its SPDX
 tags stand in a `.license` file beside it, as [licensing.md](licensing.md) describes.
 
