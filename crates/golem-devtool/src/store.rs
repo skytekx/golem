@@ -30,6 +30,10 @@
 //! prints one line for all rounds, `sleep` with `ms`, and `wait`, which prints its line and then
 //! waits until its standard input ends, for a notebook that kills the process there.
 //!
+//! A store that no step closed closes at the end of the script, and the exit code is 1 when that
+//! close fails. A store that a step closed answered its close in that step and is not closed
+//! again, so the exit code of a script that closes a failed store itself is 0.
+//!
 //! When the standard output is gone, such as a pipe whose reader closed, a subcommand stops at
 //! once, a script closes its store first, and the exit code is 1 with the reason on the standard
 //! error.
@@ -408,11 +412,13 @@ fn description_json(description: &Description) -> Value {
     })
 }
 
-/// What a script works on: the store and the file it was opened from.
+/// What a script works on: the store, the file it was opened from, and whether a step closed it.
 #[derive(Default)]
 struct Session {
     store: Option<Store>,
     path: Option<PathBuf>,
+    /// Whether a step of the script closed the store, whose answer the script printed then.
+    closed: bool,
 }
 
 impl Session {
@@ -423,9 +429,12 @@ impl Session {
     }
 
     fn open(&mut self, path: PathBuf) -> Answer {
-        if let Some(store) = self.store.take() {
+        if let Some(store) = self.store.take()
+            && !self.closed
+        {
             store.close()?;
         }
+        self.closed = false;
         let store = Store::open(&path)?;
         let answer = json!({
             "players": store.player_count(),
@@ -438,11 +447,22 @@ impl Session {
         Ok(answer)
     }
 
-    /// Closes the store and keeps it, so a later step meets a closed store.
+    /// Closes the store and keeps it, so a later step meets a closed store, and the end of the
+    /// script does not close it again.
     fn close(&mut self) -> Answer {
-        let store = self.store()?;
+        let store = self.store()?.clone();
+        self.closed = true;
         store.close()?;
         Ok(stats_json(&store.stats()))
+    }
+
+    /// Closes at the end of a script the store that no step closed, so its last changes reach
+    /// the file, and answers whether they did. A store a step closed answered its close already.
+    fn finish(&mut self) -> Result<(), StoreError> {
+        match self.store.take() {
+            Some(store) if !self.closed => store.close(),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -914,7 +934,7 @@ fn script(arguments: &[String]) -> i32 {
     }
     // A store the script left open closes here, so its last changes reach the file, also when
     // the reader of the answers went away and the script stopped early.
-    let closed = session.store.take().map_or(Ok(()), |store| store.close());
+    let closed = session.finish();
     if let Err(error) = printed {
         return output_closed(name, &error);
     }
