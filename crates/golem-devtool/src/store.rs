@@ -25,7 +25,8 @@
 //!
 //! A step is a call of `Store` by its name with its arguments by name, a location being
 //! `{"dimension", "x", "y", "z", "yaw", "pitch"}`, where a number may also be a string such as
-//! `"NaN"`. The devtool adds `reopen`, which closes the store and opens the same file, `repeat`,
+//! `"NaN"`. The devtool adds `close_concurrently`, which closes the store on two threads at once
+//! and answers both closes, `reopen`, which closes the store and opens the same file, `repeat`,
 //! which runs its `steps` `count` times with `{i}` in a string replaced by the round from 1 and
 //! prints one line for all rounds, `sleep` with `ms`, and `wait`, which prints its line and then
 //! waits until its standard input ends, for a notebook that kills the process there.
@@ -456,12 +457,51 @@ impl Session {
         Ok(stats_json(&store.stats()))
     }
 
+    /// Closes the store on a second thread and, once that close has taken the queue of the
+    /// writer, on the thread of the script as well, and answers each close with the counts of
+    /// the writer at the moment it returned.
+    fn close_concurrently(&mut self) -> Answer {
+        let store = self.store()?.clone();
+        self.closed = true;
+        let other = store.clone();
+        let first = std::thread::spawn(move || {
+            let answer = other.close();
+            (answer, other.stats())
+        });
+        while !store.stats().closed {
+            std::thread::yield_now();
+        }
+        let second = store.close();
+        let second_stats = store.stats();
+        let (first, first_stats) = first
+            .join()
+            .map_err(|_| argument("the thread of the first close panicked".to_owned()))?;
+        Ok(json!({
+            "first": close_json(first, &first_stats),
+            "second": close_json(second, &second_stats),
+        }))
+    }
+
     /// Closes at the end of a script the store that no step closed, so its last changes reach
     /// the file, and answers whether they did. A store a step closed answered its close already.
     fn finish(&mut self) -> Result<(), StoreError> {
         match self.store.take() {
             Some(store) if !self.closed => store.close(),
             _ => Ok(()),
+        }
+    }
+}
+
+/// The answer of one close with the counts of the writer after it, as a step prints them.
+fn close_json(answer: Result<(), StoreError>, stats: &Stats) -> Value {
+    match answer {
+        Ok(()) => json!({"ok": stats_json(stats)}),
+        Err(error) => {
+            let error = StepError::from(error);
+            json!({
+                "error": {"kind": error.kind, "message": error.message},
+                "stats": stats_json(stats),
+            })
         }
     }
 }
@@ -496,6 +536,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
     match op {
         "open" => session.open(PathBuf::from(arguments.text("path")?)),
         "close" => session.close(),
+        "close_concurrently" => session.close_concurrently(),
         "reopen" => {
             let path = session
                 .path

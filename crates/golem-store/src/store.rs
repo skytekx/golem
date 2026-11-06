@@ -18,7 +18,7 @@ use std::{
         PathBuf, //
     },
     sync::{
-        Arc, Mutex, MutexGuard,
+        Arc, Condvar, Mutex, MutexGuard, PoisonError,
         atomic::Ordering,
         mpsc::{
             self,
@@ -147,6 +147,10 @@ struct Inner {
     state: Mutex<State>,
     shared: Arc<Shared>,
     writer: Mutex<Option<JoinHandle<()>>>,
+    /// The answer of the close once the writer ended, which every close answers.
+    outcome: Mutex<Option<Result<(), StoreError>>>,
+    /// Wakes the closes that wait for the one that stops the writer.
+    ended: Condvar,
 }
 
 struct State {
@@ -173,18 +177,36 @@ impl Drop for Inner {
     }
 }
 
-/// Sends the stop to the writer and waits until the file is closed.
+/// Sends the stop to the writer and waits until the file is closed, then answers whether every
+/// change reached it. The first close stops the writer. Every later close, also one that runs at
+/// the same time on another thread, waits until the writer ended and answers as the first.
 fn shutdown(inner: &Inner) -> Result<(), StoreError> {
-    let sender = {
-        let mut state = inner
-            .state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let Some(sender) = state.sender.take() else {
-            return Ok(());
-        };
-        sender
+    let sender = inner
+        .state
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .sender
+        .take();
+    let Some(sender) = sender else {
+        let mut outcome = inner.outcome.lock().unwrap_or_else(PoisonError::into_inner);
+        loop {
+            if let Some(outcome) = outcome.as_ref() {
+                return outcome.clone();
+            }
+            outcome = inner
+                .ended
+                .wait(outcome)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
     };
+    let outcome = stop(inner, sender);
+    *inner.outcome.lock().unwrap_or_else(PoisonError::into_inner) = Some(outcome.clone());
+    inner.ended.notify_all();
+    outcome
+}
+
+/// Stops the writer through its queue and waits until its thread ended.
+fn stop(inner: &Inner, sender: Sender<Message>) -> Result<(), StoreError> {
     let (reply, answer) = mpsc::sync_channel(1);
     let sent = sender.send(Message::Stop(reply));
     drop(sender);
@@ -201,7 +223,7 @@ fn shutdown(inner: &Inner) -> Result<(), StoreError> {
     let handle = inner
         .writer
         .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner)
         .take();
     if let Some(handle) = handle
         && handle.join().is_err()
@@ -243,6 +265,8 @@ impl Store {
                 }),
                 shared,
                 writer: Mutex::new(Some(handle)),
+                outcome: Mutex::new(None),
+                ended: Condvar::new(),
             }),
         })
     }
@@ -337,8 +361,9 @@ impl Store {
 
     /// Writes every change into the file, checkpoints the log into it, closes it and ends the
     /// writer, then answers whether every change reached the file. A later change answers
-    /// [`StoreError::Closed`], a read still answers from the cache, and a second close does
-    /// nothing. The program golem calls it before it ends.
+    /// [`StoreError::Closed`] and a read still answers from the cache. A second close, also one
+    /// on another thread while the first still writes, waits until the writer ended and answers
+    /// as the first, so a failure stays a failure. The program golem calls it before it ends.
     pub fn close(&self) -> Result<(), StoreError> {
         shutdown(&self.inner)
     }

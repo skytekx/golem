@@ -108,8 +108,10 @@ What this gives:
   lacks, so the server is restarted, which reads the file again.
 - `close` applies every change, checkpoints the log into the file with `wal_checkpoint(TRUNCATE)`,
   closes it and ends the writer, and answers whether every change reached the file. A change after
-  it answers `the store is closed`, and a second close does nothing. A store whose last handle is
-  dropped without a close closes the same way and logs that it was not closed.
+  it answers `the store is closed`. A second close, also one on another thread while the first
+  still writes, such as the callback of the exit hook beside the main path of `golem run`, waits
+  until the writer ended and answers as the first, so a failure stays a failure. A store whose last
+  handle is dropped without a close closes the same way and logs that it was not closed.
 
 ## The schema
 
@@ -388,7 +390,7 @@ before it writes the change, and loads the set again when the generation moved.
 | `set_setting(key, value)`, `remove_setting(key)`, `setting(key)`, `settings()` | A table of text by key |
 | `Store::open(path)` | Opens or creates the file, migrates it, loads the cache, starts the writer |
 | `flush()` | Waits until every change before it is in the file and synced |
-| `close()` | Writes, checkpoints and closes the file and ends the writer |
+| `close()` | Writes, checkpoints and closes the file and ends the writer, and every later close answers as the first |
 | `stats()` | The changes queued, written, lost and pending, the batches and the time of the writer |
 | `MAX_BATCH` | 4096, the most changes in one transaction of the writer |
 | `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache |
