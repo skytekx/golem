@@ -60,6 +60,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
@@ -273,27 +274,68 @@ def fetch_server(cache: Path, given) -> Path:
     return repository
 
 
-def server_files(index: dict) -> tuple:
-    """The entries of `index` that the server requires, and the names of those it leaves out."""
-    if index.get("formatVersion") != 1 or index.get("game") != "minecraft":
+#: A SHA-512 as the index writes it, in lower case hex.
+SHA512 = re.compile(r"[0-9a-f]{128}")
+#: What env.server of an entry may say, as the format of Modrinth packs defines it.
+SERVER_ENV = ("required", "optional", "unsupported")
+
+
+def odd_character(text: str) -> bool:
+    """Whether `text` holds a control or format character, which no name of a jar needs."""
+    return any(unicodedata.category(char) in ("Cc", "Cf") for char in text)
+
+
+def folded(name: str) -> str:
+    """`name` as a file system that ignores case and the form of Unicode compares it."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
+def server_files(index) -> tuple:
+    """The entries of `index` that the server requires, and the names of those it leaves out.
+
+    Every entry must name a jar in mods/ without a control character, an env that the format
+    knows, a list of downloads, a SHA-512 in lower case hex and a positive size, or the index is
+    refused with a Failure that names the entry.
+    """
+    if not isinstance(index, dict) or index.get("formatVersion") != 1 or index.get("game") != "minecraft":
         raise Failure("modrinth.index.json is no index of a Minecraft pack in format 1")
-    pins = index.get("dependencies", {})
+    pins = index.get("dependencies")
+    pins = pins if isinstance(pins, dict) else {}
     if "%s-%s" % (pins.get("minecraft"), pins.get("forge")) != FORGE_VERSION:
         raise Failure("the pack names Forge %s, the pin is %s" % (pins.get("forge"), FORGE_VERSION))
+    if not isinstance(index.get("files"), list):
+        raise Failure("modrinth.index.json holds no list of files")
     required, left_out = [], []
     for entry in index["files"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise Failure("the index holds the entry %r, which names no path" % (entry,))
+        if odd_character(entry["path"]):
+            raise Failure("the index names the file %r, which holds a control or format character" % entry["path"])
         path = PurePosixPath(entry["path"])
         name = path.name
         if path.parts != ("mods", name) or name.startswith(".") or "\\" in name or not name.endswith(".jar"):
             raise Failure("the index names the file %r, which is no jar in mods/" % entry["path"])
-        if entry.get("env", {}).get("server") != "required":
+        env = entry.get("env", {})
+        if not isinstance(env, dict) or env.get("server", "required") not in SERVER_ENV:
+            raise Failure("the index gives %s the env %r, which the format does not know" % (name, env))
+        downloads = entry.get("downloads")
+        if not isinstance(downloads, list) or not downloads or not all(isinstance(url, str) for url in downloads):
+            raise Failure("the index names %s without a list of downloads" % name)
+        hashes = entry.get("hashes")
+        sha512 = hashes.get("sha512") if isinstance(hashes, dict) else None
+        if not isinstance(sha512, str) or not SHA512.fullmatch(sha512):
+            raise Failure("the index names %s without a SHA-512 of 128 lower case hex digits" % name)
+        size = entry.get("fileSize")
+        if not isinstance(size, int) or isinstance(size, bool) or size <= 0:
+            raise Failure("the index names %s with the size %r, which is no positive number of bytes" % (name, size))
+        if env.get("server") != "required":
             left_out.append(name)
             continue
-        url = entry["downloads"][0]
+        url = downloads[0]
         parts = urllib.parse.urlsplit(url)
         if parts.scheme != "https" or parts.hostname not in MODPACK_HOSTS:
             raise Failure("the index downloads %s from %s, which is none of %s" % (name, parts.hostname, MODPACK_HOSTS))
-        required.append({"file": name, "url": url, "sha512": entry["hashes"]["sha512"], "size": entry["fileSize"]})
+        required.append({"file": name, "url": url, "sha512": sha512, "size": size})
     return required, left_out
 
 
@@ -348,7 +390,7 @@ def fetch_jar(entry: dict, mods: Path) -> bool:
     for attempt in range(1, MODPACK_TRIES + 1):
         offset = partial.stat().st_size if partial.is_file() else 0
         if offset >= entry["size"]:
-            partial.unlink()
+            partial.unlink(missing_ok=True)
             offset = 0
         headers = {"User-Agent": "golem-harness"}
         if offset:
@@ -402,7 +444,10 @@ def fetch_modpack(cache: Path, given) -> Path:
     stamp = pack / "modpack.json"
     if stamp.exists():
         stamp.unlink()
-    index = json.loads(git(["show", SERVER_COMMIT + ":modrinth.index.json"], repository))
+    try:
+        index = json.loads(git(["show", SERVER_COMMIT + ":modrinth.index.json"], repository))
+    except ValueError as broken:
+        raise Failure("modrinth.index.json of %s is no JSON: %s" % (SERVER_COMMIT[:12], broken)) from broken
     required, left_out = server_files(index)
     tree = cache / "unpack-modpack"
     shutil.rmtree(tree, ignore_errors=True)
@@ -411,16 +456,24 @@ def fetch_modpack(cache: Path, given) -> Path:
     with open(archive, "wb") as stream:
         git(["archive", "--format=tar", SERVER_COMMIT, "--", "local-mods", *MODPACK_TREES, *MODPACK_FILES],
             repository, output=stream)
-    with tarfile.open(archive) as bundle:
-        bundle.extractall(tree, filter="data")
+    try:
+        with tarfile.open(archive) as bundle:
+            bundle.extractall(tree, filter="data")
+    except tarfile.TarError as broken:
+        raise Failure("the files of %s do not unpack as plain files: %s" % (SERVER_COMMIT[:12], broken)) from broken
     archive.unlink()
     if digest(tree / ARCLIGHT_JAR, "sha256") != ARCLIGHT_SHA256:
         raise Failure("%s of the commit differs from its pin %s" % (ARCLIGHT_JAR, ARCLIGHT_SHA256))
     local = sorted(path for path in (tree / "local-mods").iterdir() if path.suffix == ".jar")
     names = [entry["file"] for entry in required]
-    clash = sorted(set(names) & {path.name for path in local})
-    if clash or len(set(names)) != len(names):
-        raise Failure("the index and local-mods/ name some jars twice: %s" % clash)
+    # Two names that differ in case or in the form of Unicode alone are one file on the disk of a
+    # Mac, so they count as the same jar.
+    groups = {}
+    for name in names + [path.name for path in local]:
+        groups.setdefault(folded(name), []).append(name)
+    twice = sorted(group for group in groups.values() if len(group) > 1)
+    if twice:
+        raise Failure("the index and local-mods/ name some jars twice: %s" % ", ".join(" and ".join(group) for group in twice))
     mods = pack / "mods"
     mods.mkdir(parents=True, exist_ok=True)
     # A jar of an earlier pin would load beside the new one, so the folder holds the pack alone.
@@ -489,7 +542,7 @@ def main(argv=None) -> int:
         if args.only == "modpack":
             pack = fetch_modpack(cache, args.server_repo)
             print("fetch: the modpack of %s at %s" % (SERVER_COMMIT[:12], shown(pack)))
-    except (Failure, OSError) as broken:
+    except (Failure, OSError, ValueError, tarfile.TarError) as broken:
         print("fetch: %s" % broken, file=sys.stderr)
         return 1
     return 0
