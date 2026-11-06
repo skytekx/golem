@@ -88,7 +88,7 @@ seed. Every boot runs with a heap of 6 GiB.
 | Each boot | `Done`, the answer of `forge tps` after the listeners of `ServerStartedEvent`, `forge mods`, the server list, a vanilla login, six samples of `forge tps`, one at every 10 s of a 60 s idle, under golem `golem source` and `golem status`, then the stop and its exit status |
 | The same mods | Java loads every jar of the pack from `mods/`, but the jar of Kotlin for Forge, a library of jars of JarJar that `forge mods` does not list, and 289 mods beside Minecraft and Forge. Golem loads every mod of java in the same version from the same file, and only its bridge `golem` beside them. The server list names the same mods and marks `golem` as needed on the server alone. Arclight adds only `arclight` |
 | Errors and warnings | No crash report and no FATAL line. Every ERROR line of the other boots also appears under java or stands in the list of known lines with its reason. The WARN lines of the loader, Forge loading, JarJar, the registries, ModLauncher and Mixin, are the same under golem as under java, but for the version check of Forge, which asks the network |
-| Idle, stop and world | 19 TPS or more in the idle under java and golem, the same spawn and the same datapacks, with `mod:golem` and `mod:arclight` as the only additions, the same folders of the dimensions in the world, every dimension saved at the stop, and no line `Failed to store chunk` or `Failed to read chunk` under any boot |
+| Idle, stop and world | 19 TPS or more in the idle under java and golem, the same spawn and the same datapacks, with `mod:golem` and `mod:arclight` as the only additions, the same folders of the dimensions in the world, every dimension saved at the stop, and no failure of the storage of the world under any boot, the 35 messages of 10 classes of Minecraft that the notebook pins against the jars of the server |
 | Golem itself | Golem logs its banner and the four lines of a clean boot alone: the mod connected the game, the bridge connected, the stop on `SIGTERM` and the end. A panic of a plugin or a native, or a call over its budget, fails the boot |
 | Golem on the world of Arclight | `Done`, the bridge connected, the lines of a clean boot of golem alone, the mods of the golem boot, the spawn of the world, no ERROR line that java does not log, and exit 0 |
 | Arclight | It downloads no library, and its two conflicts with mixins of the pack appear under Arclight and not under golem |
@@ -96,9 +96,14 @@ seed. Every boot runs with a heap of 6 GiB.
 The list of known ERROR lines holds the codec noise of new sculk sensors, which the wiki of the
 server records as random during chunk generation. The race of the IOWorker of vanilla in a chunk
 save, which the wiki records as random too, is no known line. A failed write leaves a truncated
-entry in the region file, and vanilla still logs `All dimensions are saved` after it, so a line
-`Failed to store chunk` or `Failed to read chunk` fails the check of the world under every boot,
-java and Arclight included. Neither line appeared in the runs of the day.
+entry in the region file, and vanilla still logs `All dimensions are saved` after it, so every
+message with which Minecraft reports a failed read or write of a chunk, its entities, its points of
+interest, `level.dat` or the saved data fails the check of the world under every boot, java and
+Arclight included: `Failed to store chunk` and `Failed to read chunk` of the IOWorker, `Failed to
+save chunk` and `Couldn't load chunk` of the chunk map, the damage that a region file finds and the
+others that the notebook pins. It reads the strings of those 10 classes from the jars of the
+server and fails when one holds a message that it does not pin. None of those lines stood among
+the ERROR lines of the runs of the day.
 
 ## The numbers
 
