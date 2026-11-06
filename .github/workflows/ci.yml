@@ -263,7 +263,8 @@ jobs:
         run: python3 -I tests/fetch.py
 
       # The jars of the pack come from Modrinth and GitHub, each checked by the SHA-512 of the
-      # index, and a pack in place downloads nothing.
+      # index, and the libraries of Arclight from Maven Central and the repository of Sponge,
+      # each checked by its pinned SHA-256. A pack in place downloads nothing.
       - name: Download the modpack of the live server
         run: python3 -I tests/fetch.py --only modpack
 

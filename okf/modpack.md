@@ -48,6 +48,7 @@ EssentialsXSpawn and LuckPerms, are ported to Golem plugins instead, see
 | `world/datapacks/` | `skytekx3_fixes`, `skytekx3_skylands` and `skytekx3_skylands_forge` |
 | `server.properties.example`, `systemd/skytekx3.service` | The settings of the live server and the options of its JVM |
 | The Arclight jar, `arclight.conf`, `bukkit.yml`, `spigot.yml`, `commands.yml` | Arclight as the live server runs it, its jar checked by its SHA-256 |
+| `libraries/` | The 31 libraries that the `installer.json` of the Arclight jar names, 29 from Maven Central and the two of Configurate from the repository of Sponge, each pinned by its SHA-256 and checked against the SHA-1 of `installer.json`, so Arclight downloads nothing at its start |
 | `tools/patch_mods.py` | The patches of the live server for 14 jars, 11 of the index and Traverse, BiblioCraft and Simply Jetpacks 2 of `local-mods/` |
 | `modpack.json` | The commit, every jar with its source and its SHA-512, and the Arclight jar with its SHA-256, written last |
 
@@ -87,7 +88,7 @@ the same world. Every boot runs with a heap of 6 GiB.
 | Errors and warnings | No crash report and no FATAL line. Every ERROR line of the other boots also appears under java or stands in the list of known lines with its reason. The WARN lines of the loader, Forge loading, JarJar, the registries, ModLauncher and Mixin, are the same under golem as under java, but for the version check of Forge, which asks the network |
 | Idle, stop and world | 19 TPS or more in the idle under java and golem, the same spawn and the same datapacks, with `mod:golem` and `mod:arclight` as the only additions, the same folders of the dimensions in the world, and every dimension saved at the stop |
 | Golem on the world of Arclight | `Done`, the bridge connected, the mods of the golem boot, the spawn of the world, no ERROR line that java does not log, and exit 0 |
-| Arclight | Its two conflicts with mixins of the pack appear under Arclight and not under golem |
+| Arclight | It downloads no library, and its two conflicts with mixins of the pack appear under Arclight and not under golem |
 
 The list of known ERROR lines holds the two that the wiki of the server records as random during
 chunk generation, the codec noise of new sculk sensors and the race of the IOWorker of vanilla in
@@ -178,7 +179,7 @@ MISSING)`, and Minecraft drops the datapack `mod:arclight`. The world that golem
 | The constant of the repair cost of the anvil that Arclight raises for Bukkit goes to Apotheosis | The mixin WARN `@ModifyConstant conflict. Skipping mixins.arclight.core.json:world.inventory.RepairContainerMixin` under Arclight alone | No mixin of Arclight exists, and Apotheosis lifts the cap of the anvil as it does under Arclight |
 | Arclight weaves its own mixins into Minecraft | Three more static binding WARNs of Mixin, two of Arclight and one of ModernFix, and WARNs of Arclight about level stems it does not know and about the test level of Supplementaries | None |
 | The version in the server list reads `forge arclight/Trials 1.20.1` | The answer of the status | `1.20.1`, as vanilla |
-| Arclight downloads the 31 libraries of its `installer.json` at the first start from `arclight.hypertention.cn` and `repo.spongepowered.org`, checked by SHA-1 | The console of the boot and the class `Mirrors` of the jar | Golem downloads nothing at the start |
+| Arclight downloads the 31 libraries of its `installer.json` at the first start from `arclight.hypertention.cn` and `repo.spongepowered.org`, checked by SHA-1 | The `installer.json` and the class `Mirrors` of the jar. The notebook puts the libraries in place, so its boot downloads nothing | Golem downloads nothing at the start |
 | The Bukkit layer applies `spigot.yml` and `bukkit.yml`: the activation and tracking ranges, the merge radius of items and experience, the spawn limits | The log of Arclight names them at the start, `Entity Activation Range: An 32 / Mo 32 / Ra 48 / Mi 0`, see [Plan](plan.md#spigot-world-settings) | The values of vanilla until the plugin `golem-world` ports them |
 | At the stop Arclight logs the save of each of the 27 levels, but neither `All chunks are saved` for each level nor `All dimensions are saved`, which vanilla logs once it has flushed them | The log of the stop | Both lines, for the `save-all flush` and for the `stop` |
 | The live server stops over RCON, since a signal starts the shutdown thread of Arclight beside the server thread | The systemd unit and issue [#4](https://github.com/skytekx/golem/issues/4) | `SIGTERM` stops through the server thread |
@@ -208,8 +209,8 @@ tests/.venv/bin/python tests/run.py --only 08_modpack_boot
 ```
 
 The run took 19 minutes, and a boot holds about 7.5 GiB of resident memory, so the notebook runs
-one server at a time. The parameter `arclight = False` leaves out the boot under Arclight, which
-needs the network for its libraries, and the boot on its world. CI fetches the pack after the
+one server at a time. The parameter `arclight = False` leaves out the boot under Arclight and the
+boot on its world. CI fetches the pack after the
 plain fetch and caches it by the pinned commit. The notebook keeps the log and the console of each
 boot in `tests/notebooks/out/08_modpack_boot/`.
 

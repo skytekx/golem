@@ -8,8 +8,8 @@
     python3 -I tests/fetch.py --only modpack
     python3 -I tests/fetch.py --only modpack --server-repo path/to/skytekx3-1201-server
 
-Every download is checked by its SHA-256, or by the SHA-512 of the index of the pack, before it is
-used, and lands under tests/.cache/, which git ignores. The pins are these.
+Every download is checked by its SHA-256, or a jar of the pack by the SHA-512 of its index, before
+it is used, and lands under tests/.cache/, which git ignores. The pins are these.
 
 1. Temurin 17.0.21+9 of Eclipse Adoptium, the JDK the Mac mini runs the server on, unpacked to
    tests/.cache/jdk-17.0.21+9. On macOS the Java home is the Contents/Home of the bundle, and
@@ -30,13 +30,16 @@ used, and lands under tests/.cache/, which git ignores. The pins are these.
    release assets alone, and reads no more of an answer than the size allows. It adds the jars
    of local-mods/, and copies config/, defaultconfigs/, kubejs/, world/datapacks/,
    server.properties.example, the systemd unit of the live server, the Arclight jar with its
-   four files of settings and tools/patch_mods.py beside them. The jars stay as their authors
+   four files of settings and tools/patch_mods.py beside them. Into libraries/ it downloads the
+   libraries that the installer.json of the Arclight jar names, from Maven Central and the
+   repository of Sponge, each pinned by its SHA-256 and checked against the SHA-1 of
+   installer.json, so Arclight downloads nothing at its start. The jars stay as their authors
    published them, since tools/patch_mods.py rewrites 14 of them, which would then miss their
    hashes, so a notebook patches its own copy as the live server patches its mods/. The file
    tests/.cache/modpack/modpack.json, written last, names the commit, every jar and the Arclight
-   jar with its SHA-256. The pack holds what the pin names alone, so a file of an earlier pin is
-   removed. A download that broke off goes on where it stopped, and a jar whose hash already
-   matches stays.
+   jar with its SHA-256 and its libraries. The pack holds what the pin names alone, so a file of
+   an earlier pin is removed. A download that broke off goes on where it stopped, and a jar whose
+   hash already matches stays.
 
 The script accepts the EULA of Minecraft in that test server, with eula=true in its eula.txt,
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
@@ -62,6 +65,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -117,14 +121,86 @@ MODPACK_TREES = ("config", "defaultconfigs", "kubejs", "world/datapacks")
 #: The jar of Arclight that the live server runs, which arclight.jar of the repository links to.
 ARCLIGHT_JAR = "arclight-forge-1.20.1-1.0.6-6de9fec-safeiter2.jar"
 ARCLIGHT_SHA256 = "c55ad477b92250ef31baf965aae3158ffa99239b9b44a60b3a9dd5206dc1557f"
+#: The libraries that the installer.json of that Arclight jar names. Arclight downloads them at its
+#: first start from mirrors of its own and checks them by SHA-1 alone, so the script fetches them
+#: into libraries/ of the pack, from Maven Central and the two of Configurate from the repository
+#: of Sponge, which alone holds them, each pinned by its SHA-256 and size and checked against the
+#: SHA-1 of installer.json. A copy that holds them makes Arclight download nothing.
+MAVEN_CENTRAL = "https://repo.maven.apache.org/maven2/"
+SPONGE = "https://repo.spongepowered.org/maven/"
+ARCLIGHT_LIBRARIES = {
+    "org.yaml:snakeyaml:2.0":
+        (MAVEN_CENTRAL, "880c9d896e4b74a06c549c15ca496450165d6909fa15d7e662bee8f6a66d7afa", 334803),
+    "org.xerial:sqlite-jdbc:3.42.0.0":
+        (MAVEN_CENTRAL, "53174d76087bb73cc29db9c02766fb921fd7fc652f7952f3609e0018e3dd5ded", 13030515),
+    "com.mysql:mysql-connector-j:8.0.33":
+        (MAVEN_CENTRAL, "e2a3b2fc726a1ac64e998585db86b30fa8bf3f706195b78bb77c5f99bf877bd9", 2481560),
+    "com.googlecode.json-simple:json-simple:1.1.1":
+        (MAVEN_CENTRAL, "4e69696892b88b41c55d49ab2fdcc21eead92bf54acc588c0050596c3b75199c", 23931),
+    "org.apache.logging.log4j:log4j-jul:2.17.2":
+        (MAVEN_CENTRAL, "cec8d204efa87dfc759faf43d6affde1d18fa25b7c6d98ea5ef0737a56ff195c", 30948),
+    "net.md-5:SpecialSource:1.11.0":
+        (MAVEN_CENTRAL, "a47cd9a3db46a0cc3b769bd19a2a91d4ad0e9d019153d186f099bbaf5db16445", 88737),
+    "org.jline:jline-terminal-jansi:3.12.1":
+        (MAVEN_CENTRAL, "5aefd139ebfd05fe7792bab8a0dc6d551d0e05ff0d6972d83fbdf4a4ad256cb3", 39048),
+    "org.fusesource.jansi:jansi:1.18":
+        (MAVEN_CENTRAL, "109e64fc65767c7a1a3bd654709d76f107b0a3b39db32cbf11139e13a6f5229b", 287352),
+    "jline:jline:2.12.1":
+        (MAVEN_CENTRAL, "c31f1dcf2cef46f8a6f8aea8ae5c295cc96910e8f8ea4c40291695d64d2e940f", 213911),
+    "org.apache.maven:maven-resolver-provider:3.8.5":
+        (MAVEN_CENTRAL, "4b9f827efb393696431978dc0354651f1a95d4c52ba07c92d830efe5dc9b1012", 67173),
+    "org.apache.maven.resolver:maven-resolver-connector-basic:1.7.3":
+        (MAVEN_CENTRAL, "29beb02541adb82873d7bdeed2aaea03eaf3123720dbd1b5d96d058849364c66", 45777),
+    "org.apache.maven.resolver:maven-resolver-transport-http:1.7.3":
+        (MAVEN_CENTRAL, "558cbdf4d76f7cf3699b59fb22fd65614870e19b42983585b42ce84f336b348f", 42580),
+    "org.apache.maven:maven-model:3.8.5":
+        (MAVEN_CENTRAL, "7c9eeb30ac1941ea9bdf76c08c162ed98c005913e5bff66de3f1027a304546dc", 215280),
+    "org.codehaus.plexus:plexus-utils:3.3.0":
+        (MAVEN_CENTRAL, "76d174792540e2775af94d03d10fb2d3c776e2cd0ac0ebf427d3e570072bb9ce", 263253),
+    "org.apache.maven:maven-model-builder:3.8.5":
+        (MAVEN_CENTRAL, "6bcd688b4700bc0d9046c531c316e75674f53b345d4432d6a7f62812b2424bef", 195825),
+    "org.codehaus.plexus:plexus-interpolation:1.26":
+        (MAVEN_CENTRAL, "b3b5412ce17889103ea564bcdfcf9fb3dfa540344ffeac6b538a73c9d7182662", 85348),
+    "org.eclipse.sisu:org.eclipse.sisu.inject:0.3.4":
+        (MAVEN_CENTRAL, "8c0e6aa7f35593016f2c5e78b604b57f023cdaca3561fe2fe36f2b5dbbae1d16", 379197),
+    "org.apache.maven:maven-builder-support:3.8.5":
+        (MAVEN_CENTRAL, "a205eaa76609ae0039bf38fe9a9c024c646eded05d176effbef524f04a2c2761", 14298),
+    "org.apache.maven:maven-repository-metadata:3.8.5":
+        (MAVEN_CENTRAL, "24d89a1b23dc0427ac67895a741802fd23897bdf135d87fe586d718b38a3e924", 28416),
+    "org.apache.maven.resolver:maven-resolver-api:1.6.3":
+        (MAVEN_CENTRAL, "d0b28ed944058ba4f9be4b54c25d6d5269cc4f3f3c49aa450d4dc2f7e0d552f6", 149251),
+    "org.apache.maven.resolver:maven-resolver-spi:1.6.3":
+        (MAVEN_CENTRAL, "17441a39045ac19bc4a8068fb7284facebf6337754bf2bf8f26a76b5f98ed108", 38411),
+    "org.apache.maven.resolver:maven-resolver-util:1.6.3":
+        (MAVEN_CENTRAL, "cdcad9355b625743f40e4cead9a96353404e010c39c808d23b044be331afa251", 168856),
+    "org.apache.maven.resolver:maven-resolver-impl:1.6.3":
+        (MAVEN_CENTRAL, "17aaebe6e3e59df8cb5b4ec210196f7084637312b9bc4ff14cb77ad1ae3c381b", 179555),
+    "org.apache.httpcomponents:httpclient:4.5.13":
+        (MAVEN_CENTRAL, "6fe9026a566c6a5001608cf3fc32196641f6c1e5e1986d1037ccdbd5f31ef743", 780321),
+    "org.apache.httpcomponents:httpcore:4.4.14":
+        (MAVEN_CENTRAL, "f956209e450cb1d0c51776dfbd23e53e9dd8db9a1298ed62b70bf0944ba63b28", 328436),
+    "commons-codec:commons-codec:1.15":
+        (MAVEN_CENTRAL, "b3e9f6d63a790109bf0d056611fbed1cf69055826defeb9894a71369d246ed63", 353793),
+    "org.slf4j:jcl-over-slf4j:1.7.30":
+        (MAVEN_CENTRAL, "71e9ee37b9e4eb7802a2acc5f41728a4cf3915e7483d798db3b4ff2ec8847c50", 16537),
+    "org.spongepowered:configurate-hocon:3.6.1":
+        (SPONGE, "3e6223540525fc9e783d48c897a3b2ac56f24d9990d0a56a46d5b962815f197b", 8072),
+    "org.spongepowered:configurate-core:3.6.1":
+        (SPONGE, "3bcf3d6e62cc24e1a8d8a963e2ef8ac98e886abc10b2d65846ddd3d20d3d497b", 134754),
+    "com.typesafe:config:1.3.1":
+        (MAVEN_CENTRAL, "e6fadfc6108220d3a6b86aa7e4e16c9e7bb857ba58955886308bb13972264af0", 282549),
+    "javax.inject:javax.inject:1":
+        (MAVEN_CENTRAL, "91c77044a50c481636c32d916fd89c9118a72195390452c81065080f957de7ff", 2497),
+}
 #: The files of the server repository that the pack takes: the settings of the live server and the
 #: systemd unit with the options of its JVM, the jar of Arclight with the files of settings it
 #: reads, and the script that patches jars of mods/ on the live server.
 MODPACK_FILES = ("server.properties.example", "systemd/skytekx3.service", ARCLIGHT_JAR, "arclight.conf",
                  "bukkit.yml", "spigot.yml", "commands.yml", "tools/patch_mods.py")
-#: The downloads that run at once, and the tries of one download before the script gives up.
+#: The downloads that run at once, and the tries of one download before the script gives up, with a
+#: pause that grows after each try that broke off, since Maven Central answers 429 to a burst.
 MODPACK_WORKERS = 4
-MODPACK_TRIES = 3
+MODPACK_TRIES = 5
 
 #: The settings of the test server: offline, on localhost, a small world without spawn
 #: protection. A notebook that boots a copy sets its own port in the copy.
@@ -375,22 +451,31 @@ def continues(response, offset: int) -> bool:
     return found is not None and int(found[1]) == offset
 
 
-def fetch_jar(entry: dict, mods: Path) -> bool:
-    """Download one jar of the index into `mods`, answering whether it had to be downloaded.
+#: The names of the hashes that a download may be checked by.
+HASHES = {"sha256": "SHA-256", "sha512": "SHA-512"}
 
-    A jar whose size and SHA-512 match stays. A partial download goes on with a range request
-    where it stopped, but only when the server answers with the bytes from that point on, and
-    starts over from the first byte when it answers with anything else. A download that went on
-    from a partial one and misses the hash held wrong bytes before that point, so the next try
-    starts over from the first byte. Only a download from the first byte that misses fails at
-    once.
+
+def fetch_jar(entry: dict, folder: Path) -> bool:
+    """Download one jar into `folder`, answering whether it had to be downloaded.
+
+    The entry names the file, a path below `folder`, its URL, its size and its SHA-512 or its
+    SHA-256. A jar whose size and hash match stays. A partial download goes on with a range
+    request where it stopped, but only when the server answers with the bytes from that point
+    on, and starts over from the first byte when it answers with anything else. A download that
+    went on from a partial one and misses the hash held wrong bytes before that point, so the
+    next try starts over from the first byte. Only a download from the first byte that misses
+    fails at once.
     """
-    target = mods / entry["file"]
-    if target.is_file() and target.stat().st_size == entry["size"] and digest(target, "sha512") == entry["sha512"]:
+    algorithm = next(name for name in HASHES if name in entry)
+    target = folder / entry["file"]
+    if target.is_file() and target.stat().st_size == entry["size"] and digest(target, algorithm) == entry[algorithm]:
         return False
+    target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
     reason = "broke off"
     for attempt in range(1, MODPACK_TRIES + 1):
+        if attempt > 1 and reason == "broke off":
+            time.sleep(min(2 ** (attempt - 2), 8))
         offset = partial.stat().st_size if partial.is_file() else 0
         if offset >= entry["size"]:
             partial.unlink(missing_ok=True)
@@ -416,18 +501,33 @@ def fetch_jar(entry: dict, mods: Path) -> bool:
             reason = "broke off"
             continue
         if size == entry["size"]:
-            found = digest(partial, "sha512")
-            if found == entry["sha512"]:
+            found = digest(partial, algorithm)
+            if found == entry[algorithm]:
                 partial.replace(target)
                 return True
-            problem = "has SHA-512 %s, the index names %s" % (found, entry["sha512"])
+            problem = "has %s %s, the pin is %s" % (HASHES[algorithm], found, entry[algorithm])
         else:
-            problem = "is larger than the %d bytes the index names" % entry["size"]
+            problem = "is larger than the %d bytes of its pin" % entry["size"]
         partial.unlink()
         if not offset:
             raise Failure("%s %s" % (entry["url"], problem))
         reason = "went on from byte %d and %s" % (offset, problem)
     raise Failure("%s: all %d tries failed, the last %s" % (entry["url"], MODPACK_TRIES, reason))
+
+
+def arclight_libraries(named) -> list:
+    """The downloads of the libraries that the installer.json of Arclight names, by their pins."""
+    if not isinstance(named, dict) or set(named) != set(ARCLIGHT_LIBRARIES):
+        others = sorted(set(named) ^ set(ARCLIGHT_LIBRARIES)) if isinstance(named, dict) else named
+        raise Failure("the installer.json of %s and the pins name other libraries: %s" % (ARCLIGHT_JAR, others))
+    entries = []
+    for coordinate, sha1 in sorted(named.items()):
+        group, artifact, version = coordinate.split(":")
+        path = "%s/%s/%s/%s-%s.jar" % (group.replace(".", "/"), artifact, version, artifact, version)
+        base, sha256, size = ARCLIGHT_LIBRARIES[coordinate]
+        entries.append({"coordinate": coordinate, "file": path, "url": base + path, "sha256": sha256, "size": size,
+                        "sha1": sha1})
+    return entries
 
 
 def replace(source: Path, target: Path) -> None:
@@ -485,6 +585,12 @@ def fetch_modpack(cache: Path, given) -> Path:
     archive.unlink()
     if digest(tree / ARCLIGHT_JAR, "sha256") != ARCLIGHT_SHA256:
         raise Failure("%s of the commit differs from its pin %s" % (ARCLIGHT_JAR, ARCLIGHT_SHA256))
+    with zipfile.ZipFile(tree / ARCLIGHT_JAR) as jar:
+        try:
+            installer = json.loads(jar.read("META-INF/installer.json"))
+        except (KeyError, ValueError) as broken:
+            raise Failure("%s holds no installer.json to read: %s" % (ARCLIGHT_JAR, broken)) from broken
+    libraries = arclight_libraries(installer.get("libraries") if isinstance(installer, dict) else None)
     local = sorted(path for path in (tree / "local-mods").iterdir() if path.suffix == ".jar")
     names = [entry["file"] for entry in required]
     # Two names that differ in case or in the form of Unicode alone are one file on the disk of a
@@ -499,7 +605,9 @@ def fetch_modpack(cache: Path, given) -> Path:
     mods.mkdir(parents=True, exist_ok=True)
     # A file of an earlier pin, such as the Arclight jar it named, would stay beside the new ones,
     # so the pack holds what this pin names alone.
-    prune(pack, {"mods", "modpack.json", *MODPACK_TREES, *MODPACK_FILES})
+    prune(pack, {"mods", "libraries", "modpack.json", *MODPACK_TREES, *MODPACK_FILES})
+    (pack / "libraries").mkdir(exist_ok=True)
+    prune(pack / "libraries", {name for entry in libraries for name in (entry["file"], entry["file"] + ".part")})
     # A jar of an earlier pin would load beside the new one, so the folder holds the pack alone.
     wanted = set(names) | {path.name for path in local} | {name + ".part" for name in names}
     for stale in mods.iterdir():
@@ -510,6 +618,12 @@ def fetch_modpack(cache: Path, given) -> Path:
                 stale.unlink()
     with ThreadPoolExecutor(MODPACK_WORKERS) as workers:
         downloaded = sum(workers.map(lambda entry: fetch_jar(entry, mods), required))
+        downloaded += sum(workers.map(lambda entry: fetch_jar(entry, pack / "libraries"), libraries))
+    for entry in libraries:
+        found = digest(pack / "libraries" / entry["file"], "sha1")
+        if found != entry["sha1"]:
+            raise Failure("%s has SHA-1 %s, but installer.json of Arclight names %s, so Arclight would download it "
+                          "again" % (entry["file"], found, entry["sha1"]))
     for path in local:
         shutil.copyfile(path, mods / path.name)
     for part in (*MODPACK_TREES, *MODPACK_FILES):
@@ -524,13 +638,15 @@ def fetch_modpack(cache: Path, given) -> Path:
         "repository": SERVER_REPOSITORY,
         "commit": SERVER_COMMIT,
         "pack": {"name": index.get("name"), "version": index.get("versionId"), **index["dependencies"]},
-        "arclight": {"file": ARCLIGHT_JAR, "sha256": ARCLIGHT_SHA256},
+        "arclight": {"file": ARCLIGHT_JAR, "sha256": ARCLIGHT_SHA256,
+                     "libraries": [{key: entry[key] for key in ("coordinate", "file", "sha256", "sha1")}
+                                   for entry in libraries]},
         "mods": sorted(jars, key=lambda jar: jar["file"].lower()),
         "left_out": sorted(left_out, key=str.lower),
     }
     stamp.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
-    print("fetch: %d jars of the index, %d of them downloaded now, %d of local-mods, %d left out as not for the "
-          "server" % (len(required), downloaded, len(local), len(left_out)))
+    print("fetch: %d jars of the index and %d libraries of Arclight, %d of them downloaded now, %d of local-mods, "
+          "%d left out as not for the server" % (len(required), len(libraries), downloaded, len(local), len(left_out)))
     return pack
 
 
