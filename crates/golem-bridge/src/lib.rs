@@ -17,6 +17,33 @@
  */
 
 //! The bridge between the Golem bridge mod in the JVM and the plugins in Rust.
+//!
+//! | Module | Holds |
+//! | --- | --- |
+//! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
+//! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
+//! | [`host`] | The global state and one plain function per native method |
+//!
+//! The crate holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
+//! `tests/notebooks/04_plugins.ipynb` drives the functions of [`host`] through golem-devtool.
+
+mod actions;
+pub mod host;
+mod ticks;
+
+pub use crate::{
+    actions::{
+        Action,
+        Actions,
+        SEPARATOR, //
+    },
+    ticks::{
+        MAX_TPS,
+        TickStats,
+        TickWindow,
+        WINDOW, //
+    },
+};
 
 /// The binary name of the host class, whose native methods the bridge registers.
 pub const HOST_CLASS: &str = "com/skytekx/golem/host/Host";
@@ -87,6 +114,31 @@ pub enum Event {
     },
 }
 
+impl Event {
+    /// Answers the name of the native method that reports the event, such as chat.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::ServerStarting { .. } => "serverStarting",
+            Self::ServerStarted => "serverStarted",
+            Self::ServerStopping => "serverStopping",
+            Self::ServerStopped => "serverStopped",
+            Self::Tick { .. } => "tick",
+            Self::PlayerJoined(_) => "playerJoined",
+            Self::PlayerLeft(_) => "playerLeft",
+            Self::Chat { .. } => "chat",
+            Self::Death { .. } => "death",
+            Self::Respawn { .. } => "respawn",
+        }
+    }
+
+    /// Answers whether the game drops the event when a handler answers [`Verdict::Cancel`].
+    ///
+    /// Chat is the one event of the contract whose native method answers a verdict.
+    pub fn cancellable(&self) -> bool {
+        matches!(self, Self::Chat { .. })
+    }
+}
+
 /// What a handler answers to an event.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
@@ -94,48 +146,6 @@ pub enum Verdict {
     Pass,
     /// The game drops the event, where the event can be cancelled.
     Cancel,
-}
-
-/// What Rust asks the server thread to do.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Action {
-    /// Run a command as the console, without its leading slash.
-    Command(String),
-    /// Send a system message to one player.
-    Message {
-        /// The UUID of the player.
-        uuid: String,
-        /// The plain text.
-        text: String,
-    },
-    /// Send a system message to every player and the console.
-    Broadcast(String),
-}
-
-/// The queue of actions that the mod drains at the end of every server tick.
-///
-/// A clone shares the queue, so a signal handler, a plugin and the API push into the same one.
-#[derive(Clone, Debug, Default)]
-pub struct Actions {
-    queue: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<Action>>>,
-}
-
-impl Actions {
-    /// An empty queue.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Queues one action behind the others.
-    pub fn push(&self, action: Action) {
-        let _ = action;
-        todo!("golem-bridge: Actions::push")
-    }
-
-    /// Takes every queued action, oldest first.
-    pub fn drain(&self) -> Vec<Action> {
-        todo!("golem-bridge: Actions::drain")
-    }
 }
 
 /// What answers the events and the commands of the mod.
@@ -159,24 +169,12 @@ pub trait Handler: Send {
     ) -> Vec<String>;
 }
 
-/// The tick statistics of the running server.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct TickStats {
-    /// The ticks since the start.
-    pub ticks: u64,
-    /// The mean milliseconds per tick over the last 100 ticks.
-    pub mspt: f64,
-    /// The ticks per second over the last 100 ticks, at most 20.
-    pub tps: f64,
-}
-
 /// Installs the handler that the native methods call, and answers the queue they drain.
 ///
 /// The native methods are plain functions, so the handler lives in a global of this crate. A
-/// second call replaces the handler and keeps the queue.
+/// second call replaces the handler and keeps the queue. See [`host::install`].
 pub fn install(handler: Box<dyn Handler>) -> Actions {
-    let _ = handler;
-    todo!("golem-bridge: install")
+    host::install(handler)
 }
 
 /// Registers the native methods of the host class on the JVM of `env`.
@@ -187,7 +185,17 @@ pub fn register_natives(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<()> {
     todo!("golem-bridge: register_natives")
 }
 
-/// The tick statistics so far.
+/// The tick statistics so far, over the ticks that the native method `tick()` recorded.
 pub fn stats() -> TickStats {
-    todo!("golem-bridge: stats")
+    host::stats()
+}
+
+/// Writes one line to the log of the server, the standard error, behind the prefix `[golem]`.
+///
+/// It never panics, so a native method may log on its way out of a panic. A line that the
+/// standard error does not take is lost.
+pub fn log(message: std::fmt::Arguments<'_>) {
+    use std::io::Write as _;
+
+    let _ = writeln!(std::io::stderr().lock(), "[golem] {message}");
 }
