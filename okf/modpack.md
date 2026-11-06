@@ -18,13 +18,14 @@ Arclight that it found.
 
 ## The answer
 
-Yes. `golem run` boots all 291 mods of the 265 jars of the pack, each in the same version as the
-java launcher, with no FATAL line, no crash report, no ERROR line that java does not log too and the
-same warnings of the loader as java. It generates the same world from the same seed, ticks at 20 TPS
-in the idle and stops with exit 0, every dimension saved and no chunk that failed to write or read.
-It also opens the world that Arclight wrote, which the switch of the live server needs. No mod of
-the pack names Bukkit, so none needs Arclight. Arclight boots the same mods, with two conflicts of
-its own mixins with mods of the pack. Nothing broke under golem, so nothing of Golem needed a fix.
+Yes. `golem run` boots the 289 mods that the 265 jars of the pack hold, the jars nested in them
+included, beside Minecraft and Forge, each in the same version as the java launcher, with no FATAL
+line, no crash report, no ERROR line that java does not log too and the same warnings of the loader
+as java. It generates the same world from the same seed, ticks at 20 TPS in the idle and stops with
+exit 0, every dimension saved and no chunk that failed to write or read. It also opens the world
+that Arclight wrote, which the switch of the live server needs. No mod of the pack names Bukkit, so
+none needs Arclight. Arclight boots the same mods, with two conflicts of its own mixins with mods of
+the pack. Nothing broke under golem, so nothing of Golem needed a fix.
 
 The answer has limits, listed under [What is not checked](#what-is-not-checked). Most of all no
 player joins, since the client of the harness is a vanilla client, which the pack refuses.
@@ -84,7 +85,7 @@ the same world. Every boot runs with a heap of 6 GiB.
 | The options of the live JVM | The 23 options of the systemd unit reach the launch that `golem run` reads, unchanged and in order |
 | No mod needs Bukkit | No class and no `mods.toml` of the 265 jars and the jars nested in them names Bukkit, CraftBukkit, Spigot, BungeeCord, Paper or Mohist. Only two mixins of Supplementaries name Arclight, and only the agent entry point of the debug probes of Kotlin installs a signal handler |
 | Each boot | `Done`, the answer of `forge tps` after the listeners of `ServerStartedEvent`, `forge mods`, the server list, a vanilla login, six samples of `forge tps`, one at every 10 s of a 60 s idle, under golem `golem source` and `golem status`, then the stop and its exit status |
-| The same mods | Golem loads every mod of java in the same version from the same file, and only its bridge `golem` beside them. The server list names the same mods and marks `golem` as needed on the server alone. Arclight adds only `arclight` |
+| The same mods | Java loads every jar of the pack from `mods/`, but the jar of Kotlin for Forge, a library of jars of JarJar that `forge mods` does not list, and 289 mods beside Minecraft and Forge. Golem loads every mod of java in the same version from the same file, and only its bridge `golem` beside them. The server list names the same mods and marks `golem` as needed on the server alone. Arclight adds only `arclight` |
 | Errors and warnings | No crash report and no FATAL line. Every ERROR line of the other boots also appears under java or stands in the list of known lines with its reason. The WARN lines of the loader, Forge loading, JarJar, the registries, ModLauncher and Mixin, are the same under golem as under java, but for the version check of Forge, which asks the network |
 | Idle, stop and world | 19 TPS or more in the idle under java and golem, the same spawn and the same datapacks, with `mod:golem` and `mod:arclight` as the only additions, the same folders of the dimensions in the world, every dimension saved at the stop, and no line `Failed to store chunk` or `Failed to read chunk` under any boot |
 | Golem on the world of Arclight | `Done`, the bridge connected, the mods of the golem boot, the spawn of the world, no ERROR line that java does not log, and exit 0 |
@@ -107,8 +108,8 @@ The last run of the notebook on 2026-11-06 in the cloud container of the session
 | `Done`, seconds from the start of the process | 156 | 128 | 213 | 174 |
 | The line `Done`, seconds of the load of the worlds | 19.7 | 22.1 | 45.9 | 7.2 |
 | Started, seconds to the first answer of the console | 177 | 148 | 250 | 193 |
-| Mod files | 290 | 291 | 291 | 291 |
-| Mods with their versions | 291 | 292 | 292 | 292 |
+| Mod files, Minecraft and Forge among them | 290 | 291 | 291 | 291 |
+| Mods with their versions, Minecraft and Forge among them | 291 | 292 | 292 | 292 |
 | Mods and channels in the server list | 291 and 188 | 292 and 188 | 292 and 188 | 292 and 188 |
 | Jars that `tools/patch_mods.py` patched | 14 | 14 | 14 | Those of Arclight |
 | FATAL lines | 0 | 0 | 0 | 0 |
