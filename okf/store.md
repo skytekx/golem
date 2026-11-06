@@ -129,13 +129,18 @@ What this gives:
 
 ## The schema
 
-The file has the application id `0x476f6c6d`, the bytes `Golm`, and the schema version 1 in its
-user version. Every table is `STRICT`, so a value of the wrong type is an error instead of being
-stored as it comes. A UUID is the text Minecraft writes, in lower case with its four dashes. A
-time is milliseconds since 1970-01-01 UTC, as the caller gives it, so the migration tool carries
-the times of EssentialsX over. Money is whole cents. A location is the six columns of a
-dimension, a position and a rotation, and a location that may be missing has all six or none.
-The column Key is the place of the column in the primary key.
+The file has the application id `0x476f6c6d`, the bytes `Golm`, and the schema version 1 in its user
+version. Every table is `STRICT`, so a value of the wrong type is an error instead of being stored
+as it comes. A UUID is the text Minecraft writes, in lower case with its four dashes. A time is
+milliseconds since 1970-01-01 UTC, as the caller gives it, so the migration tool carries the times
+of EssentialsX over. Money is whole cents. A location is the six columns of a dimension, a position
+and a rotation, and a location that may be missing has all six or none. The column Key is the place
+of the column in the primary key. A reference that ends in `deleted with it` deletes the row when
+the row it names is deleted, the `ON DELETE CASCADE` of SQLite, and every other reference refuses
+the delete of a row that another row names. The rules that the tables name for a value, such as
+never below zero, above zero, never themselves, all six or none and a 32 bit integer, are each a
+`CHECK` of the table, so the file refuses a row that breaks one also when a program writes it past
+the store.
 
 ### players
 
@@ -256,17 +261,21 @@ always what reached it less what left it, and `check` holds every account to tha
 
 | Column | Type | Null | Key | References | What it is |
 | --- | --- | --- | --- | --- | --- |
-| `group_name` | TEXT | no | 1 | `permission_groups.name` | The group |
+| `group_name` | TEXT | no | 1 | `permission_groups.name`, deleted with it | The group |
 | `position` | INTEGER | no | | | The place of the parent in the list of the group |
 | `parent` | TEXT | no | 2 | `permission_groups.name` | A group it inherits from |
+
+The pair of `group_name` and `position` is unique, so two parents never share a place.
 
 ### permission_group_nodes
 
 | Column | Type | Null | Key | References | What it is |
 | --- | --- | --- | --- | --- | --- |
-| `group_name` | TEXT | no | 1 | `permission_groups.name` | The group |
+| `group_name` | TEXT | no | 1 | `permission_groups.name`, deleted with it | The group |
 | `position` | INTEGER | no | | | The place of the node in the list of the group |
 | `node` | TEXT | no | 2 | | A node, a deny with its leading `-` |
+
+The pair of `group_name` and `position` is unique, so two nodes never share a place.
 
 ### permission_player_groups
 
@@ -276,6 +285,8 @@ always what reached it less what left it, and `check` holds every account to tha
 | `position` | INTEGER | no | | | The place of the group in the list of the player |
 | `group_name` | TEXT | no | 2 | `permission_groups.name` | A group of the player besides `default` |
 
+The pair of `player` and `position` is unique, so two groups never share a place.
+
 ### permission_player_nodes
 
 | Column | Type | Null | Key | References | What it is |
@@ -283,6 +294,8 @@ always what reached it less what left it, and `check` holds every account to tha
 | `player` | TEXT | no | 1 | | The player |
 | `position` | INTEGER | no | | | The place of the node in the list of the player |
 | `node` | TEXT | no | 2 | | A node of the player |
+
+The pair of `player` and `position` is unique, so two nodes never share a place.
 
 ### settings
 

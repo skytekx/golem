@@ -422,7 +422,9 @@ fn description_json(description: &Description) -> Value {
             let keys: Vec<Value> = table
                 .foreign_keys
                 .iter()
-                .map(|(from, table, to)| json!({"from": from, "table": table, "to": to}))
+                .map(|(from, table, to, on_delete)| {
+                    json!({"from": from, "table": table, "to": to, "on_delete": on_delete})
+                })
                 .collect();
             json!({
                 "name": table.name,
@@ -430,6 +432,7 @@ fn description_json(description: &Description) -> Value {
                 "rows": table.rows,
                 "columns": columns,
                 "foreign_keys": keys,
+                "unique": table.unique,
             })
         })
         .collect();

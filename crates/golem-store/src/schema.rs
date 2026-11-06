@@ -411,8 +411,11 @@ pub struct TableDescription {
     pub name: String,
     /// The columns in their order.
     pub columns: Vec<ColumnDescription>,
-    /// The foreign keys: the column, the table and the column it names.
-    pub foreign_keys: Vec<(String, String, String)>,
+    /// The foreign keys: the column, the table and the column it names, and what a delete of
+    /// the row it names does, `CASCADE` or `NO ACTION`.
+    pub foreign_keys: Vec<(String, String, String, String)>,
+    /// The columns of each UNIQUE constraint beside the primary key, sorted.
+    pub unique: Vec<Vec<String>>,
     /// Whether the table is STRICT.
     pub strict: bool,
     /// The number of rows.
@@ -497,11 +500,31 @@ fn describe_table(connection: &Connection, name: &str) -> rusqlite::Result<Table
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut statement = connection.prepare(
-        "SELECT \"from\", \"table\", \"to\" FROM pragma_foreign_key_list(?1) ORDER BY id, seq",
+        "SELECT \"from\", \"table\", \"to\", on_delete FROM pragma_foreign_key_list(?1) \
+         ORDER BY id, seq",
     )?;
     let foreign_keys = statement
-        .query_map([name], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .query_map([name], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
+    // A UNIQUE constraint of the table has an index of the origin u, which SQLite makes for it.
+    let mut statement = connection
+        .prepare("SELECT name FROM pragma_index_list(?1) WHERE origin = 'u' ORDER BY name")?;
+    let indexes = statement
+        .query_map([name], |row| row.get(0))?
+        .collect::<rusqlite::Result<Vec<String>>>()?;
+    let mut statement =
+        connection.prepare("SELECT name FROM pragma_index_info(?1) ORDER BY seqno")?;
+    let mut unique = Vec::new();
+    for index in indexes {
+        unique.push(
+            statement
+                .query_map([index], |row| row.get(0))?
+                .collect::<rusqlite::Result<Vec<String>>>()?,
+        );
+    }
+    unique.sort();
     let strict: bool = connection.query_row(
         "SELECT strict FROM pragma_table_list(?1) WHERE schema = 'main'",
         [name],
@@ -517,6 +540,7 @@ fn describe_table(connection: &Connection, name: &str) -> rusqlite::Result<Table
         name: name.to_owned(),
         columns,
         foreign_keys,
+        unique,
         strict,
         rows,
     })
