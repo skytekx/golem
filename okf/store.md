@@ -549,11 +549,15 @@ from above. The file was 7.6 MB.
 
 The notebook `tests/notebooks/09_store.ipynb` drives the store through the subcommands
 `golem-devtool store`, which runs a JSON script of calls and prints the answer of every step as a
-line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`.
-It checks the schema against the tables of this page, every call and every refusal, a check while
-another thread changes the store, a reopen after a close, a store dropped without a close, a
-reopen after a kill between changes, a reader of the answers that goes away, a writer that fails
-at a limit of the file size, the files the open refuses and the cost above.
+line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`. It
+checks the schema against the tables of this page, every call and every refusal, a check while
+another thread changes the store, a reopen after a close, a store dropped without a close, a reopen
+after a kill between changes, a reader of the answers that goes away, a writer that fails at a limit
+of the file size, a batch that fails part way at a limit of the pages of the file, a row that the
+file refuses behind the cache, the files the open refuses and the cost above. The steps
+`pause_writer`, `limit_pages` and `execute_behind` of `golem-devtool store` reach the writer through
+the hooks of the feature `testing` of `golem-store`, which only `golem-devtool` turns on and which
+the program `golem` never calls.
 
 Related: [Plugins](plugins/index.md), [Permissions](plugins/permissions.md),
 [Plan](plan.md#data-migration), [Index](index.md).

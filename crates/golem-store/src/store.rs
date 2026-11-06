@@ -1329,6 +1329,51 @@ impl Store {
     }
 }
 
+/// The hooks of the feature `testing`, which only golem-devtool turns on, so that a notebook
+/// reaches the paths of a failure of the writer. None of them is a call of the plugins.
+#[cfg(feature = "testing")]
+impl Store {
+    /// Holds the writer still for `pause` after every change before the call, without waiting
+    /// for it, so the changes that follow wait in its queue and reach it as one batch.
+    pub fn testing_pause_writer(&self, pause: std::time::Duration) -> Result<(), StoreError> {
+        let state = self.lock();
+        let sender = state.sender.as_ref().ok_or(StoreError::Closed)?;
+        sender
+            .send(Message::Read(Box::new(move |_| std::thread::sleep(pause))))
+            .map_err(|_| StoreError::Failed("the writer thread ended".to_owned()))
+    }
+
+    /// Lets the file of the writer grow by `pages` pages at most, through the `max_page_count` of
+    /// its connection, so a transaction that needs more fails as on a full disk. It answers the
+    /// pages of the file and the new limit.
+    pub fn testing_limit_pages(&self, pages: u32) -> Result<(i64, i64), StoreError> {
+        self.query(move |connection| {
+            let sqlite =
+                |error: rusqlite::Error| StoreError::Database(schema::describe_error(&error));
+            let count: i64 = connection
+                .pragma_query_value(None, "page_count", |row| row.get(0))
+                .map_err(sqlite)?;
+            let limit: i64 = connection
+                .pragma_update_and_check(None, "max_page_count", count + i64::from(pages), |row| {
+                    row.get(0)
+                })
+                .map_err(sqlite)?;
+            Ok((count, limit))
+        })
+    }
+
+    /// Runs `sql` on the connection of the writer after every change before the call, behind the
+    /// cache, which then no longer holds the truth of the file.
+    pub fn testing_execute(&self, sql: &str) -> Result<(), StoreError> {
+        let sql = sql.to_owned();
+        self.query(move |connection| {
+            connection
+                .execute_batch(&sql)
+                .map_err(|error| StoreError::Database(schema::describe_error(&error)))
+        })
+    }
+}
+
 /// The generation and the permissions of the cache as pointers, which the lock of the cache
 /// hands out at the cost of a count each, so the copy of the rows happens after the lock.
 #[allow(clippy::type_complexity)]

@@ -34,6 +34,11 @@
 //! needs no store, and `wait`, which prints its line and then waits until its standard input
 //! ends, for a notebook that kills the process there.
 //!
+//! Three steps reach the writer through the hooks of the feature `testing` of golem-store, so a
+//! notebook drives the paths of a failure: `pause_writer` with `ms` holds the writer still,
+//! `limit_pages` with `pages` lets the file grow by that many pages at most, and `execute_behind`
+//! with `sql` changes the file behind the cache.
+//!
 //! A store that no step closed closes at the end of the script, and the exit code is 1 when that
 //! close fails. A store that a step closed answered its close in that step and is not closed
 //! again, so the exit code of a script that closes a failed store itself is 0.
@@ -655,6 +660,27 @@ fn lifecycle(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answe
         "durability" => store
             .durability()
             .map(|durability| durability_json(&durability)),
+        "pause_writer" => {
+            return Some(arguments.integer("ms").and_then(|millis| {
+                let pause = Duration::from_millis(u64::try_from(millis).unwrap_or(0));
+                Ok(store.testing_pause_writer(pause).map(|()| Value::Null)?)
+            }));
+        }
+        "limit_pages" => {
+            return Some(arguments.count("pages").and_then(|pages| {
+                let pages = u32::try_from(pages)
+                    .map_err(|_| argument("\"pages\" does not fit 32 bits".to_owned()))?;
+                let (count, limit) = store.testing_limit_pages(pages)?;
+                Ok(json!({"page_count": count, "max_page_count": limit}))
+            }));
+        }
+        "execute_behind" => {
+            return Some(
+                arguments
+                    .text("sql")
+                    .and_then(|sql| Ok(store.testing_execute(sql).map(|()| Value::Null)?)),
+            );
+        }
         "check_race" => {
             return Some(
                 arguments

@@ -20,7 +20,7 @@ golem-bridge.workspace = true
 golem-jvm.workspace = true
 golem-permissions.workspace = true
 golem-plugin.workspace = true
-golem-store.workspace = true
+golem-store = { workspace = true, features = ["testing"] }
 serde.workspace = true
 serde_json.workspace = true
 
