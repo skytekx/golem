@@ -369,6 +369,7 @@ Each change answers a `Receipt` with the number of the entry and the balances af
 | --- | --- |
 | `permissions()` | The whole `PermissionSet`, whose `to_toml` is the text `golem-permissions` loads |
 | `permissions_generation()` | A count from 0 at the open that moves with every change of the permissions |
+| `permissions_with_generation()` | The generation and the set of that generation, read under one lock, the call a resolver reloads through |
 | `replace_permissions(set)` | Puts a whole set in place, such as `PermissionSet::from_toml` of the seed |
 | `put_permission_group(group)`, `remove_permission_group(name)` | Change one group |
 | `put_player_permissions(player)`, `remove_player_permissions(uuid)` | Change one player |
@@ -385,6 +386,14 @@ every group that a list names exists, no list names an entry twice, and no group
 group or a player names is removed. `golem-permissions` judges the rest, the syntax of a node, the
 group `default` and the cycles of inheritance, so a port loads a changed set into a resolver
 before it writes the change, and loads the set again when the generation moved.
+
+A resolver keeps the generation of the set it loaded, looks at `permissions_generation()` to learn
+whether the permissions changed, and reloads through `permissions_with_generation()`, which answers
+the set and its generation under one lock. `permissions()` and then `permissions_generation()` take
+the lock twice, so a change of another thread between them, such as the worker thread of the chat
+beside the server thread, pairs the set before the change with the generation after it. A resolver
+that keeps that pair never reloads the change, and a node that was revoked or denied stays granted
+until the next change.
 
 ### Settings and the store itself
 

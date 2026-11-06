@@ -1111,18 +1111,27 @@ impl Store {
     // The permissions.
 
     /// The groups and players of the permissions, which
-    /// [`PermissionSet::to_toml`] turns into the text golem-permissions loads.
+    /// [`PermissionSet::to_toml`] turns into the text golem-permissions loads. A resolver that
+    /// reloads the set reads it through [`Store::permissions_with_generation`] instead.
     pub fn permissions(&self) -> PermissionSet {
-        self.read(|cache| PermissionSet {
-            groups: cache.groups.values().cloned().collect(),
-            players: cache.permission_players.values().cloned().collect(),
-        })
+        self.read(permission_set)
     }
 
     /// The count of changes of the permissions since the open, so a resolver loads them again
-    /// only when the count moved.
+    /// only when the count moved. It is a cheap look whether to reload, and the reload itself
+    /// goes through [`Store::permissions_with_generation`].
     pub fn permissions_generation(&self) -> u64 {
         self.read(|cache| cache.permissions_generation)
+    }
+
+    /// The generation of the permissions and the set of that generation, read under one lock.
+    ///
+    /// This is the call a resolver reloads through. [`Store::permissions`] and then
+    /// [`Store::permissions_generation`] take the lock twice, so a change of another thread
+    /// between them pairs the set before the change with the generation after it, and a
+    /// resolver that keeps that pair never reloads the change, such as a node that was revoked.
+    pub fn permissions_with_generation(&self) -> (u64, PermissionSet) {
+        self.read(|cache| (cache.permissions_generation, permission_set(cache)))
     }
 
     /// One group of the permissions.
@@ -1285,6 +1294,14 @@ impl Store {
                 .map(|(key, value)| (key.clone(), value.clone()))
                 .collect()
         })
+    }
+}
+
+/// The permissions of the cache as one set.
+fn permission_set(cache: &Cache) -> PermissionSet {
+    PermissionSet {
+        groups: cache.groups.values().cloned().collect(),
+        players: cache.permission_players.values().cloned().collect(),
     }
 }
 

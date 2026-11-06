@@ -50,6 +50,14 @@ use std::{
         Write as _, //
     },
     path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicBool,
+            AtomicU64,
+            Ordering, //
+        },
+    },
     time::{
         Duration,
         Instant, //
@@ -885,14 +893,16 @@ fn permissions(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Ans
                 Value::Null
             }
             "permissions" => {
-                let set = store.permissions();
+                let (generation, set) = store.permissions_with_generation();
                 json!({
                     "groups": set.groups.iter().map(group_json).collect::<Vec<_>>(),
                     "players": set.players.iter().map(player_permissions_json).collect::<Vec<_>>(),
                     "toml": set.to_toml(),
-                    "generation": store.permissions_generation(),
+                    "generation": generation,
                 })
             }
+            "permissions_generation" => json!(store.permissions_generation()),
+            "permissions_race" => permissions_race(store, arguments.count("rounds")?)?,
             "permission_group" => store
                 .permission_group(arguments.text("name")?)
                 .map_or(Value::Null, |group| group_json(&group)),
@@ -927,6 +937,83 @@ fn permissions(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Ans
         })
     };
     known(run())
+}
+
+/// The player whose permissions [`permissions_race`] changes.
+const RACER: Uuid = Uuid(0x7ace_0000_0000_4000_8000_0000_0000_0001);
+
+/// Changes the node of one player on a second thread, a grant and a deny in turn, while the
+/// thread of the script reads the set and its generation `rounds` times, once through
+/// `permissions_with_generation` and once through `permissions` and then
+/// `permissions_generation` with a yield of the thread between them. The node a set holds
+/// follows from its generation, so a reading disagrees when it pairs a set with the generation of
+/// another one. The answer counts the readings that disagree in each way and the changes the
+/// second thread made.
+fn permissions_race(store: &Store, rounds: usize) -> Result<Value, StepError> {
+    fn node(change: u64) -> &'static str {
+        if change.is_multiple_of(2) {
+            "race.node"
+        } else {
+            "-race.node"
+        }
+    }
+    fn put(store: &Store, change: u64) -> Result<(), StoreError> {
+        store.put_player_permissions(PlayerPermissions {
+            uuid: RACER,
+            groups: Vec::new(),
+            nodes: vec![node(change).to_owned()],
+        })
+    }
+    put(store, 0)?;
+    let base = store.permissions_generation();
+    let stop = Arc::new(AtomicBool::new(false));
+    let made = Arc::new(AtomicU64::new(0));
+    let changer = {
+        let (store, stop, made) = (store.clone(), Arc::clone(&stop), Arc::clone(&made));
+        std::thread::spawn(move || -> Result<(), StoreError> {
+            let mut change = 0;
+            while !stop.load(Ordering::Relaxed) {
+                change += 1;
+                put(&store, change)?;
+                made.store(change, Ordering::Relaxed);
+            }
+            Ok(())
+        })
+    };
+    // The readings begin once the generation moves, so each of them meets a changing set.
+    while made.load(Ordering::Relaxed) == 0 && !changer.is_finished() {
+        std::thread::yield_now();
+    }
+    let disagrees = |generation: u64, set: &PermissionSet| {
+        let held = set
+            .players
+            .iter()
+            .find(|player| player.uuid == RACER)
+            .and_then(|player| player.nodes.first());
+        held.map(String::as_str) != Some(node(generation - base))
+    };
+    let (mut one_lock, mut two_calls) = (0_u64, 0_u64);
+    for _ in 0..rounds {
+        let (generation, set) = store.permissions_with_generation();
+        one_lock += u64::from(disagrees(generation, &set));
+        // A resolver does its work between the two calls, such as the text of the set, and the
+        // yield stands in for it.
+        let set = store.permissions();
+        std::thread::yield_now();
+        let generation = store.permissions_generation();
+        two_calls += u64::from(disagrees(generation, &set));
+    }
+    stop.store(true, Ordering::Relaxed);
+    changer
+        .join()
+        .map_err(|_| argument("the thread of the changes panicked".to_owned()))??;
+    store.remove_player_permissions(RACER)?;
+    Ok(json!({
+        "rounds": rounds,
+        "changes": made.load(Ordering::Relaxed),
+        "disagree": one_lock,
+        "two_calls_disagree": two_calls,
+    }))
 }
 
 fn settings(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> {
