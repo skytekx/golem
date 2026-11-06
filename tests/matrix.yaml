@@ -20,3 +20,7 @@ entries:
   # The license lint of Golem, rule by rule, held against reuse lint.
   - notebook: 01_license_lint
     cell_timeout: 300
+
+  # The commit lint of Golem, rule by rule, held against Commitizen.
+  - notebook: 02_commit_lint
+    cell_timeout: 300

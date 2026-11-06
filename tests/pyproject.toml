@@ -24,6 +24,8 @@ license = "AGPL-3.0-only"
 # pyyaml reads tests/matrix.yaml.
 # reuse is the tool of the REUSE specification, which the license notebook
 # holds the license lint of Golem against.
+# commitizen checks the subject of a commit message, which the commit
+# notebook holds the commit lint of Golem against.
 dependencies = [
     "papermill==2.7.0",
     "nbclient==0.11.0",
@@ -32,6 +34,7 @@ dependencies = [
     "jupyter_client==8.10.0",
     "pyyaml==6.0.3",
     "reuse==6.3.0",
+    "commitizen==4.19.2",
 ]
 
 [project.urls]
