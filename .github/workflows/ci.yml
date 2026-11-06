@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The continuous integration of Golem, run on every push and on every pull request.
+#
+# The job licenses checks that every file states its license and its holder and that every
+# license has its text, as Documentation/licensing.md describes: once with the license lint of
+# Golem and once with reuse lint, the tool of the REUSE specification, pinned by version.
+# The jobs of the Rust code and of the bridge mod join it as the code lands.
+#
+# Every action is pinned to the commit of a release, with its tag beside it. No job reads a
+# secret, and the token of every job can only read the repository.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  licenses:
+    name: Licenses
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Lint the licenses
+        run: python3 -I .github/scripts/license_lint.py
+
+      - name: Install reuse
+        run: python3 -m pip install --disable-pip-version-check --no-input reuse==6.3.0
+
+      - name: Lint with REUSE
+        run: reuse lint
