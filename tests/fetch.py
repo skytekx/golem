@@ -26,7 +26,9 @@ used, and lands under tests/.cache/, which git ignores. The pins are these.
    leaves that checkout as it is. Every file comes from the commit itself, not from the work
    tree of a checkout. It downloads the files of modrinth.index.json that the server requires
    into tests/.cache/modpack/mods, each checked by the SHA-512 and the size the index gives,
-   adds the jars of local-mods/, and copies config/, defaultconfigs/, kubejs/, world/datapacks/,
+   from cdn.modrinth.com and github.com, which may redirect over https to the host of its
+   release assets alone, and reads no more of an answer than the size allows. It adds the jars
+   of local-mods/, and copies config/, defaultconfigs/, kubejs/, world/datapacks/,
    server.properties.example, the systemd unit of the live server, the Arclight jar with its
    four files of settings and tools/patch_mods.py beside them. The jars stay as their authors
    published them, since tools/patch_mods.py rewrites 14 of them, which would then miss their
@@ -99,8 +101,14 @@ SERVER_REPOSITORY = "https://github.com/skytekx/skytekx3-1201-server"
 SERVER_COMMIT = "3fa5ae681d12233fe81003fbfe5a2d3c529747fc"
 SERVER_DIRECTORY = "skytekx3-1201-server"
 MODPACK_DIRECTORY = "modpack"
-#: The hosts that a download of the index may name, as the format of Modrinth packs allows them.
+#: The hosts that the first download of an entry of the index may name. The format of Modrinth packs
+#: allows more, so this is the own list of Golem, the two hosts of the pinned index, and a new pin
+#: that names another host is a change to look at.
 MODPACK_HOSTS = ("cdn.modrinth.com", "github.com")
+#: The hosts that a download of the pack may be redirected to, over https alone: those above and the
+#: host of the release assets, where github.com sends the download of a release. The SHA-512 of the
+#: index guards the bytes wherever they come from.
+MODPACK_REDIRECT_HOSTS = (*MODPACK_HOSTS, "release-assets.githubusercontent.com")
 #: The directories of the server repository that the pack takes beside its mods.
 MODPACK_TREES = ("config", "defaultconfigs", "kubejs", "world/datapacks")
 #: The jar of Arclight that the live server runs, which arclight.jar of the repository links to.
@@ -289,6 +297,31 @@ def server_files(index: dict) -> tuple:
     return required, left_out
 
 
+class Redirects(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect of a download of the pack only over https to a host it may reach."""
+
+    def redirect_request(self, request, stream, code, message, headers, url):
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https" or parts.hostname not in MODPACK_REDIRECT_HOSTS:
+            raise Failure("%s redirects to %s on %s, which is none of https on %s" % (
+                request.full_url, parts.scheme, parts.hostname, ", ".join(MODPACK_REDIRECT_HOSTS)))
+        return super().redirect_request(request, stream, code, message, headers, url)
+
+
+#: The opener of the downloads of the pack, with the redirects above.
+OPENER = urllib.request.build_opener(Redirects)
+
+
+def copy_bounded(response, stream, limit: int) -> None:
+    """Copy `response` into `stream`, but no more than `limit` bytes."""
+    while limit > 0:
+        block = response.read(min(1 << 20, limit))
+        if not block:
+            return
+        stream.write(block)
+        limit -= len(block)
+
+
 def continues(response, offset: int) -> bool:
     """Whether `response` answers a range request with the bytes from `offset` on."""
     if response.status != 206:
@@ -323,26 +356,32 @@ def fetch_jar(entry: dict, mods: Path) -> bool:
         print("fetch: %s%s" % (entry["url"], " from byte %d" % offset if offset else ""), flush=True)
         try:
             request = urllib.request.Request(entry["url"], headers=headers)
-            with urllib.request.urlopen(request, timeout=300) as response:
+            with OPENER.open(request, timeout=300) as response:
                 resumed = offset > 0 and continues(response, offset)
+                # One byte more than the jar can hold shows an answer that is too large.
                 with open(partial, "ab" if resumed else "wb") as stream:
-                    shutil.copyfileobj(response, stream)
+                    copy_bounded(response, stream, entry["size"] - (offset if resumed else 0) + 1)
         except (OSError, http.client.HTTPException) as broken:
             if attempt == MODPACK_TRIES:
                 raise Failure("%s: %s" % (entry["url"], broken)) from broken
             reason = "broke off"
             continue
-        if partial.stat().st_size < entry["size"]:
+        size = partial.stat().st_size
+        if size < entry["size"]:
             reason = "broke off"
             continue
-        found = digest(partial, "sha512")
-        if partial.stat().st_size == entry["size"] and found == entry["sha512"]:
-            partial.replace(target)
-            return True
+        if size == entry["size"]:
+            found = digest(partial, "sha512")
+            if found == entry["sha512"]:
+                partial.replace(target)
+                return True
+            problem = "has SHA-512 %s, the index names %s" % (found, entry["sha512"])
+        else:
+            problem = "is larger than the %d bytes the index names" % entry["size"]
         partial.unlink()
         if not offset:
-            raise Failure("%s has SHA-512 %s, the index names %s" % (entry["url"], found, entry["sha512"]))
-        reason = "went on from byte %d and missed the SHA-512" % offset
+            raise Failure("%s %s" % (entry["url"], problem))
+        reason = "went on from byte %d and %s" % (offset, problem)
     raise Failure("%s: all %d tries failed, the last %s" % (entry["url"], MODPACK_TRIES, reason))
 
 

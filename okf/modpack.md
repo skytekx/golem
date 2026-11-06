@@ -43,7 +43,7 @@ EssentialsXSpawn and LuckPerms, are ported to Golem plugins instead, see
 
 | Part | What it holds |
 | --- | --- |
-| `mods/` | The 216 jars of `modrinth.index.json` that the server requires, from `cdn.modrinth.com` and `github.com`, each checked by its SHA-512, and the 49 jars of `local-mods/`. The 16 entries that the server does not support stay out |
+| `mods/` | The 216 jars of `modrinth.index.json` that the server requires, from `cdn.modrinth.com` and `github.com`, which sends a release on to `release-assets.githubusercontent.com`, over https alone and each checked by its size and its SHA-512, and the 49 jars of `local-mods/`. The 16 entries that the server does not support stay out |
 | `config/`, `defaultconfigs/`, `kubejs/` | The configuration of the mods and the KubeJS scripts of the server |
 | `world/datapacks/` | `skytekx3_fixes`, `skytekx3_skylands` and `skytekx3_skylands_forge` |
 | `server.properties.example`, `systemd/skytekx3.service` | The settings of the live server and the options of its JVM |
