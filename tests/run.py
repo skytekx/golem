@@ -74,6 +74,10 @@ def resolve_notebook(root: Path, notebook: str) -> Path:
     return root / "tests" / "notebooks" / Path(name).name
 
 
+#: The lines of the message of a failure that the runner prints below its line.
+DETAIL_LINES = 60
+
+
 def first_error(executed: Path):
     """The first error output of an executed notebook, as plain data, or None."""
     import nbformat
@@ -157,9 +161,16 @@ def main(argv=None) -> int:
         result = run_entry(root, entry, args.kernel)
         results.append(result)
         line = "run: %-6s %s in %.1f s" % (result["status"], result["id"], result["seconds"])
+        details = result["error"]["evalue"].splitlines() if result["error"] else []
         if result["error"]:
-            line += " - %s: %s" % (result["error"]["ename"], result["error"]["evalue"].splitlines()[0] if result["error"]["evalue"] else "")
+            line += " - %s: %s" % (result["error"]["ename"], details[0] if details else "")
         print(line, flush=True)
+        # The rest of the message, such as the output of a build that failed, so that a log of CI
+        # explains the failure without the executed notebook.
+        for detail in details[1:DETAIL_LINES]:
+            print("    " + detail, flush=True)
+        if len(details) > DETAIL_LINES:
+            print("    (%d more lines in report.json)" % (len(details) - DETAIL_LINES), flush=True)
 
     passed = sum(result["status"] == "passed" for result in results)
     report = {
