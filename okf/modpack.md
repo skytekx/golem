@@ -21,11 +21,12 @@ Arclight that it found.
 Yes. `golem run` boots the 289 mods that the 265 jars of the pack hold, the jars nested in them
 included, beside Minecraft and Forge, each in the same version as the java launcher, with no FATAL
 line, no crash report, no ERROR line that java does not log too and the same warnings of the loader
-as java. It generates the same world from the same seed, ticks at 20 TPS in the idle and stops with
-exit 0, every dimension saved and no chunk that failed to write or read. It also opens the world
-that Arclight wrote, which the switch of the live server needs. No mod of the pack names Bukkit, so
-none needs Arclight. Arclight boots the same mods, with two conflicts of its own mixins with mods of
-the pack. Nothing broke under golem, so nothing of Golem needed a fix.
+as java. From the same seed it generates a world with the same spawn, the same datapacks and the
+same folders of the dimensions, ticks at 20 TPS in the idle and stops with exit 0, every dimension
+saved and no chunk that failed to write or read. It also opens the world that Arclight wrote, which
+the switch of the live server needs. No mod of the pack names Bukkit, so none needs Arclight.
+Arclight boots the same mods, with two conflicts of its own mixins with mods of the pack. Nothing
+broke under golem, so nothing of Golem needed a fix.
 
 The answer has limits, listed under [What is not checked](#what-is-not-checked). Most of all no
 player joins, since the client of the harness is a vanilla client, which the pack refuses.
@@ -65,12 +66,12 @@ runs skytekx-compat 2.1.6, while `local-mods/` holds 2.1.3.
 
 ## What the notebook checks
 
-The notebook copies the Forge server of `tests/fetch.py` and the pack into a temporary directory
-and boots it from a fresh world three times, then a fourth time under golem on the world of the
-third. `server.properties` takes every setting of the live server, the level type with the
-Skylands datapacks among them, but binds 127.0.0.1 on port 25677, runs offline with a view and
-simulation distance of 4 and RCON off, and seeds the world with `golem`, so every boot generates
-the same world. Every boot runs with a heap of 6 GiB.
+The notebook copies the Forge server of `tests/fetch.py` and the pack into a temporary directory and
+boots it from a fresh world three times, then a fourth time under golem on the world of the third.
+`server.properties` takes every setting of the live server, the level type with the Skylands
+datapacks among them, but binds 127.0.0.1 on port 25677, runs offline with a view and simulation
+distance of 4 and RCON off, and seeds the world with `golem`, so every boot starts from the same
+seed. Every boot runs with a heap of 6 GiB.
 
 | Boot | Started as | Stopped by |
 | --- | --- | --- |
@@ -216,6 +217,9 @@ is meant to.
   [The pack](#the-pack).
 - No Bukkit plugin runs under Arclight in the notebook, since the server repository tracks none,
   and the world of the fourth boot is a fresh one of Arclight, not the world of the live server.
+- The terrain. The notebook compares the spawn, the datapacks and the folders of the dimensions of
+  the worlds, not the chunks in them, so a change in the generation under golem, such as a mixin
+  that applies otherwise or another order of the biome modifiers, would pass.
 - Each boot ran once on a shared machine, so the times are single samples.
 
 ## Running it
