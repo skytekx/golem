@@ -231,27 +231,110 @@ fn exit_through_jvm(status: i32) {
     }
 }
 
+/// Answers the dump of every thread of the JVM, from the operation `threadPrint` of the
+/// `DiagnosticCommand` bean, which is what `jcmd Thread.print` runs.
+fn thread_dump(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<String> {
+    use jni::objects::{
+        JObject,
+        JString,
+        JValue, //
+    };
+
+    let server = env
+        .call_static_method(
+            "java/lang/management/ManagementFactory",
+            "getPlatformMBeanServer",
+            "()Ljavax/management/MBeanServer;",
+            &[],
+        )?
+        .l()?;
+    let name = env.new_string("com.sun.management:type=DiagnosticCommand")?;
+    let bean = env.new_object(
+        "javax/management/ObjectName",
+        "(Ljava/lang/String;)V",
+        &[JValue::Object(&name)],
+    )?;
+    let operation = env.new_string("threadPrint")?;
+    let none = env.new_object_array(0, "java/lang/String", JObject::null())?;
+    let parameters = env.new_object_array(1, "java/lang/Object", &none)?;
+    let kind = env.new_string("[Ljava.lang.String;")?;
+    let signature = env.new_object_array(1, "java/lang/String", &kind)?;
+    let dump = env
+        .call_method(
+            &server,
+            "invoke",
+            "(Ljavax/management/ObjectName;Ljava/lang/String;[Ljava/lang/Object;[Ljava/lang/String;)Ljava/lang/Object;",
+            &[
+                JValue::Object(&bean),
+                JValue::Object(&operation),
+                JValue::Object(&parameters),
+                JValue::Object(&signature),
+            ],
+        )?
+        .l()?;
+    let dump = JString::from(dump);
+    let text = env.get_string(&dump)?.into();
+    Ok(text)
+}
+
+/// Prints the dump of every thread on standard output, as the JVM does on SIGQUIT when it has
+/// the signal, which -Xrs takes from it. The default action of SIGQUIT would end the process
+/// without saving, and an operator sends it for a dump alone.
+fn print_thread_dump() {
+    let Some(vm) = JVM.get() else {
+        log(format_args!(
+            "SIGQUIT: the JVM does not run yet, so there is no thread to dump"
+        ));
+        return;
+    };
+    let dump = vm.attach_current_thread_as_daemon().and_then(|mut env| {
+        let dump = thread_dump(&mut env);
+        if env.exception_check().unwrap_or(false) {
+            let _ = env.exception_describe();
+            let _ = env.exception_clear();
+        }
+        dump
+    });
+    match dump {
+        Ok(text) => {
+            let mut out = std::io::stdout().lock();
+            let _ = writeln!(out, "{text}");
+            let _ = out.flush();
+            log(format_args!("SIGQUIT: printed the dump of every thread"));
+        }
+        Err(error) => log(format_args!(
+            "SIGQUIT: no dump of the threads ({error}), jcmd <pid> Thread.print gives one"
+        )),
+    }
+}
+
 /// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own.
 ///
 /// When the bridge is connected, the first signal queues save-all flush and stop, which the mod
 /// runs on the server thread at the end of the next tick. Without the bridge no tick drains the
 /// queue, so the first signal ends the JVM through System.exit, which runs the shutdown hook of
 /// the server as a signal does under java. A later signal changes nothing, since the stop is
-/// already on its way and a second stop would only race it.
+/// already on its way and a second stop would only race it. SIGQUIT prints the dump of every
+/// thread and stops nothing, as under java.
 fn watch_signals(actions: Actions) -> Result<(), String> {
     use signal_hook::consts::{
         SIGHUP,
         SIGINT,
+        SIGQUIT,
         SIGTERM, //
     };
 
-    let mut signals = signal_hook::iterator::Signals::new([SIGINT, SIGTERM, SIGHUP])
+    let mut signals = signal_hook::iterator::Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT])
         .map_err(|error| format!("could not watch the signals: {error}"))?;
     std::thread::Builder::new()
         .name("golem-signals".to_owned())
         .spawn(move || {
             let mut queued = false;
             for signal in signals.forever() {
+                if signal == SIGQUIT {
+                    print_thread_dump();
+                    continue;
+                }
                 let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
                 if queued {
                     log(format_args!(
