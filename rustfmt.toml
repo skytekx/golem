@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The formatting of the Rust code, the defaults of rustfmt as the Linux kernel keeps them, with
+# the edition of the workspace.
+
+edition = "2024"
+newline_style = "Unix"

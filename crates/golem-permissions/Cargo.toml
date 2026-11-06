@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The permissions of Golem: groups with inheritance, nodes with wildcards and values per player,
+# seeded from a tracked configuration file, in place of LuckPerms.
+
+[package]
+name = "golem-permissions"
+description = "Groups, nodes and player values of Golem, in place of LuckPerms."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+toml.workspace = true
+
+[lints]
+workspace = true

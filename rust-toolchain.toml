@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The toolchain Golem is built and judged on. It is the pin of Aosabi, so that one compiler builds
+# both and a crate of Aosabi never meets a compiler it was not judged on.
+
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

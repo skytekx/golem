@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The door of the notebooks into the crates of Golem: one primitive per subcommand, each printing
+# JSON, so that a notebook checks one primitive at a time. It is never shipped.
+
+[package]
+name = "golem-devtool"
+description = "The primitives of the Golem crates for the notebooks, one per subcommand."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+golem-bridge.workspace = true
+golem-jvm.workspace = true
+golem-permissions.workspace = true
+golem-plugin.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

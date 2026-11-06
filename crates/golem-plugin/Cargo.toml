@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The plugin runtime of Golem: the trait of a plugin, the calls on the server thread with their
+# time budget, and the core plugin with the command golem.
+
+[package]
+name = "golem-plugin"
+description = "The plugin runtime of Golem and its core plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+golem-bridge.workspace = true
+
+[lints]
+workspace = true

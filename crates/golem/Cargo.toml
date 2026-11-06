@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The program golem, which owns the server process: it starts the JVM inside itself, boots the
+# Forge server unchanged and runs the plugins around it.
+
+[package]
+name = "golem"
+description = "The Rust hybrid server of SkyTekx, which runs Forge 47 and its mods inside itself."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+golem-bridge.workspace = true
+golem-jvm.workspace = true
+golem-plugin.workspace = true
+signal-hook.workspace = true
+
+[lints]
+workspace = true

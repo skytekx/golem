@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The JVM host of Golem: reads the launch arguments of a Forge server, loads libjvm, creates the
+# JVM through the invocation API on a thread of its own and runs the main class until the JVM ends.
+
+[package]
+name = "golem-jvm"
+description = "The JVM host of Golem, which runs a Forge server inside the Golem process."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+jni.workspace = true
+jni-sys.workspace = true
+libloading.workspace = true
+
+[lints]
+workspace = true

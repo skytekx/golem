@@ -1,0 +1,60 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The Golem workspace. This file is the one place where the settings every crate inherits are
+# written down: the package fields, the dependencies with their versions and the lints.
+#
+# Every dependency is named here once, so that a crate takes it with `workspace = true` and the
+# lock holds one version of it. CONTRIBUTING.md section 8 says when a crate from outside may join.
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95.0"
+license = "AGPL-3.0-only"
+authors = ["Florian Kleber <opensource@skytekx.com>"]
+repository = "https://github.com/skytekx/golem"
+
+[workspace.dependencies]
+golem-bridge = { path = "crates/golem-bridge" }
+golem-jvm = { path = "crates/golem-jvm" }
+golem-permissions = { path = "crates/golem-permissions" }
+golem-plugin = { path = "crates/golem-plugin" }
+
+# The safe wrapper of the JNI, for every call into the JVM after it exists.
+jni = { version = "0.21.1", default-features = false }
+# The raw types of jni.h, for JNI_CreateJavaVM and its hooks, which the wrapper does not cover.
+jni-sys = "0.3.0"
+# Loads libjvm of the Java home that the server names, at run time.
+libloading = "0.8.9"
+# The configuration files and the JSON of the devtool.
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+toml = "0.8.23"
+# SIGINT, SIGTERM and SIGHUP reach the host, since -Xrs keeps the JVM away from them.
+signal-hook = "0.3.18"
+
+[workspace.lints.rust]
+# Unsafe code lives only where the JNI needs it, and each such module allows it by name.
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Every unsafe block says why it is sound, as the kernel requires.
+undocumented_unsafe_blocks = "deny"
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"

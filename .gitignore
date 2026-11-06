@@ -12,3 +12,13 @@ __pycache__/
 
 # Notebook checkpoints of an editor
 .ipynb_checkpoints/
+
+# The downloads of the harness: the JDK, the Forge installer and the server it installs
+tests/.cache/
+
+# Rust build output
+target/
+
+# Gradle build output and caches of the bridge
+bridge/.gradle/
+bridge/**/build/

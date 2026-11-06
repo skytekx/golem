@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The bridge between the Golem bridge mod in the JVM and the plugins in Rust: the events the mod
+# reports, the actions Rust queues for the server thread, and the native methods of the host class.
+
+[package]
+name = "golem-bridge"
+description = "The bridge between the Golem bridge mod in the JVM and the Rust plugins of Golem."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+jni.workspace = true
+
+[lints]
+workspace = true
