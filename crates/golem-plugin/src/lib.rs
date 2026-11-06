@@ -17,9 +17,13 @@
 //! | Module | Holds |
 //! | --- | --- |
 //! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
+//! | `core_plugin` | [`CorePlugin`], the command golem, and [`Source`], the source that the AGPL asks Golem to offer |
 //!
-//! The crate holds no test, which is the rule of CONTRIBUTING.md section 5.
+//! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
+//! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
+//! `tests/notebooks/04_plugins.ipynb` drives the runtime through golem-devtool.
 
+mod core_plugin;
 mod runtime;
 
 use golem_bridge::{
@@ -30,12 +34,20 @@ use golem_bridge::{
     Verdict, //
 };
 
-pub use crate::runtime::{
-    Budget,
-    Budgets,
-    DEFAULT_BUDGET,
-    Runtime,
-    WARNING_INTERVAL, //
+pub use crate::{
+    core_plugin::{
+        COMMAND,
+        CorePlugin,
+        Source,
+        UNKNOWN_COMMIT, //
+    },
+    runtime::{
+        Budget,
+        Budgets,
+        DEFAULT_BUDGET,
+        Runtime,
+        WARNING_INTERVAL, //
+    },
 };
 
 /// A command that a plugin declares.
@@ -132,33 +144,5 @@ pub trait Plugin: Send {
     ) -> Vec<String> {
         let _ = (name, sender, arguments, context);
         Vec::new()
-    }
-}
-
-/// The source of the running Golem, which section 13 of the AGPL asks it to offer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Source {
-    /// The version of the crates, such as 0.1.0.
-    pub version: String,
-    /// The URL of the repository.
-    pub repository: String,
-    /// The commit the binary was built from, or unknown.
-    pub commit: String,
-}
-
-/// The core plugin, which answers the command golem with its subcommands source and status.
-pub struct CorePlugin {
-    source: Source,
-}
-
-impl CorePlugin {
-    /// The core plugin of the Golem built from `source`.
-    pub fn new(source: Source) -> Self {
-        Self { source }
-    }
-
-    /// The source it names.
-    pub fn source(&self) -> &Source {
-        &self.source
     }
 }
