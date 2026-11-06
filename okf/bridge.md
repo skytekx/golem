@@ -182,10 +182,14 @@ Forge, such as `minecraft:diamond`.
 `safeLocation` answers the nearest place near the block of the target where a player stands
 safely, with the search that the mod writes itself and copies from no plugin. A place is safe when
 the block below the feet carries a player on its full top face and is no block that hurts, the
-blocks of the feet and the head have no collision shape, hold no fluid and do not hurt, the ground
-lies at or above the lowest block of the dimension, the head below its top, and the place inside
-the world border. The blocks that hurt are fire, soul fire, campfires, cactus, magma, sweet berry
-bushes, wither roses, powder snow, pointed dripstone and lava. The search looks at every block
+blocks of the feet and the head have no collision shape, hold no fluid, are no portal of the tag
+`minecraft:portals`, the nether portal, the end portal and the end gateway, which would carry the
+player away, no cobweb, which would hold them, and do not hurt, the ground lies at or above the
+lowest block of the dimension, the head below its top, and the place inside the world border.
+The blocks that hurt are fire, soul fire, campfires, cactus, magma, sweet berry bushes, wither
+roses, powder snow, pointed dripstone and lava, and every block, of a mod as well, whose type of
+path for the mobs of Forge, `getBlockPathType`, names a danger, such as `DAMAGE_FIRE`,
+`DAMAGE_OTHER` or `LAVA`, or is `POWDER_SNOW` or `DAMAGE_CAUTIOUS`, as the mobs avoid it. The search looks at every block
 within the sphere of the radius around the block of the target, at most 8 blocks, in this order:
 the nearest first, then the higher, then the lower `x`, then the lower `z`, so a world always gives
 the same answer. It reads at most 2109 places, and only those of loaded chunks: at the first

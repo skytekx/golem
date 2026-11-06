@@ -5,8 +5,10 @@
  *
  * A place is safe when the block below the feet carries a player on its top face and hurts no
  * one standing on it, the blocks of the feet and the head let a player through and hold no
- * fluid and nothing that hurts, the ground lies above the void and the head below the top of the
- * world, and the place lies inside the world border. The search looks at the blocks within a
+ * fluid, no portal, which would carry the player away, no cobweb, which would hold them, and
+ * nothing that hurts, the ground lies above the void and the head below the top of the world,
+ * and the place lies inside the world border. A block of a mod hurts when its type of path for
+ * the mobs of Forge names a danger, as the mobs of the game avoid it. The search looks at the blocks within a
  * sphere around the block of the target, the nearest first, and at the same distance the higher
  * first, then the lower x, then the lower z, so the same world always gives the same answer.
  *
@@ -30,6 +32,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.BlockPathTypes;
 
 /** Finds a safe place to stand near a target. */
 final class SafeLocation {
@@ -122,25 +125,35 @@ final class SafeLocation {
 	private static boolean safe(ServerLevel level, BlockPos feet) {
 		BlockPos below = feet.below();
 		BlockState ground = level.getBlockState(below);
-		if (!ground.isFaceSturdy(level, below, Direction.UP) || hurts(ground)) {
+		if (!ground.isFaceSturdy(level, below, Direction.UP) || hurts(level, below, ground)) {
 			return false;
 		}
 		return passable(level, feet) && passable(level, feet.above());
 	}
 
-	/** Answers whether a player passes through the block unhurt and breathes in it. */
+	/**
+	 * Answers whether a player passes through the block unhurt, breathes in it and stays where
+	 * they are: no portal carries them away and no cobweb holds them.
+	 */
 	private static boolean passable(ServerLevel level, BlockPos pos) {
 		BlockState state = level.getBlockState(pos);
 		return state.getCollisionShape(level, pos).isEmpty() && state.getFluidState().isEmpty()
-				&& !hurts(state);
+				&& !state.is(BlockTags.PORTALS) && !state.is(Blocks.COBWEB)
+				&& !hurts(level, pos, state);
 	}
 
 	/** Answers whether the block hurts a player who stands on or in it. */
-	private static boolean hurts(BlockState state) {
-		return state.is(BlockTags.FIRE) || state.is(BlockTags.CAMPFIRES)
+	private static boolean hurts(ServerLevel level, BlockPos pos, BlockState state) {
+		if (state.is(BlockTags.FIRE) || state.is(BlockTags.CAMPFIRES)
 				|| state.is(Blocks.CACTUS) || state.is(Blocks.MAGMA_BLOCK)
 				|| state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.WITHER_ROSE)
 				|| state.is(Blocks.POWDER_SNOW) || state.is(Blocks.POINTED_DRIPSTONE)
-				|| state.getFluidState().is(FluidTags.LAVA);
+				|| state.getFluidState().is(FluidTags.LAVA)) {
+			return true;
+		}
+		// The blocks of mods: Forge asks the block itself how a mob may walk on or through it.
+		BlockPathTypes type = state.getBlockPathType(level, pos, null);
+		return type != null && (type.getDanger() != null || type == BlockPathTypes.POWDER_SNOW
+				|| type == BlockPathTypes.DAMAGE_CAUTIOUS);
 	}
 }
