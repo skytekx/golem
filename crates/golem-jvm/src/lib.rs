@@ -21,6 +21,9 @@
 //! The JVM host of Golem.
 
 mod argfile;
+// The invocation API of the JNI is C, so the module that calls it needs unsafe code.
+#[allow(unsafe_code)]
+mod invocation;
 mod launch;
 
 use std::path::{
@@ -56,6 +59,14 @@ impl std::error::Error for ArgError {}
 pub struct JvmError {
     /// What is wrong.
     pub message: String,
+}
+
+impl JvmError {
+    pub(crate) fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
 }
 
 impl std::fmt::Display for JvmError {
@@ -146,7 +157,12 @@ pub struct JavaHome(pub PathBuf);
 impl JavaHome {
     /// The path of libjvm in the server variant.
     pub fn libjvm(&self) -> PathBuf {
-        todo!("golem-jvm: JavaHome::libjvm")
+        let name = if cfg!(target_os = "macos") {
+            "libjvm.dylib"
+        } else {
+            "libjvm.so"
+        };
+        self.0.join("lib").join("server").join(name)
     }
 }
 
@@ -162,12 +178,24 @@ pub struct Outcome {
 /// Runs `spec` in a new JVM of `java_home` and waits until it ends.
 ///
 /// The JVM runs on a thread of its own. `register` runs on that thread after the JVM exists and
-/// before the main class, to register native methods. A call to System.exit in the JVM ends the
+/// before the main class, to register native methods. A call to `System.exit` in the JVM ends the
 /// process after the exit hook of the host has logged it, so this function does not return then.
+///
+/// The thread is named golem-jvm and has a stack of 8 MiB, or the size of `-Xss` when that is
+/// larger. The options of `spec` reach `JNI_CreateJavaVM` in their order, followed by
+/// `-Dsun.java.command` and `-Dsun.java.launcher=SUN_STANDARD`, which the launcher sets the same
+/// way, and the hooks `exit` and `abort`. The main class loads through the system class loader,
+/// with the checks and the messages of the launcher, and a main class that does not load ends
+/// the process with status 1, as it does under the launcher. A process holds at most one JVM,
+/// so this function runs once.
+///
+/// # Errors
+///
+/// Returns a [`JvmError`] when libjvm does not load, `JNI_CreateJavaVM` fails, an option holds a
+/// NUL byte, or `register` fails or panics.
 pub fn run<F>(java_home: &JavaHome, spec: &LaunchSpec, register: F) -> Result<Outcome, JvmError>
 where
     F: FnOnce(&mut jni::JNIEnv<'_>) -> jni::errors::Result<()> + Send + 'static,
 {
-    let _ = (java_home, spec, register);
-    todo!("golem-jvm: run")
+    invocation::run(java_home, spec, register)
 }
