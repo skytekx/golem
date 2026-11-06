@@ -13,12 +13,29 @@
  */
 
 //! The plugin runtime of Golem and its core plugin.
+//!
+//! | Module | Holds |
+//! | --- | --- |
+//! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
+//!
+//! The crate holds no test, which is the rule of CONTRIBUTING.md section 5.
+
+mod runtime;
 
 use golem_bridge::{
+    Action,
     Actions,
     Event,
     Sender,
     Verdict, //
+};
+
+pub use crate::runtime::{
+    Budget,
+    Budgets,
+    DEFAULT_BUDGET,
+    Runtime,
+    WARNING_INTERVAL, //
 };
 
 /// A command that a plugin declares.
@@ -31,19 +48,61 @@ pub struct CommandSpec {
 }
 
 /// What a plugin may do while the runtime calls it.
+///
+/// A plugin never touches the game itself. It queues actions, which the mod runs on the server
+/// thread at the end of the tick, oldest first.
 pub struct Context<'a> {
     actions: &'a Actions,
+    budgets: Option<&'a Budgets>,
 }
 
 impl<'a> Context<'a> {
     /// A context that queues into `actions`.
     pub fn new(actions: &'a Actions) -> Self {
-        Self { actions }
+        Self {
+            actions,
+            budgets: None,
+        }
+    }
+
+    /// A context of a call of the runtime, which also reads the budgets of its plugins.
+    pub(crate) fn in_runtime(actions: &'a Actions, budgets: &'a Budgets) -> Self {
+        Self {
+            actions,
+            budgets: Some(budgets),
+        }
     }
 
     /// The queue of actions, for what the helpers below do not cover.
     pub fn actions(&self) -> &Actions {
         self.actions
+    }
+
+    /// The budgets of the plugins of the runtime that makes the call, or `None` for a context
+    /// made with [`Context::new`].
+    pub fn budgets(&self) -> Option<&Budgets> {
+        self.budgets
+    }
+
+    /// Queues a system message to the player with `uuid`, which the mod sends if they are
+    /// online.
+    pub fn send_message(&self, uuid: &str, text: &str) {
+        self.actions.push(Action::Message {
+            uuid: uuid.to_owned(),
+            text: text.to_owned(),
+        });
+    }
+
+    /// Queues a system message to every player and the console.
+    pub fn broadcast(&self, text: &str) {
+        self.actions.push(Action::Broadcast(text.to_owned()));
+    }
+
+    /// Queues a command that the mod runs as the console. A leading slash is dropped, since the
+    /// console reads a command without it.
+    pub fn run_command(&self, command: &str) {
+        let command = command.strip_prefix('/').unwrap_or(command);
+        self.actions.push(Action::Command(command.to_owned()));
     }
 }
 
@@ -73,42 +132,6 @@ pub trait Plugin: Send {
     ) -> Vec<String> {
         let _ = (name, sender, arguments, context);
         Vec::new()
-    }
-}
-
-/// The time a plugin has cost so far.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Budget {
-    /// The calls.
-    pub calls: u64,
-    /// The time of all calls, in nanoseconds.
-    pub total_nanos: u64,
-    /// The longest call, in nanoseconds.
-    pub max_nanos: u64,
-    /// The calls that took longer than the budget of the runtime.
-    pub over_budget: u64,
-}
-
-/// The plugin runtime, the handler of golem-bridge.
-pub struct Runtime {
-    plugins: Vec<Box<dyn Plugin>>,
-}
-
-impl Runtime {
-    /// A runtime without plugins whose calls each have `budget`.
-    pub fn new(budget: std::time::Duration) -> Self {
-        let _ = budget;
-        todo!("golem-plugin: Runtime::new")
-    }
-
-    /// Adds a plugin behind the others. The runtime calls the plugins in that order.
-    pub fn add(&mut self, plugin: Box<dyn Plugin>) {
-        self.plugins.push(plugin);
-    }
-
-    /// The name and the budget of every plugin, in their order.
-    pub fn budgets(&self) -> Vec<(String, Budget)> {
-        todo!("golem-plugin: Runtime::budgets")
     }
 }
 
