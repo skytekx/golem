@@ -153,11 +153,15 @@ The license is written into the code itself.
   does, and carries no other license text. A file that cannot hold a comment, such as JSON or an
   image, is covered by an entry in `REUSE.toml`.
 
+<!-- REUSE-IgnoreStart -->
+
 ```text
 // SPDX-License-Identifier: AGPL-3.0-only             Rust, Java, C, JavaScript
 # SPDX-License-Identifier: AGPL-3.0-only              TOML, YAML, shell, Python
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->       Markdown outside the wiki
 ```
+
+<!-- REUSE-IgnoreEnd -->
 
 Each SPDX line is followed by the `SPDX-FileCopyrightText` line of REUSE that names the holder.
 
