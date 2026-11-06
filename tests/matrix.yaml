@@ -24,3 +24,7 @@ entries:
   # The commit lint of Golem, rule by rule, held against Commitizen.
   - notebook: 02_commit_lint
     cell_timeout: 300
+
+  # The permissions of Golem, rule by rule and refusal by refusal, and the seed of SkyTekx.
+  - notebook: 06_permissions
+    cell_timeout: 1800
