@@ -24,14 +24,22 @@ SkyTekx 3 server and its modpack stay in the
 | License | AGPL 3 only, holder Florian Kleber, REUSE compliant, checked in CI | [Licensing](../Documentation/licensing.md) |
 | Commits | Conventional Commits in the form of the kernel, checked in CI | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Tests | Jupyter notebooks run by papermill, as in Aosabi | [Testing](../Documentation/testing.md) |
-| First milestone | The workspace, the JVM host, the bridge, the plugin runtime and the permissions, in work | [Plan](plan.md#work-plan) |
+| JVM host | Built: `golem run` boots Forge 47.4.18 unchanged in its embedded JVM and stops it through the server thread, held by `03_launch_args` and `07_forge_boot` | [JVM host](jvm-host.md) |
+| Bridge | Built: the host jar, the Forge mod and the 14 natives in Rust, held by `04_plugins`, `05_bridge_build` and `07_forge_boot` | [Bridge](bridge.md) |
+| Plugin runtime | Built with the core plugin and its command `golem`, held by `04_plugins` and `07_forge_boot` | [Plugins](plugins/index.md) |
+| Permissions | Built as a crate with the seed of SkyTekx, held by `06_permissions`, not yet wired to a command or the store | [Permissions](plugins/permissions.md) |
+| Next | The adversarial review of the first milestone, CI for Rust, Gradle and the boot, then the GraphQL API and the ports | [Open items](open-items.md) |
 
 ## Page map
 
 | Page | What it holds |
 | --- | --- |
 | [Plan](plan.md) | The plan of Golem as the owner set it, with the later rulings |
-| [Bridge](bridge.md) | The contract between the bridge mod and the Rust of Golem |
+| [JVM host](jvm-host.md) | `golem run`, the launch as the java launcher reads it, the options Golem adds, the thread, the hooks, the stop path and the host jar |
+| [Bridge](bridge.md) | The contract between the bridge mod and the Rust of Golem, and how the bridge is built and tested |
+| [Plugins](plugins/index.md) | The plugin runtime: order, cancel chain, panics, budgets, threads, commands and tick statistics |
+| [Core plugin](plugins/core.md) | The command `golem`: source, status and help |
+| [Permissions](plugins/permissions.md) | The permissions in place of LuckPerms: the format, the rules of resolution, the seed and the quirks they fix |
 | [Change log](log.md) | What changed, oldest first |
 | [Decisions](decisions.md) | Every ruling of the owner |
 | [Open items](open-items.md) | What is still open |

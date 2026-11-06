@@ -25,3 +25,22 @@ itself are on [Plan](plan.md#owner-requirements).
 | 2026-11-06 | Commits are Conventional Commits as Commitizen writes them, in the form of the Linux kernel | Built, checked in CI | [CONTRIBUTING.md](../CONTRIBUTING.md#3-commit-messages) |
 | 2026-11-06 | Test cases are Jupyter notebooks, as in Aosabi | Built | [Testing](../Documentation/testing.md) |
 | 2026-11-06 | An agent answers its own blocking questions instead of asking | In force | This page records the answers it gave |
+
+## Answers of the agents
+
+The agents of the first milestone answered these questions themselves, under the last ruling
+above. Each stands until the owner rules otherwise.
+
+| Question | Answer | Where |
+| --- | --- | --- |
+| How closely does `golem run` follow the java launcher? | Byte for byte, quirks included, so an argument file that `run.sh` accepts starts the same server. A NUL byte in an argument file is refused instead of cutting the argument | [JVM host](jvm-host.md) |
+| Which environment reaches the launch? | `JAVA_TOOL_OPTIONS` and `_JAVA_OPTIONS`, which the JVM reads itself. `JDK_JAVA_OPTIONS` and `CLASSPATH` of the launcher are ignored, so the launch is the files of the server alone | [JVM host](jvm-host.md) |
+| How does a signal stop a server without the bridge? | Through `System.exit` with 128 plus the signal, so the shutdown hook of the server saves the worlds, as under java | [JVM host](jvm-host.md#the-stop-path) |
+| What does a native do when another thread holds the handler? | It waits, since Forge calls `chat()` beside the server thread. Only a call from inside the handler answers the pass value at once | [Plugins](plugins/index.md) |
+| How long is the budget of one plugin call? | 1 ms by default, `--budget-ms` changes it | [Plugins](plugins/index.md) |
+| May a command run as the console when the mod sends half a sender? | No. A sender with only one of the UUID and the name is refused | [Bridge](bridge.md) |
+| Which commit does `/golem source` name? | `GOLEM_COMMIT` at build time, else `git rev-parse HEAD`, else unknown, with the link to the tree of that commit | [Core plugin](plugins/core.md) |
+| Where does the version of the bridge jars come from? | `[workspace.package]` of `Cargo.toml`, so Golem has one version | [Bridge](bridge.md) |
+| Does a player's own node win over a group's? | Yes. The player's nodes decide before every group, so a player's wildcard deny takes away what a group grants by name, unlike LuckPerms | [Permissions](plugins/permissions.md) |
+| How do groups of the same rank disagree? | The deny wins. A wildcard `a.*` matches below `a` and not `a` itself, as in LuckPerms | [Permissions](plugins/permissions.md) |
+| What does the seed grant? | The 39 nodes of the live group default to every player, and `essentials.*` and `golem.*` to the group admin, which has no members yet | [Permissions](plugins/permissions.md) |

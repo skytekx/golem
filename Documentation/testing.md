@@ -16,7 +16,8 @@ and the executed copy shows every output on the way to the failure.
 | `tests/notebooks/` | The notebooks, one test case each, named `NN_topic.ipynb` |
 | `tests/matrix.yaml` | The entries the runner sweeps, in order, with their parameters |
 | `tests/run.py` | The runner, papermill over the kernel `golem` |
-| `tests/harness/` | What the notebooks share: where the repository is and how a process runs |
+| `tests/harness/` | What the notebooks share: where the repository is, how a process runs, and a player of Minecraft 1.20.1 in `minecraft.py` |
+| `tests/fetch.py` | The downloads of the notebooks that boot Forge: Temurin 17, the Forge server and Gradle, each checked by its SHA-256 |
 | `tests/pyproject.toml` | The exact pins of the Python packages the harness needs |
 | `tests/notebooks/out/` | The executed notebooks and `report.json` of a run, never committed |
 
@@ -33,6 +34,17 @@ tests/.venv/bin/python -m ipykernel install --sys-prefix --name golem --display-
 tests/.venv/bin/python tests/run.py
 tests/.venv/bin/python tests/run.py --only 01_license_lint
 tests/.venv/bin/python tests/run.py --list
+```
+
+The notebooks that build or boot Golem need more than Python. `cargo` of the toolchain in
+`rust-toolchain.toml` builds the crates for 03, 04, 06 and 07. `tests/fetch.py` downloads Temurin
+17.0.21, installs the Forge server 1.20.1-47.4.18 and unpacks Gradle 8.14.3 under `tests/.cache/`,
+which git ignores, for 03, 05 and 07, and 05 needs a C compiler as `cc`. The first build of the
+bridge downloads and remaps Minecraft into the Gradle cache of the user, which takes minutes, and
+later builds take seconds:
+
+```
+python3 -I tests/fetch.py
 ```
 
 The pins are the ones in `tests/pyproject.toml`, and CI reads them from there. The runner prints
@@ -78,3 +90,8 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | --- | --- |
 | `01_license_lint` | Does the license lint pass this tree, refuse every break of its eight rules, and agree with `reuse lint`? |
 | `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, and agree with Commitizen? |
+| `03_launch_args` | Does the JVM host read the launch of a Forge server as the java launcher of Temurin 17 reads it, and does a program run in its embedded JVM as it runs under java? |
+| `04_plugins` | Do the 14 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin, the queue, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
+| `05_bridge_build` | Does the Gradle build of `bridge/` give the host jar and the reobfuscated mod of `okf/bridge.md`, and does the mod stay off with one warning on a stock Forge without the host jar or its natives, and call every native and run every action when natives answer? |
+| `06_permissions` | Does `golem-permissions` refuse every break of its format, decide every check by the rules of `okf/plugins/permissions.md` in their order, and does the seed grant the 39 nodes of the live group default and no admin command? |
+| `07_forge_boot` | Does `golem run` boot Forge with the bridge connected to the real natives, answer `golem` on the console and to a player, and stop on a signal with the worlds saved, with and without the bridge mod? |
