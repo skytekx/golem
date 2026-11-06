@@ -503,8 +503,9 @@ The notebook `tests/notebooks/09_store.ipynb` drives the store through the subco
 `golem-devtool store`, which runs a JSON script of calls and prints the answer of every step as a
 line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`.
 It checks the schema against the tables of this page, every call and every refusal, a reopen after
-a close, a reopen after a kill between changes, a reader of the answers that goes away, a writer
-that fails at a limit of the file size, the files the open refuses and the cost above.
+a close, a store dropped without a close, a reopen after a kill between changes, a reader of the
+answers that goes away, a writer that fails at a limit of the file size, the files the open
+refuses and the cost above.
 
 Related: [Plugins](plugins/index.md), [Permissions](plugins/permissions.md),
 [Plan](plan.md#data-migration), [Index](index.md).

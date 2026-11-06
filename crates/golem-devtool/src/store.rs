@@ -26,10 +26,11 @@
 //! A step is a call of `Store` by its name with its arguments by name, a location being
 //! `{"dimension", "x", "y", "z", "yaw", "pitch"}`, where a number may also be a string such as
 //! `"NaN"`. The devtool adds `close_concurrently`, which closes the store on two threads at once
-//! and answers both closes, `reopen`, which closes the store and opens the same file, `repeat`,
-//! which runs its `steps` `count` times with `{i}` in a string replaced by the round from 1 and
-//! prints one line for all rounds, `sleep` with `ms`, and `wait`, which prints its line and then
-//! waits until its standard input ends, for a notebook that kills the process there.
+//! and answers both closes, `drop`, which drops the store without a close, `reopen`, which closes
+//! the store and opens the same file, `repeat`, which runs its `steps` `count` times with `{i}` in
+//! a string replaced by the round from 1 and prints one line for all rounds, `sleep` with `ms`,
+//! and `wait`, which prints its line and then waits until its standard input ends, for a notebook
+//! that kills the process there.
 //!
 //! A store that no step closed closes at the end of the script, and the exit code is 1 when that
 //! close fails. A store that a step closed answered its close in that step and is not closed
@@ -482,6 +483,15 @@ impl Session {
         }))
     }
 
+    /// Drops the handle of the store without a close, as a program that forgets to close does,
+    /// so the store closes as its last handle goes and logs that it was not closed.
+    fn drop_store(&mut self) -> Answer {
+        self.store()?;
+        drop(self.store.take());
+        self.closed = false;
+        Ok(Value::Null)
+    }
+
     /// Closes at the end of a script the store that no step closed, so its last changes reach
     /// the file, and answers whether they did. A store a step closed answered its close already.
     fn finish(&mut self) -> Result<(), StoreError> {
@@ -537,6 +547,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
         "open" => session.open(PathBuf::from(arguments.text("path")?)),
         "close" => session.close(),
         "close_concurrently" => session.close_concurrently(),
+        "drop" => session.drop_store(),
         "reopen" => {
             let path = session
                 .path
