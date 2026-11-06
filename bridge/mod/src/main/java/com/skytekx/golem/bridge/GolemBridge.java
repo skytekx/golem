@@ -4,14 +4,15 @@
  * The Golem bridge mod: the class that Forge constructs, which decides whether the bridge runs.
  *
  * The mod meets three kinds of server. Under Golem the host class is on the module path and its
- * natives answer, so the mod switches itself on. On a stock Forge without golem-host.jar
+ * natives answer, so the mod registers its listeners. On a stock Forge without golem-host.jar
  * the host class is missing, and on a stock Forge with the jar but without Golem the natives are
- * not registered. In both of those the mod logs one warning and stays off, so the server runs
- * as if the mod were not installed.
+ * not registered. In both of those the mod logs one warning and registers nothing, so the server
+ * runs as if the mod were not installed.
  */
 package com.skytekx.golem.bridge;
 
 import com.skytekx.golem.host.Host;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.logging.log4j.LogManager;
@@ -30,7 +31,7 @@ public final class GolemBridge {
 			+ " and the server runs as a stock Forge server";
 
 	/**
-	 * Switches the bridge on when the natives of Golem answer.
+	 * Registers the listeners of the bridge when the natives of Golem answer.
 	 *
 	 * @param context the context of the mod, which names its version
 	 */
@@ -38,6 +39,8 @@ public final class GolemBridge {
 		if (!natives()) {
 			return;
 		}
+		Guard guard = new Guard();
+		MinecraftForge.EVENT_BUS.register(new ServerEvents(guard));
 		Object version = context.getContainer().getModInfo().getVersion();
 		LOG.info("The Golem bridge {} is on", version);
 	}
