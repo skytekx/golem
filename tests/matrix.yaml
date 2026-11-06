@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The run matrix of the Golem harness. Each entry is one notebook and the
+# parameters papermill injects into its parameters cell, and the runner sweeps
+# the file in order:
+#
+#     python tests/run.py
+#
+# An entry carries a notebook, an optional id, an optional per cell timeout in
+# seconds and a parameters mapping. The notebook is a bare name, which the
+# runner resolves under tests/notebooks/, or a repository relative path. The
+# id names the executed copy under tests/notebooks/out/ and defaults to the
+# notebook's name.
+#
+# A parameter belongs here when the run chooses it. A pin belongs in the
+# notebook's own parameters cell, so that it has one source.
+
+entries:
+  # The license lint of Golem, rule by rule, held against reuse lint.
+  - notebook: 01_license_lint
+    cell_timeout: 300
