@@ -10,7 +10,9 @@
  * server thread, so a handler may answer a cancellable event before the game goes on.
  *
  * Rust never touches the game from another thread. It queues actions, and the mod drains the
- * queue at the end of every server tick and runs them on the server thread.
+ * queue at the end of every server tick and runs them on the server thread. While a native of the
+ * server thread runs, a handler may also ask the game, through the object of the interface Game
+ * that the mod connects and the JNIEnv of that native.
  *
  * okf/bridge.md is the contract between this crate and the Java of bridge/, with the signature
  * of every native method and the wire form of every action.
@@ -21,7 +23,8 @@
 //! | Module | Holds |
 //! | --- | --- |
 //! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
-//! | `game` | [`Location`], the places of the world as the mod reports them |
+//! | `game` | [`Game`] and [`NoGame`], the places the game answers, and [`wire`], their wire form |
+//! | `jni_game` | The game through the JNI, with the object the mod connected |
 //! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
 //! | [`host`] | The global state and one plain function per native method |
 //! | `natives` | The functions the JVM calls, thin wrappers over [`host`], and their registration |
@@ -32,6 +35,7 @@
 mod actions;
 mod game;
 pub mod host;
+mod jni_game;
 mod natives;
 mod ticks;
 
@@ -41,7 +45,18 @@ pub use crate::{
         Actions,
         SEPARATOR, //
     },
-    game::Location,
+    game::{
+        BlockLocation,
+        Game,
+        GameMode,
+        Heights,
+        Item,
+        Location,
+        NoGame,
+        OnlinePlayer,
+        Spawn,
+        wire, //
+    },
     ticks::{
         MAX_TPS,
         TickStats,
@@ -169,10 +184,11 @@ pub enum Verdict {
 /// What answers the events and the commands of the mod.
 ///
 /// The plugin runtime of golem-plugin is the handler of a running Golem. Every method runs on
-/// the server thread, so it must return quickly.
+/// the server thread but those the contract names, so it must return quickly. Each method gets
+/// the game behind the guard of the server thread, which answers none on any other thread.
 pub trait Handler: Send {
     /// Answers an event.
-    fn event(&mut self, event: &Event, actions: &Actions) -> Verdict;
+    fn event(&mut self, event: &Event, actions: &Actions, game: &dyn Game) -> Verdict;
 
     /// The names of the commands the mod registers, each without its slash.
     fn command_names(&self) -> Vec<String>;
@@ -184,14 +200,21 @@ pub trait Handler: Send {
         sender: &Sender,
         arguments: &str,
         actions: &Actions,
+        game: &dyn Game,
     ) -> Vec<String>;
 
     /// Answers whether the player with `uuid` holds `node` of the `PermissionAPI` of Forge, or
     /// `None` to leave it to the default resolver of the node. The default answers `None`.
     ///
     /// Mods ask Forge on any thread, so this may run beside the server thread.
-    fn permission(&mut self, uuid: &str, node: &str, actions: &Actions) -> Option<bool> {
-        let _ = (uuid, node, actions);
+    fn permission(
+        &mut self,
+        uuid: &str,
+        node: &str,
+        actions: &Actions,
+        game: &dyn Game,
+    ) -> Option<bool> {
+        let _ = (uuid, node, actions, game);
         None
     }
 }

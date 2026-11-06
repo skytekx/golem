@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
- * The host jar, golem-host.jar: the one class whose native methods Golem registers.
+ * The host jar, golem-host.jar: the class whose native methods Golem registers, and the
+ * interface through which Golem asks the game.
  *
  * The JVM host of Golem puts the jar on the module path, outside the layers of Forge. It has no
  * module-info.class and names its module in the manifest, so it becomes an automatic module of

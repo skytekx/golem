@@ -21,15 +21,22 @@
 //!   "budgetMs": 20,                  the budget of a call, by default 1 ms
 //!   "source": {"version": "0.1.0", "repository": "...", "commit": "..."},   or "build"
 //!   "plugins": [{"kind": "core"}, {"kind": "echo", "name": "echo-a", "commands": ["a"]}],
+//!   "game": {"players": [], "dimensions": []},   the scripted game of the module game
 //!   "steps": [{"op": "chat", "uuid": "...", "name": "Alex", "message": "hello"}]
 //! }
 //! ```
+//!
+//! Every native step hands the natives the scripted game, or a game that answers nothing when
+//! the script names none, and the natives hand it to the plugins behind the guard of the server
+//! thread, as they do the game of the mod.
 //!
 //! A step is a native method by its Java name with its Java parameters, where a missing
 //! parameter is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`,
 //! `serverStopped`, `tick` (with `nanos`, and `repeat` and `sleepMs` of the devtool),
 //! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` (with
-//! `level`, 4 when left out), `permission` and `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
+//! `level`, 4 when left out), `permission` and `drain`. A `death` step takes the `dimension`,
+//! `x`, `y`, `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands
+//! for null. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
 //! `install` (a fresh handler of the same script), `sleep` and `together`, which runs its
 //! `steps` each on a thread of its own, the next one `staggerMs` after the one before, as Forge
 //! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
@@ -37,15 +44,14 @@
 //!
 //! The test plugins are these. `echo` broadcasts the name of every event but a tick, and the
 //! location of a death, unless it is `quiet`, and answers its `commands` with a line, a message
-//! to a player sender and a console command. A `death` step takes the `dimension`, `x`, `y`,
-//! `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands for null. `cancel` cancels a chat message that holds its `word` and answers cancel to
-//! every other event, which the runtime must ignore. `panic` panics on the events named `on`
-//! and in its `commands`. `slow` sleeps `sleepMs` on the first `times` events named `on`.
-//! `reenter` calls the native `commandNames` from inside its handler on the events named `on`
-//! and broadcasts how many names it got. `grant` grants the nodes of its `grants` and denies
-//! those of its `denies`, and `panic` also panics on a permission when `on` is `permission`.
-//! `mover` answers its `commands` with the helpers of the
-//! context that teleport a player to its place `to` and name them in the player list.
+//! to a player sender and a console command. `cancel` cancels a chat message that holds its
+//! `word` and answers cancel to every other event, which the runtime must ignore. `panic` panics
+//! on the events named `on`, on a permission when `on` is `permission`, and in its `commands`.
+//! `slow` sleeps `sleepMs` on the first `times` events named `on`. `reenter` calls the native
+//! `commandNames` from inside its handler on the events named `on` and broadcasts how many names
+//! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`. `mover`
+//! answers its `commands` with the helpers of the context that teleport a player to its place
+//! `to` and name them in the player list. `ask` asks the game, as the module game describes.
 
 use std::{
     fs,
@@ -60,8 +66,10 @@ use golem_bridge::{
     Action,
     Actions,
     Event,
+    Game,
     Handler,
     Location,
+    NoGame,
     Sender,
     TickStats,
     TickWindow,
@@ -86,7 +94,16 @@ use serde_json::{
     json, //
 };
 
-use crate::Subcommand;
+use crate::{
+    Subcommand,
+    game::{
+        Ask,
+        GameSpec,
+        LocationSpec,
+        ScriptedGame,
+        location_json, //
+    },
+};
 
 pub const PLUGINS: Subcommand = (
     "plugins",
@@ -121,6 +138,7 @@ struct Script {
     source: Option<SourceSpec>,
     #[serde(default)]
     plugins: Vec<PluginSpec>,
+    game: Option<GameSpec>,
     steps: Vec<Step>,
 }
 
@@ -196,6 +214,13 @@ enum PluginSpec {
         grants: Vec<String>,
         #[serde(default)]
         denies: Vec<String>,
+    },
+    /// A plugin that asks the game on its commands and on the events named `on`.
+    Ask {
+        name: String,
+        #[serde(default)]
+        commands: Vec<String>,
+        on: Option<String>,
     },
     /// A plugin that teleports players and names them in the player list on its commands.
     Mover {
@@ -333,33 +358,6 @@ enum ActionSpec {
     },
 }
 
-/// A location as JSON, its fields beside the others of an action or a step.
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LocationSpec {
-    dimension: String,
-    x: f64,
-    y: f64,
-    z: f64,
-    #[serde(default)]
-    yaw: f32,
-    #[serde(default)]
-    pitch: f32,
-}
-
-impl From<LocationSpec> for Location {
-    fn from(spec: LocationSpec) -> Self {
-        Self {
-            dimension: spec.dimension,
-            x: spec.x,
-            y: spec.y,
-            z: spec.z,
-            yaw: spec.yaw,
-            pitch: spec.pitch,
-        }
-    }
-}
-
 impl From<ActionSpec> for Action {
     fn from(spec: ActionSpec) -> Self {
         match spec {
@@ -373,18 +371,6 @@ impl From<ActionSpec> for Action {
             ActionSpec::ListName { uuid, name } => Self::ListName { uuid, name },
         }
     }
-}
-
-/// Answers a location as JSON, in the form of [`LocationSpec`].
-fn location_json(location: &Location) -> Value {
-    json!({
-        "dimension": location.dimension,
-        "x": location.x,
-        "y": location.y,
-        "z": location.z,
-        "yaw": location.yaw,
-        "pitch": location.pitch,
-    })
 }
 
 /// Answers an action as JSON, in the form of [`ActionSpec`].
@@ -404,7 +390,7 @@ fn action_json(action: &Action) -> Value {
 }
 
 /// Reads the JSON file that the only argument names.
-fn read<T: for<'de> Deserialize<'de>>(name: &str, arguments: &[String]) -> Result<T, String> {
+pub fn read<T: for<'de> Deserialize<'de>>(name: &str, arguments: &[String]) -> Result<T, String> {
     let [path] = arguments else {
         return Err(format!("{name} takes one file"));
     };
@@ -413,7 +399,7 @@ fn read<T: for<'de> Deserialize<'de>>(name: &str, arguments: &[String]) -> Resul
 }
 
 /// Prints `result` as the answer of a subcommand and answers its exit status.
-fn finish(name: &str, result: Result<Value, String>) -> i32 {
+pub fn finish(name: &str, result: Result<Value, String>) -> i32 {
     match result {
         Ok(document) => {
             println!("{document:#}");
@@ -462,6 +448,7 @@ fn run_script(script: Script) -> Result<Value, String> {
         plugins: script.plugins,
         budgets: None,
         actions: host::actions(),
+        game: script.game.map(ScriptedGame::new),
     };
     run.install();
     let answers: Vec<Value> = script
@@ -489,9 +476,19 @@ struct Run {
     plugins: Vec<PluginSpec>,
     budgets: Option<golem_plugin::Budgets>,
     actions: Actions,
+    /// The game of the script, or none for a game that answers nothing.
+    game: Option<ScriptedGame>,
 }
 
 impl Run {
+    /// Answers the game of the script, which a native step hands the natives.
+    fn game(&self) -> &(dyn Game + Sync) {
+        match &self.game {
+            Some(game) => game,
+            None => &NoGame,
+        }
+    }
+
     /// Answers the name of the handler, as the script names it.
     fn kind_name(&self) -> &'static str {
         match self.kind {
@@ -521,7 +518,7 @@ impl Run {
 
     /// Runs one step and answers what its native answered.
     fn step(&mut self, step: Step) -> Value {
-        if let Some(answer) = native(&step) {
+        if let Some(answer) = native(&step, self.game()) {
             return answer;
         }
         match step {
@@ -534,7 +531,7 @@ impl Run {
                 self.install();
                 json!({"op": "install", "answer": null, "queued": self.actions.len()})
             }
-            Step::Together { stagger_ms, steps } => together(stagger_ms, &steps),
+            Step::Together { stagger_ms, steps } => together(stagger_ms, &steps, self.game()),
             _ => unreachable!("native() answers every other step"),
         }
     }
@@ -563,30 +560,31 @@ impl Run {
     }
 }
 
-/// Runs a step that is a native method, `stats` or `sleep`, and answers what it answered, or
-/// None for a step of the devtool that needs the state of the script.
-fn native(step: &Step) -> Option<Value> {
+/// Runs a step that is a native method, `stats` or `sleep`, with the game of the script, and
+/// answers what it answered, or None for a step of the devtool that needs the state of the
+/// script.
+fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
     Some(match step {
         Step::Version => answer("version", host::version()),
         Step::ServerStarting {
             forge_version,
             minecraft_version,
         } => done("serverStarting", || {
-            host::server_starting(forge_version.as_deref(), minecraft_version.as_deref());
+            host::server_starting(forge_version.as_deref(), minecraft_version.as_deref(), game);
         }),
-        Step::ServerStarted => done("serverStarted", host::server_started),
-        Step::ServerStopping => done("serverStopping", host::server_stopping),
-        Step::ServerStopped => done("serverStopped", host::server_stopped),
+        Step::ServerStarted => done("serverStarted", || host::server_started(game)),
+        Step::ServerStopping => done("serverStopping", || host::server_stopping(game)),
+        Step::ServerStopped => done("serverStopped", || host::server_stopped(game)),
         Step::Tick {
             nanos,
             repeat,
             sleep_ms,
-        } => done("tick", || ticks(*nanos, *repeat, *sleep_ms)),
+        } => done("tick", || ticks(*nanos, *repeat, *sleep_ms, game)),
         Step::PlayerJoined { uuid, name } => done("playerJoined", || {
-            host::player_joined(uuid.as_deref(), name.as_deref());
+            host::player_joined(uuid.as_deref(), name.as_deref(), game);
         }),
         Step::PlayerLeft { uuid, name } => done("playerLeft", || {
-            host::player_left(uuid.as_deref(), name.as_deref());
+            host::player_left(uuid.as_deref(), name.as_deref(), game);
         }),
         Step::Chat {
             uuid,
@@ -594,7 +592,7 @@ fn native(step: &Step) -> Option<Value> {
             message,
         } => answer(
             "chat",
-            host::chat(uuid.as_deref(), name.as_deref(), message.as_deref()),
+            host::chat(uuid.as_deref(), name.as_deref(), message.as_deref(), game),
         ),
         Step::Death {
             uuid,
@@ -615,14 +613,20 @@ fn native(step: &Step) -> Option<Value> {
                 yaw: *yaw,
                 pitch: *pitch,
             });
-            host::death(uuid.as_deref(), name.as_deref(), cause.as_deref(), location);
+            host::death(
+                uuid.as_deref(),
+                name.as_deref(),
+                cause.as_deref(),
+                location,
+                game,
+            );
         }),
         Step::Respawn {
             uuid,
             name,
             dimension,
         } => done("respawn", || {
-            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref());
+            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref(), game);
         }),
         Step::CommandNames => answer("commandNames", host::command_names()),
         Step::Command {
@@ -639,11 +643,12 @@ fn native(step: &Step) -> Option<Value> {
                 sender_name.as_deref(),
                 *level,
                 arguments.as_deref(),
+                game,
             ),
         ),
         Step::Permission { uuid, node } => answer(
             "permission",
-            host::permission(uuid.as_deref(), node.as_deref()),
+            host::permission(uuid.as_deref(), node.as_deref(), game),
         ),
         Step::Drain => drain(),
         Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
@@ -655,7 +660,7 @@ fn native(step: &Step) -> Option<Value> {
 /// Runs `steps` each on a thread of its own, the next one `stagger_ms` after the one before,
 /// and answers their answers in the order of the steps, each with the milliseconds from the
 /// start of the first to its own end.
-fn together(stagger_ms: u64, steps: &[Step]) -> Value {
+fn together(stagger_ms: u64, steps: &[Step], game: &(dyn Game + Sync)) -> Value {
     const REFUSED: &str = "together runs native methods, stats and sleep alone";
     let start = Instant::now();
     let answers: Vec<Value> = thread::scope(|scope| {
@@ -668,7 +673,7 @@ fn together(stagger_ms: u64, steps: &[Step]) -> Value {
                     .name(format!("devtool-{index}"))
                     .spawn_scoped(scope, move || {
                         thread::sleep(delay);
-                        let mut answer = native(step).unwrap_or_else(
+                        let mut answer = native(step, game).unwrap_or_else(
                             || json!({"op": "refused", "answer": null, "error": REFUSED}),
                         );
                         answer["endMs"] = json!(start.elapsed().as_secs_f64() * 1000.0);
@@ -699,10 +704,10 @@ fn done(op: &str, native: impl FnOnce()) -> Value {
 }
 
 /// Feeds `repeat` ticks of `nanos` to the native tick, each after a sleep of `sleep_ms`.
-fn ticks(nanos: i64, repeat: u32, sleep_ms: u64) {
+fn ticks(nanos: i64, repeat: u32, sleep_ms: u64, game: &dyn Game) {
     for _ in 0..repeat {
         thread::sleep(Duration::from_millis(sleep_ms));
-        host::tick(nanos);
+        host::tick(nanos, game);
     }
 }
 
@@ -762,6 +767,7 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             grants,
             denies,
         }),
+        PluginSpec::Ask { name, commands, on } => Box::new(Ask { name, commands, on }),
         PluginSpec::Mover { name, commands, to } => Box::new(Mover {
             name,
             commands,
@@ -1039,7 +1045,7 @@ impl Plugin for Mover {
 struct Panicking;
 
 impl Handler for Panicking {
-    fn event(&mut self, event: &Event, _actions: &Actions) -> Verdict {
+    fn event(&mut self, event: &Event, _actions: &Actions, _game: &dyn Game) -> Verdict {
         panic!("the panicking handler panics on {}", event.name());
     }
 
@@ -1053,11 +1059,18 @@ impl Handler for Panicking {
         _sender: &Sender,
         _arguments: &str,
         _actions: &Actions,
+        _game: &dyn Game,
     ) -> Vec<String> {
         panic!("the panicking handler panics in the command {name}");
     }
 
-    fn permission(&mut self, _uuid: &str, node: &str, _actions: &Actions) -> Option<bool> {
+    fn permission(
+        &mut self,
+        _uuid: &str,
+        node: &str,
+        _actions: &Actions,
+        _game: &dyn Game,
+    ) -> Option<bool> {
         panic!("the panicking handler panics on the permission {node}");
     }
 }

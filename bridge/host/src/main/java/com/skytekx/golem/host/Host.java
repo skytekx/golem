@@ -4,10 +4,10 @@
  * The host class of Golem: the native methods that the Rust of Golem registers on this class
  * before it starts Forge, and the probe that tells the bridge mod whether it did.
  *
- * The class lives alone in golem-host.jar on the module path of the JVM, outside the layers that
- * Forge builds, so the bridge mod in the game layer and the JVM host see the same class. It loads
- * no library and looks up no symbol: the JVM host registers every native method with
- * RegisterNatives. okf/bridge.md is the contract for every method here.
+ * The class lives with the interface Game in golem-host.jar on the module path of the JVM,
+ * outside the layers that Forge builds, so the bridge mod in the game layer and the JVM host see
+ * the same class. It loads no library and looks up no symbol: the JVM host registers every
+ * native method with RegisterNatives. okf/bridge.md is the contract for every method here.
  */
 package com.skytekx.golem.host;
 
@@ -67,6 +67,13 @@ public final class Host {
 	 * @return the version of the Golem that registered the natives
 	 */
 	public static native String version();
+
+	/**
+	 * Hands Golem the game it may ask on the server thread, once, while Forge constructs the mod.
+	 *
+	 * @param game what Golem may ask the game, or null for nothing
+	 */
+	public static native void connect(Game game);
 
 	/**
 	 * Reports that the server is starting, before the worlds load.

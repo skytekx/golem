@@ -30,7 +30,9 @@ use golem_bridge::{
     Action,
     Actions,
     Event,
+    Game,
     Location,
+    NoGame,
     Sender,
     Verdict,
     log, //
@@ -63,28 +65,47 @@ pub struct CommandSpec {
 
 /// What a plugin may do while the runtime calls it.
 ///
-/// A plugin never touches the game itself. It queues actions, which the mod runs on the server
-/// thread at the end of the tick, oldest first.
+/// A plugin never changes the game itself. It queues actions, which the mod runs on the server
+/// thread at the end of the tick, oldest first. It may ask the game during its call through
+/// [`Context::game`], which answers on the server thread alone.
 pub struct Context<'a> {
     actions: &'a Actions,
     budgets: Option<&'a Budgets>,
+    game: &'a dyn Game,
 }
 
 impl<'a> Context<'a> {
-    /// A context that queues into `actions`.
+    /// A context that queues into `actions`, with a game that answers nothing.
     pub fn new(actions: &'a Actions) -> Self {
+        Self::with_game(actions, &NoGame)
+    }
+
+    /// A context that queues into `actions` and asks `game`.
+    pub fn with_game(actions: &'a Actions, game: &'a dyn Game) -> Self {
         Self {
             actions,
             budgets: None,
+            game,
         }
     }
 
     /// A context of a call of the runtime, which also reads the budgets of its plugins.
-    pub(crate) fn in_runtime(actions: &'a Actions, budgets: &'a Budgets) -> Self {
+    pub(crate) fn in_runtime(
+        actions: &'a Actions,
+        budgets: &'a Budgets,
+        game: &'a dyn Game,
+    ) -> Self {
         Self {
             actions,
             budgets: Some(budgets),
+            game,
         }
+    }
+
+    /// The game, which answers while the call runs on the server thread and answers none on
+    /// any other thread, such as for a chat message, or without a game.
+    pub fn game(&self) -> &dyn Game {
+        self.game
     }
 
     /// The queue of actions, for what the helpers below do not cover.

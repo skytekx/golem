@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 type: Spec
 title: Bridge
-description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the wire form of the actions and the rules of the server thread.
+description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the game that Rust may ask, the permission handler of Forge, the wire form of the actions and the rules of the server thread.
 tags: [bridge, jni, forge, contract]
 timestamp: 2026-11-06
 ---
@@ -15,7 +15,7 @@ parts, and this page is the contract between them.
 
 | Part | Where | What it is |
 | --- | --- | --- |
-| Host class | `bridge/host/`, the jar `golem-host.jar` | One Java class with the native methods, no Forge in it |
+| Host class | `bridge/host/`, the jar `golem-host.jar` | The Java class with the native methods and the interface `Game`, no Forge in them |
 | Bridge mod | `bridge/mod/`, the jar `golem-bridge-<version>.jar` in `mods/` | A Forge mod that listens on the event bus and calls the host class |
 | Natives | The crate `golem-bridge` | The Rust functions behind the native methods, registered by the host |
 
@@ -46,6 +46,7 @@ public final class Host {
 	public static boolean available();
 
 	public static native String version();
+	public static native void connect(Game game);
 	public static native void serverStarting(String forgeVersion, String minecraftVersion);
 	public static native void serverStarted();
 	public static native void serverStopping();
@@ -76,6 +77,7 @@ does not run, instead of failing on every event.
 | Native method | Called by the mod | Answer |
 | --- | --- | --- |
 | `version()` | Once, through `available()`, while Forge constructs the mod | The version of Golem, such as `0.1.0` |
+| `connect(game)` | Once, right after `available()`, while Forge constructs the mod | None. Golem keeps the game, see [The game](#the-game) |
 | `serverStarting(forge, minecraft)` | On `ServerStartingEvent` | None |
 | `serverStarted()` | On `ServerStartedEvent` | None |
 | `serverStopping()` | On `ServerStoppingEvent` | None |
@@ -133,6 +135,80 @@ Forge builds the commands when it loads the data packs: once at the start, befor
 whitespace cannot be typed as the first word of a command, so the mod skips it with a warning.
 When `command` throws, the sender reads that the command failed and the log of the
 server holds the exception.
+
+## The game
+
+While a native of the server thread runs, the handler in Rust may ask the game. The mod hands
+Golem an object of the interface `Game` of the host jar with `connect`, and Golem keeps a global
+reference to it and calls its methods through the JNI with the `JNIEnv` of the running native, so
+every question is read on the server thread, inside the call of the mod.
+
+```java
+package com.skytekx.golem.host;
+
+public interface Game {
+	String[] players();
+	String location(String uuid);
+	String respawn(String uuid);
+	String spawn(String dimension);
+	String mainHand(String uuid);
+	String heights(String dimension);
+	String safeLocation(String dimension, double x, double y, double z, int radius);
+}
+```
+
+An answer is its fields joined by U+001F, as an action is, null when the game cannot answer, and
+the empty string where the table names an empty answer. A field that holds U+001F, such as a
+display name that a mod made, has it replaced by a space.
+
+| Method | Fields of the answer | Null | Empty |
+| --- | --- | --- | --- |
+| `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list | Never on the server thread | The name in the list, while the client shows the name of the profile |
+| `location(uuid)` | The dimension, `x`, `y`, `z` of the feet, `yaw`, `pitch` | The player is not online | Never |
+| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the bed or the respawn anchor | The player is not online | The player has no respawn point |
+| `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
+| `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
+| `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
+| `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
+
+The game mode is the name of the game, `survival`, `creative`, `adventure` or `spectator`. The
+permission level is the operator level of the profile, 0 to 4, from `getProfilePermissions`. The
+time since the last action is `Util.getMillis()` less `getLastActionTime()`, which the game
+resets when the player moves, chats, uses an item or clicks, so a plugin marks a player who is
+away. The shared spawn of the Nether and the End is the one of the Overworld, since Minecraft
+keeps one spawn for the worlds of a server. The registry id of an item comes from the registry of
+Forge, such as `minecraft:diamond`.
+
+`safeLocation` answers the nearest place near the block of the target where a player stands
+safely, with the search that the mod writes itself and copies from no plugin. A place is safe when
+the block below the feet carries a player on its full top face and is no block that hurts, the
+blocks of the feet and the head have no collision shape, hold no fluid and do not hurt, the ground
+lies at or above the lowest block of the dimension, the head below its top, and the place inside
+the world border. The blocks that hurt are fire, soul fire, campfires, cactus, magma, sweet berry
+bushes, wither roses, powder snow, pointed dripstone and lava. The search looks at every block
+within the sphere of the radius around the block of the target, at most 8 blocks, in this order:
+the nearest first, then the higher, then the lower `x`, then the lower `z`, so a world always gives
+the same answer. It reads the blocks through the level, which loads the chunks it looks at, as a
+teleport there would, and it reads at most 2109 places.
+
+The Rust side asks through the trait `golem_bridge::Game`, which the handler gets on every call.
+
+| Implementation | Where | Answers |
+| --- | --- | --- |
+| The JNI | `golem-bridge`, the natives | The object of `connect`, asked with the `JNIEnv` of the native |
+| `NoGame` | `golem-bridge` | Nothing, before the mod connects a game and for a call without one |
+| The scripted game | `golem-devtool` | What a script of `04_plugins` names |
+
+Every implementation reaches the handler behind the guard `ServerThread` of `golem_bridge::host`.
+The server thread is the thread of the first `serverStarting()`, and a question on any other
+thread, such as from a handler of `chat()`, answers none without asking the mod. The first such
+question of the process is logged. A question runs in a local frame of its own, so a native that
+asks many questions leaves no local reference behind. A Java exception that a question throws is
+printed and cleared, so it never crosses into the caller of the native, and the question answers
+none. A question that fails and an answer that does not read are logged the first time, the
+tenth, the hundredth and every further power of ten. The object of the mod checks the thread a
+second time with `isSameThread` of the server and answers null on any other thread, so the game is
+read on its own thread alone, whatever Golem does.
 
 ## Permissions
 
@@ -196,20 +272,23 @@ path is the same as an operator's at the console.
 ## The rules of the server thread
 
 - Every native method runs on the thread that calls it. That is the server thread for every
-  method of this page but four, as Forge 47.4.18 calls them and the notebook `05_bridge_build`
-  records. `version()` runs on a thread of the mod loader, `modloading-worker-<n>`, while Forge
-  constructs the mods. `commandNames()` runs on the main thread, `main`, when Forge builds the
-  commands at the start, and on the server thread on a reload. `chat()` runs on a worker thread of
-  Forge, `Worker-Main-<n>`, while the server thread goes on, since Forge fires `ServerChatEvent`
-  there. `permission()` runs on the thread of the mod that asks Forge, which is the server thread
-  for the selectors of a command.
+  method of this page but five, as Forge 47.4.18 calls them and the notebook `05_bridge_build`
+  records. `version()` and `connect()` run on a thread of the mod loader, `modloading-worker-<n>`,
+  while Forge constructs the mods. `commandNames()` runs on the main thread, `main`, when Forge
+  builds the commands at the start, and on the server thread on a reload. `chat()` runs on a
+  worker thread of Forge, `Worker-Main-<n>`, while the server thread goes on, since Forge fires
+  `ServerChatEvent` there. `permission()` runs on the thread of the mod that asks Forge, which is
+  the server thread for the selectors of a command.
 - A handler in Rust answers before the event goes on, so it must be quick. The plugin runtime times
   every call against its budget.
-- Rust never touches game state from another thread. Whatever Rust wants done is an action. A
-  handler of `chat()` runs beside the server thread, so it must be thread safe and may only answer
-  and queue actions. Its answer still cancels the message.
-- A native method never lets a panic of Rust cross into the JVM. It catches it, logs it and
-  answers what a pass would answer: nothing, false, or an empty array.
+- Rust never touches game state from another thread. Whatever Rust wants done is an action, and
+  it reads the game only through `Game` while a native of the server thread runs. A handler of
+  `chat()` runs beside the server thread, so it must be thread safe and may only answer and queue
+  actions, and every question it asks the game answers none. Its answer still cancels the
+  message.
+- A native method never lets a panic of Rust or a Java exception of a question to the game cross
+  into the JVM. It catches the panic, logs it and answers what a pass would answer: nothing,
+  false, or an empty array.
 - The mod catches every exception of its own around a native call, logs it with the logger
   `golem` and lets the game go on, so a fault of the bridge never stops the server. A call that
   fails again and again logs its first failure with the stack trace and after that only its tenth,
@@ -266,15 +345,19 @@ the same machine that day.
 The notebook `tests/notebooks/05_bridge_build.ipynb` builds a copy of `bridge/` and checks the
 jars against this page.
 
-- The host jar holds exactly one class, `com/skytekx/golem/host/Host.class`, of class file version
-  61, and depends on `java.lang` alone. Its manifest names the module, the version of Golem and
-  the license. Its public methods are the 14 natives of the Java block above, each with the
+- The host jar holds exactly two classes, `com/skytekx/golem/host/Host.class` and the interface
+  `com/skytekx/golem/host/Game.class`, of class file version 61, and depends on its package and
+  `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
+  public methods of `Host` are the 16 natives of the first Java block above, each with the
   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
-  `available()`.
+  `available()`, and those of `Game` are the 7 abstract methods of the block of
+  [The game](#the-game).
 - The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
   no `.license` file. It listens for every event of the table and calls every native but
   `version()`, with the descriptors of the host jar. Every member of Minecraft it uses carries its
-  SRG name, but the methods of `java.lang.Object`, and no official name of Mojang appears.
+  SRG name, but the methods of `java.lang.Object`, the methods that Forge adds to a class of
+  Minecraft, the constants of an enum and the methods that a class takes from Brigadier, and no
+  official name of Mojang appears.
 
 It then boots a copy of the Forge server of `tests/fetch.py` on port 25633 three times, through
 the java launcher of the JDK with the argument files of the server, as `run.sh` does. Each boot
@@ -282,15 +365,18 @@ must reach `Done`, stop cleanly with no FATAL line and no crash report, and find
 
 | Boot | The mod must |
 | --- | --- |
-| Without the host jar | Log one warning that the host class is missing, and nothing else |
-| With `golem-host.jar` on the `-p` of a copied `unix_args.txt` | Log one warning that the natives are not registered |
-| With the host jar and stand in natives | Call every native, run every action, and stop the server through the actions |
+| Without the host jar | Log one warning that the host class is missing, and nothing else, while Forge falls back to its own permission handler |
+| With `golem-host.jar` on the `-p` of a copied `unix_args.txt` | Log one warning that the natives are not registered, while Forge falls back to its own permission handler |
+| With the host jar and stand in natives | Call every native, answer every question of the game, run every action, decide `forge.use_entity_selectors` through the native, and stop the server through the actions |
 
 The stand in natives are a small C library that the notebook compiles and loads with
 `-agentpath`, since HotSpot searches the symbols of an agent library for a native method that no
 library of its class loader holds. A minimal offline client of Minecraft 1.20.1 joins, chats,
-runs a command of the plugins, dies, respawns and leaves. The notebook records the thread of every
-call, and the threads of
+runs a command of the plugins, uses a selector, dies, respawns, is teleported into the Nether and
+named in the player list, and leaves, and the console runs the command as the player and as an
+armor stand. The stand in natives ask the object of `connect` every question of the game on the
+server thread and once from the worker thread of a chat message, where it answers null. The
+notebook records the thread of every call, and the threads of
 [the rules of the server thread](#the-rules-of-the-server-thread) come from it.
 
 Related: [JVM host](jvm-host.md), [Plugins](plugins/index.md), [Index](index.md).

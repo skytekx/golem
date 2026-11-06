@@ -26,7 +26,7 @@ answers its pass value at once with a line on the log, since it would wait for i
 | --- | --- | --- |
 | `Plugin` | `golem_plugin::Plugin` | The trait of a plugin: its name, its commands, `on_event` and `on_command` |
 | `Runtime` | `golem_plugin::Runtime` | The handler of the bridge, which calls the plugins and keeps their budgets |
-| `Context` | `golem_plugin::Context` | What a plugin may do during its call: queue actions and read the budgets |
+| `Context` | `golem_plugin::Context` | What a plugin may do during its call: queue actions, ask the game and read the budgets |
 | `Budgets` | `golem_plugin::Budgets` | The shared handle on the time every plugin costs |
 | Core plugin | `golem_plugin::CorePlugin` | The command `golem`, see [Core plugin](core.md) |
 
@@ -148,9 +148,10 @@ a permission from what it holds and never waits for the game.
 
 ## The context of a call
 
-A plugin never touches the game. It queues actions through its context, and the mod runs them on
-the server thread at the end of the tick, oldest first, in the wire form of
-[Bridge](../bridge.md#actions).
+A plugin never changes the game itself. It queues actions through its context, and the mod runs
+them on the server thread at the end of the tick, oldest first, in the wire form of
+[Bridge](../bridge.md#actions). It may ask the game during its call through `game()`, which
+answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game).
 
 | Helper | Action |
 | --- | --- |
@@ -161,10 +162,35 @@ the server thread at the end of the tick, oldest first, in the wire form of
 | `set_list_name(uuid, name)` | `listName`, the name of the player in the player list, cleared by an empty name |
 | `clear_list_name(uuid)` | `listName` with an empty name, which clears it |
 | `actions()` | The queue itself, for what the helpers do not cover |
+| `game()` | The game, which answers on the server thread and answers none on any other thread |
 | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
 
 A field of an action that holds U+001F, the separator of the wire form, has it replaced by a space,
 and the first such replacement of the process is logged.
+
+## The game
+
+`Context::game` answers what the game holds while the call runs on the server thread: every event
+but a chat message, every command and a permission that a mod asks on the server thread. On any
+other thread, such as for a chat message, every question answers none, and the log names the first
+such question of the process. Every answer is `None` when the game cannot answer, and an answer
+that may be empty is an `Option` inside, so `?` takes the outer one.
+
+| Question | Answer |
+| --- | --- |
+| `players()` | Every player online as `OnlinePlayer`: the UUID, the name, the display name, the name in the player list, the ping in milliseconds, the `GameMode`, the operator level and the milliseconds since the last action |
+| `player(who)` | The player online of that name or UUID in any case, or `Some(None)` |
+| `location(uuid)` | The `Location` of an online player |
+| `respawn(uuid)` | The bed or the respawn anchor as a `BlockLocation`, or `Some(None)` |
+| `spawn(dimension)` | The shared spawn of a dimension as a `Spawn`, its block and angle |
+| `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
+| `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |
+| `safe_location(target, radius)` | The nearest safe place within the radius, at most 8, with the dimension and the rotation of the target, or `Some(None)` |
+
+A question reads the game at once, through the JNI, and its time counts into the budget of the
+plugin that asks, so a plugin asks what it needs and keeps no answer longer than its call, since
+the game goes on. A test of a plugin makes its context with `Context::new`, whose game answers
+nothing, or with `Context::with_game` and a game of its own.
 
 ## Tick statistics
 

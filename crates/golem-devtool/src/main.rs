@@ -12,6 +12,7 @@
 //! The primitives of the Golem crates for the notebooks.
 
 mod bridge;
+mod game;
 mod jvm;
 mod permissions;
 
@@ -29,6 +30,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
     bridge::ACTIONS_ENCODE,
     bridge::TICK_STATS,
     bridge::NATIVES,
+    game::GAME_WIRE,
 ];
 
 fn main() {

@@ -26,6 +26,7 @@ use std::{
 use golem_bridge::{
     Actions,
     Event,
+    Game,
     Handler,
     Sender,
     Verdict,
@@ -270,13 +271,14 @@ impl Runtime {
         index: usize,
         what: Call<'_>,
         actions: &Actions,
+        game: &dyn Game,
         body: impl FnOnce(&mut dyn Plugin, &mut Context<'_>) -> T,
     ) -> Option<T> {
         let Self {
             plugins, budgets, ..
         } = self;
         let slot = plugins.get_mut(index)?;
-        let mut context = Context::in_runtime(actions, budgets);
+        let mut context = Context::in_runtime(actions, budgets, game);
         let started = Instant::now();
         let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
             body(slot.plugin.as_mut(), &mut context)
@@ -301,10 +303,10 @@ impl Runtime {
 }
 
 impl Handler for Runtime {
-    fn event(&mut self, event: &Event, actions: &Actions) -> Verdict {
+    fn event(&mut self, event: &Event, actions: &Actions, game: &dyn Game) -> Verdict {
         let what = Call::Event(event.name());
         for index in 0..self.plugins.len() {
-            let verdict = self.call(index, what, actions, |plugin, context| {
+            let verdict = self.call(index, what, actions, game, |plugin, context| {
                 plugin.on_event(event, context)
             });
             if event.cancellable() && verdict == Some(Verdict::Cancel) {
@@ -327,6 +329,7 @@ impl Handler for Runtime {
         sender: &Sender,
         arguments: &str,
         actions: &Actions,
+        game: &dyn Game,
     ) -> Vec<String> {
         let Some(index) = self
             .commands
@@ -336,9 +339,13 @@ impl Handler for Runtime {
         else {
             return vec![format!("The command {name} is unknown.")];
         };
-        self.call(index, Call::Command(name), actions, |plugin, context| {
-            plugin.on_command(name, sender, arguments, context)
-        })
+        self.call(
+            index,
+            Call::Command(name),
+            actions,
+            game,
+            |plugin, context| plugin.on_command(name, sender, arguments, context),
+        )
         .unwrap_or_else(|| {
             vec![format!(
                 "The command {name} failed, and the log of the server holds the cause."
@@ -346,11 +353,21 @@ impl Handler for Runtime {
         })
     }
 
-    fn permission(&mut self, uuid: &str, node: &str, actions: &Actions) -> Option<bool> {
+    fn permission(
+        &mut self,
+        uuid: &str,
+        node: &str,
+        actions: &Actions,
+        game: &dyn Game,
+    ) -> Option<bool> {
         (0..self.plugins.len()).find_map(|index| {
-            self.call(index, Call::Permission(node), actions, |plugin, context| {
-                plugin.on_permission(uuid, node, context)
-            })
+            self.call(
+                index,
+                Call::Permission(node),
+                actions,
+                game,
+                |plugin, context| plugin.on_permission(uuid, node, context),
+            )
             .flatten()
         })
     }

@@ -46,6 +46,7 @@ public final class GolemBridge {
 		MinecraftForge.EVENT_BUS.register(new PlayerEvents(guard));
 		MinecraftForge.EVENT_BUS.register(new PluginCommands(guard));
 		MinecraftForge.EVENT_BUS.register(new Permissions(guard));
+		guard.run("Host.connect", () -> GameQueries.connect(guard));
 		Object version = context.getContainer().getModInfo().getVersion();
 		LOG.info("The Golem bridge {} is on", version);
 	}

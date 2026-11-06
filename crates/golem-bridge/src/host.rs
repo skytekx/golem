@@ -22,11 +22,17 @@
 //! calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, so a
 //! call that finds the lock taken by another thread waits for it, which takes no longer than one
 //! call of the handler. A call from inside the handler itself, on the thread that holds the
-//! lock, answers the pass value at once, since it would wait for itself forever.
+//! lock, answers the pass value at once, since it would wait for itself forever, and the log
+//! names the first such call of each native.
+//!
+//! Every function that calls the handler takes the game that the native may ask, and hands the
+//! handler that game behind [`ServerThread`], which answers none off the server thread. The
+//! server thread is the thread of the first `serverStarting()`, which Forge calls there.
 
 use std::{
     any::Any,
     cell::Cell,
+    collections::HashSet,
     panic::{
         self,
         AssertUnwindSafe, //
@@ -40,18 +46,29 @@ use std::{
             Ordering, //
         }, //
     },
+    thread::{
+        self,
+        ThreadId, //
+    },
     time::Instant, //
 };
 
 use crate::{
     Action,
     Actions,
+    BlockLocation,
     Event,
+    Game,
     Handler,
+    Heights,
+    Item,
     Location,
     MAX_LEVEL,
+    NoGame,
+    OnlinePlayer,
     Player,
     Sender,
+    Spawn,
     TickStats,
     TickWindow,
     Verdict,
@@ -74,6 +91,15 @@ static HOST: OnceLock<Host> = OnceLock::new();
 
 /// True once the mod has called `version()`, which it does while Forge constructs it.
 static CONNECTED: AtomicBool = AtomicBool::new(false);
+
+/// The thread of the first `serverStarting()`, the server thread, on which the game may be asked.
+static SERVER_THREAD: OnceLock<ThreadId> = OnceLock::new();
+
+/// Whether a question to the game off the server thread was already logged.
+static OFF_THREAD_LOGGED: AtomicBool = AtomicBool::new(false);
+
+/// The natives whose call from inside the handler was already logged.
+static REENTRY_LOGGED: Mutex<Option<HashSet<&'static str>>> = Mutex::new(None);
 
 thread_local! {
     /// True while the handler runs on this thread, which tells a call from inside the handler
@@ -161,6 +187,70 @@ pub fn panic_message(payload: &(dyn Any + Send)) -> &str {
     }
 }
 
+/// The game behind the guard of the server thread: every question answers none on another
+/// thread, or before the server started, and the first such question is logged.
+///
+/// Rust never reads the game from another thread. A handler that is called beside the server
+/// thread, such as on a chat message, gets this guard and must do without the game.
+pub struct ServerThread<'a>(pub &'a dyn Game);
+
+impl ServerThread<'_> {
+    /// Answers whether the game may be asked on this thread, and logs the first refusal.
+    fn allowed(question: &str) -> bool {
+        if SERVER_THREAD.get() == Some(&thread::current().id()) {
+            return true;
+        }
+        if !OFF_THREAD_LOGGED.swap(true, Ordering::Relaxed) {
+            log(format_args!(
+                "a plugin asked the game for {question} off the server thread, so the game answers none, and later questions like it are not logged"
+            ));
+        }
+        false
+    }
+}
+
+impl Game for ServerThread<'_> {
+    fn players(&self) -> Option<Vec<OnlinePlayer>> {
+        Self::allowed("players").then(|| self.0.players()).flatten()
+    }
+
+    fn location(&self, uuid: &str) -> Option<Location> {
+        Self::allowed("location")
+            .then(|| self.0.location(uuid))
+            .flatten()
+    }
+
+    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
+        Self::allowed("respawn")
+            .then(|| self.0.respawn(uuid))
+            .flatten()
+    }
+
+    fn spawn(&self, dimension: &str) -> Option<Spawn> {
+        Self::allowed("spawn")
+            .then(|| self.0.spawn(dimension))
+            .flatten()
+    }
+
+    fn main_hand(&self, uuid: &str) -> Option<Option<Item>> {
+        Self::allowed("mainHand")
+            .then(|| self.0.main_hand(uuid))
+            .flatten()
+    }
+
+    fn heights(&self, dimension: &str) -> Option<Heights> {
+        Self::allowed("heights")
+            .then(|| self.0.heights(dimension))
+            .flatten()
+    }
+
+    fn safe_location(&self, target: &Location, radius: u32) -> Option<Option<Location>> {
+        Self::allowed("safeLocation")
+            .then(|| self.0.safe_location(target, radius))
+            .flatten()
+    }
+}
+
 /// Answers the version of Golem, the answer of `version()`, and marks the bridge connected.
 pub fn version() -> &'static str {
     CONNECTED.store(true, Ordering::Release);
@@ -173,9 +263,15 @@ pub fn connected() -> bool {
     CONNECTED.load(Ordering::Acquire)
 }
 
-/// Reports `ServerStartingEvent` with the versions of Forge and Minecraft.
-pub fn server_starting(forge_version: Option<&str>, minecraft_version: Option<&str>) {
+/// Reports `ServerStartingEvent` with the versions of Forge and Minecraft, and takes the thread
+/// of the first call as the server thread.
+pub fn server_starting(
+    forge_version: Option<&str>,
+    minecraft_version: Option<&str>,
+    game: &dyn Game,
+) {
     const NATIVE: &str = "serverStarting";
+    let _ = SERVER_THREAD.set(thread::current().id());
     guard(NATIVE, (), || {
         let (Some(forge_version), Some(minecraft_version)) = (
             required(NATIVE, "forgeVersion", forge_version),
@@ -189,28 +285,29 @@ pub fn server_starting(forge_version: Option<&str>, minecraft_version: Option<&s
                 forge_version,
                 minecraft_version,
             },
+            game,
         );
     });
 }
 
 /// Reports `ServerStartedEvent`.
-pub fn server_started() {
+pub fn server_started(game: &dyn Game) {
     guard("serverStarted", (), || {
-        dispatch("serverStarted", &Event::ServerStarted);
+        dispatch("serverStarted", &Event::ServerStarted, game);
     });
 }
 
 /// Reports `ServerStoppingEvent`.
-pub fn server_stopping() {
+pub fn server_stopping(game: &dyn Game) {
     guard("serverStopping", (), || {
-        dispatch("serverStopping", &Event::ServerStopping);
+        dispatch("serverStopping", &Event::ServerStopping, game);
     });
 }
 
 /// Reports `ServerStoppedEvent`.
-pub fn server_stopped() {
+pub fn server_stopped(game: &dyn Game) {
     guard("serverStopped", (), || {
-        dispatch("serverStopped", &Event::ServerStopped);
+        dispatch("serverStopped", &Event::ServerStopped, game);
     });
 }
 
@@ -218,7 +315,7 @@ pub fn server_stopped() {
 ///
 /// The tick enters the statistics before the handler sees it, so a plugin that reads them on
 /// the tick reads that tick too. A negative duration, which the mod never sends, counts as 0.
-pub fn tick(nanos: i64) {
+pub fn tick(nanos: i64, game: &dyn Game) {
     guard("tick", (), || {
         let nanos = u64::try_from(nanos).unwrap_or(0);
         host()
@@ -226,32 +323,39 @@ pub fn tick(nanos: i64) {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .record(nanos, Instant::now());
-        dispatch("tick", &Event::Tick { nanos });
+        dispatch("tick", &Event::Tick { nanos }, game);
     });
 }
 
 /// Reports `PlayerLoggedInEvent`.
-pub fn player_joined(uuid: Option<&str>, name: Option<&str>) {
+pub fn player_joined(uuid: Option<&str>, name: Option<&str>, game: &dyn Game) {
     const NATIVE: &str = "playerJoined";
     guard(NATIVE, (), || {
         if let Some(player) = player(NATIVE, uuid, name) {
-            dispatch(NATIVE, &Event::PlayerJoined(player));
+            dispatch(NATIVE, &Event::PlayerJoined(player), game);
         }
     });
 }
 
 /// Reports `PlayerLoggedOutEvent`.
-pub fn player_left(uuid: Option<&str>, name: Option<&str>) {
+pub fn player_left(uuid: Option<&str>, name: Option<&str>, game: &dyn Game) {
     const NATIVE: &str = "playerLeft";
     guard(NATIVE, (), || {
         if let Some(player) = player(NATIVE, uuid, name) {
-            dispatch(NATIVE, &Event::PlayerLeft(player));
+            dispatch(NATIVE, &Event::PlayerLeft(player), game);
         }
     });
 }
 
 /// Reports `ServerChatEvent` and answers true when the handler cancels it.
-pub fn chat(uuid: Option<&str>, name: Option<&str>, message: Option<&str>) -> bool {
+///
+/// Forge calls it on a worker thread, so the guard of the game answers none to the handler.
+pub fn chat(
+    uuid: Option<&str>,
+    name: Option<&str>,
+    message: Option<&str>,
+    game: &dyn Game,
+) -> bool {
     const NATIVE: &str = "chat";
     guard(NATIVE, false, || {
         let (Some(player), Some(message)) = (
@@ -260,7 +364,7 @@ pub fn chat(uuid: Option<&str>, name: Option<&str>, message: Option<&str>) -> bo
         ) else {
             return false;
         };
-        dispatch(NATIVE, &Event::Chat { player, message }) == Verdict::Cancel
+        dispatch(NATIVE, &Event::Chat { player, message }, game) == Verdict::Cancel
     })
 }
 
@@ -273,6 +377,7 @@ pub fn death(
     name: Option<&str>,
     cause: Option<&str>,
     location: Option<Location>,
+    game: &dyn Game,
 ) {
     const NATIVE: &str = "death";
     guard(NATIVE, (), || {
@@ -291,12 +396,13 @@ pub fn death(
                 cause,
                 location,
             },
+            game,
         );
     });
 }
 
 /// Reports `PlayerRespawnEvent` with the id of the dimension.
-pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>) {
+pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>, game: &dyn Game) {
     const NATIVE: &str = "respawn";
     guard(NATIVE, (), || {
         let (Some(player), Some(dimension)) = (
@@ -305,7 +411,7 @@ pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>) 
         ) else {
             return;
         };
-        dispatch(NATIVE, &Event::Respawn { player, dimension });
+        dispatch(NATIVE, &Event::Respawn { player, dimension }, game);
     });
 }
 
@@ -313,7 +419,9 @@ pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>) 
 pub fn command_names() -> Vec<String> {
     const NATIVE: &str = "commandNames";
     guard(NATIVE, Vec::new(), || {
-        with_handler(NATIVE, Vec::new(), |handler, _| handler.command_names())
+        with_handler(NATIVE, Vec::new(), &NoGame, |handler, _, _| {
+            handler.command_names()
+        })
     })
 }
 
@@ -329,6 +437,7 @@ pub fn command(
     sender_name: Option<&str>,
     level: i32,
     arguments: Option<&str>,
+    game: &dyn Game,
 ) -> Vec<String> {
     const NATIVE: &str = "command";
     guard(NATIVE, Vec::new(), || {
@@ -339,8 +448,8 @@ pub fn command(
             return Vec::new();
         };
         let arguments = arguments.unwrap_or_default();
-        with_handler(NATIVE, Vec::new(), |handler, actions| {
-            handler.command(&name, &sender, arguments, actions)
+        with_handler(NATIVE, Vec::new(), game, |handler, actions, game| {
+            handler.command(&name, &sender, arguments, actions, game)
         })
     })
 }
@@ -381,7 +490,7 @@ fn sender(uuid: Option<&str>, name: Option<&str>, level: i32, command: &str) -> 
 
 /// Answers whether the player with `uuid` holds the node of the `PermissionAPI` of Forge, or
 /// `None` for the default resolver of the node, which is also the pass value.
-pub fn permission(uuid: Option<&str>, node: Option<&str>) -> Option<bool> {
+pub fn permission(uuid: Option<&str>, node: Option<&str>, game: &dyn Game) -> Option<bool> {
     const NATIVE: &str = "permission";
     guard(NATIVE, None, || {
         let (Some(uuid), Some(node)) = (
@@ -390,8 +499,8 @@ pub fn permission(uuid: Option<&str>, node: Option<&str>) -> Option<bool> {
         ) else {
             return None;
         };
-        with_handler(NATIVE, None, |handler, actions| {
-            handler.permission(&uuid, &node, actions)
+        with_handler(NATIVE, None, game, |handler, actions, game| {
+            handler.permission(&uuid, &node, actions, game)
         })
     })
 }
@@ -420,9 +529,9 @@ pub(crate) fn requeue(lines: &[String]) {
 }
 
 /// Hands `event` to the handler and answers its verdict, or a pass without a handler.
-fn dispatch(native: &str, event: &Event) -> Verdict {
-    with_handler(native, Verdict::Pass, |handler, actions| {
-        handler.event(event, actions)
+fn dispatch(native: &'static str, event: &Event, game: &dyn Game) -> Verdict {
+    with_handler(native, Verdict::Pass, game, |handler, actions, game| {
+        handler.event(event, actions, game)
     })
 }
 
@@ -430,11 +539,21 @@ fn dispatch(native: &str, event: &Event) -> Verdict {
 ///
 /// A call of another thread waits until the handler is free, so a chat message that arrives
 /// on a worker thread while a tick runs on the server thread still reaches the plugins.
-fn with_handler<T>(native: &str, pass: T, call: impl FnOnce(&mut dyn Handler, &Actions) -> T) -> T {
+fn with_handler<T>(
+    native: &'static str,
+    pass: T,
+    game: &dyn Game,
+    call: impl FnOnce(&mut dyn Handler, &Actions, &dyn Game) -> T,
+) -> T {
     if IN_HANDLER.get() {
-        log(format_args!(
-            "the native {native} was called from inside the handler, so it answers the pass value"
-        ));
+        let mut logged = REENTRY_LOGGED
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if logged.get_or_insert_with(HashSet::new).insert(native) {
+            log(format_args!(
+                "the native {native} was called from inside the handler, so it answers the pass value, and later calls like it are not logged"
+            ));
+        }
         return pass;
     }
     let host = host();
@@ -443,7 +562,7 @@ fn with_handler<T>(native: &str, pass: T, call: impl FnOnce(&mut dyn Handler, &A
         return pass;
     };
     let _inside = Inside::enter();
-    call(handler, &host.actions)
+    call(handler, &host.actions, &ServerThread(game))
 }
 
 /// Answers the string of a field that the contract names, or logs its absence.

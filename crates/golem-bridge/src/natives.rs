@@ -5,7 +5,9 @@
  * the JVM calls on the server thread, and their registration with RegisterNatives.
  *
  * Each native converts what the JVM hands it, calls its function of host.rs and converts the
- * answer back, so the logic lives in plain Rust that the notebooks reach without a JVM. The
+ * answer back, so the logic lives in plain Rust that the notebooks reach without a JVM. A native
+ * that calls the handler hands it the game that the mod connected with connect(), asked through
+ * the JNIEnv of that native, or a game that answers nothing before the mod connected one. The
  * safe wrapper of jni 0.21 covers every call here, so this module holds no unsafe code.
  */
 
@@ -15,13 +17,18 @@ use std::{
         self,
         AssertUnwindSafe, //
     },
-    ptr, //
+    ptr,
+    sync::{
+        Mutex,
+        PoisonError, //
+    }, //
 };
 
 use jni::{
     JNIEnv, NativeMethod,
     errors::Result,
     objects::{
+        GlobalRef,
         JClass,
         JObject,
         JString, //
@@ -41,11 +48,17 @@ use jni::{
 };
 
 use crate::{
+    Game,
     HOST_CLASS,
     Location,
+    NoGame,
     host,
+    jni_game::JniGame,
     log, //
 };
+
+/// The object of the interface Game that the mod connected, which the natives ask.
+static GAME: Mutex<Option<GlobalRef>> = Mutex::new(None);
 
 /// The class of the elements of every array the natives answer.
 const STRING_CLASS: &str = "java/lang/String";
@@ -53,9 +66,14 @@ const STRING_CLASS: &str = "java/lang/String";
 /// Every native method of the host class: its name, its descriptor and its function.
 ///
 /// The names and the descriptors are those of the host class in okf/bridge.md.
-fn table() -> [(&'static str, &'static str, *mut c_void); 15] {
+fn table() -> [(&'static str, &'static str, *mut c_void); 16] {
     [
         ("version", "()Ljava/lang/String;", version as *mut c_void),
+        (
+            "connect",
+            "(Lcom/skytekx/golem/host/Game;)V",
+            connect as *mut c_void,
+        ),
         (
             "serverStarting",
             "(Ljava/lang/String;Ljava/lang/String;)V",
@@ -212,6 +230,16 @@ fn empty_array(env: &mut JNIEnv<'_>) -> jobjectArray {
 /// The pass value of a native that answers nothing.
 fn nothing(_: &mut JNIEnv<'_>) {}
 
+/// Runs `body` with the game that the mod connected, asked through `env`, or with a game that
+/// answers nothing while the mod connected none.
+fn with_game<T>(env: &mut JNIEnv<'_>, body: impl FnOnce(&dyn Game) -> T) -> T {
+    let connected = GAME.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    match connected {
+        Some(object) => body(&JniGame::new(env, object.as_obj())),
+        None => body(&NoGame),
+    }
+}
+
 extern "system" fn version<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>) -> jstring {
     answer(
         &mut env,
@@ -219,6 +247,30 @@ extern "system" fn version<'local>(mut env: JNIEnv<'local>, _class: JClass<'loca
         |_| ptr::null_mut(),
         |env| Ok(env.new_string(host::version())?.into_raw()),
     )
+}
+
+extern "system" fn connect<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    game: JObject<'local>,
+) {
+    answer(&mut env, "connect", nothing, |env| {
+        let object = if game.is_null() {
+            None
+        } else {
+            Some(env.new_global_ref(&game)?)
+        };
+        log(format_args!(
+            "the mod connected {}",
+            if object.is_some() {
+                "the game, which the plugins may ask on the server thread"
+            } else {
+                "no game, so the plugins get no answer from the game"
+            }
+        ));
+        *GAME.lock().unwrap_or_else(PoisonError::into_inner) = object;
+        Ok(())
+    });
 }
 
 extern "system" fn server_starting<'local>(
@@ -230,35 +282,37 @@ extern "system" fn server_starting<'local>(
     answer(&mut env, "serverStarting", nothing, |env| {
         let forge_version = string(env, &forge_version)?;
         let minecraft_version = string(env, &minecraft_version)?;
-        host::server_starting(forge_version.as_deref(), minecraft_version.as_deref());
+        with_game(env, |game| {
+            host::server_starting(forge_version.as_deref(), minecraft_version.as_deref(), game);
+        });
         Ok(())
     });
 }
 
 extern "system" fn server_started<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>) {
-    answer(&mut env, "serverStarted", nothing, |_| {
-        host::server_started();
+    answer(&mut env, "serverStarted", nothing, |env| {
+        with_game(env, host::server_started);
         Ok(())
     });
 }
 
 extern "system" fn server_stopping<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>) {
-    answer(&mut env, "serverStopping", nothing, |_| {
-        host::server_stopping();
+    answer(&mut env, "serverStopping", nothing, |env| {
+        with_game(env, host::server_stopping);
         Ok(())
     });
 }
 
 extern "system" fn server_stopped<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>) {
-    answer(&mut env, "serverStopped", nothing, |_| {
-        host::server_stopped();
+    answer(&mut env, "serverStopped", nothing, |env| {
+        with_game(env, host::server_stopped);
         Ok(())
     });
 }
 
 extern "system" fn tick<'local>(mut env: JNIEnv<'local>, _class: JClass<'local>, nanos: jlong) {
-    answer(&mut env, "tick", nothing, |_| {
-        host::tick(nanos);
+    answer(&mut env, "tick", nothing, |env| {
+        with_game(env, |game| host::tick(nanos, game));
         Ok(())
     });
 }
@@ -272,7 +326,9 @@ extern "system" fn player_joined<'local>(
     answer(&mut env, "playerJoined", nothing, |env| {
         let uuid = string(env, &uuid)?;
         let name = string(env, &name)?;
-        host::player_joined(uuid.as_deref(), name.as_deref());
+        with_game(env, |game| {
+            host::player_joined(uuid.as_deref(), name.as_deref(), game);
+        });
         Ok(())
     });
 }
@@ -286,7 +342,9 @@ extern "system" fn player_left<'local>(
     answer(&mut env, "playerLeft", nothing, |env| {
         let uuid = string(env, &uuid)?;
         let name = string(env, &name)?;
-        host::player_left(uuid.as_deref(), name.as_deref());
+        with_game(env, |game| {
+            host::player_left(uuid.as_deref(), name.as_deref(), game);
+        });
         Ok(())
     });
 }
@@ -306,7 +364,9 @@ extern "system" fn chat<'local>(
             let uuid = string(env, &uuid)?;
             let name = string(env, &name)?;
             let message = string(env, &message)?;
-            let cancel = host::chat(uuid.as_deref(), name.as_deref(), message.as_deref());
+            let cancel = with_game(env, |game| {
+                host::chat(uuid.as_deref(), name.as_deref(), message.as_deref(), game)
+            });
             Ok(if cancel { JNI_TRUE } else { JNI_FALSE })
         },
     )
@@ -339,7 +399,15 @@ extern "system" fn death<'local>(
             yaw,
             pitch,
         });
-        host::death(uuid.as_deref(), name.as_deref(), cause.as_deref(), location);
+        with_game(env, |game| {
+            host::death(
+                uuid.as_deref(),
+                name.as_deref(),
+                cause.as_deref(),
+                location,
+                game,
+            );
+        });
         Ok(())
     });
 }
@@ -355,7 +423,9 @@ extern "system" fn respawn<'local>(
         let uuid = string(env, &uuid)?;
         let name = string(env, &name)?;
         let dimension = string(env, &dimension)?;
-        host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref());
+        with_game(env, |game| {
+            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref(), game);
+        });
         Ok(())
     });
 }
@@ -383,13 +453,16 @@ extern "system" fn command<'local>(
         let sender_uuid = string(env, &sender_uuid)?;
         let sender_name = string(env, &sender_name)?;
         let arguments = string(env, &arguments)?;
-        let lines = host::command(
-            name.as_deref(),
-            sender_uuid.as_deref(),
-            sender_name.as_deref(),
-            level,
-            arguments.as_deref(),
-        );
+        let lines = with_game(env, |game| {
+            host::command(
+                name.as_deref(),
+                sender_uuid.as_deref(),
+                sender_name.as_deref(),
+                level,
+                arguments.as_deref(),
+                game,
+            )
+        });
         string_array(env, &lines)
     })
 }
@@ -407,7 +480,10 @@ extern "system" fn permission<'local>(
         |env| {
             let uuid = string(env, &uuid)?;
             let node = string(env, &node)?;
-            Ok(match host::permission(uuid.as_deref(), node.as_deref()) {
+            let decided = with_game(env, |game| {
+                host::permission(uuid.as_deref(), node.as_deref(), game)
+            });
+            Ok(match decided {
                 Some(true) => PERMISSION_TRUE,
                 Some(false) => PERMISSION_FALSE,
                 None => PERMISSION_NONE,
