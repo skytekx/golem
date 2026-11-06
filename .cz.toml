@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The configuration of Commitizen for Golem. A commit message is a Conventional Commit whose
+# subject is type(scope): summary, with a body and trailers in the form of the Linux kernel, as
+# CONTRIBUTING.md says. Commitizen checks the subject and the layout, and the commit lint under
+# .github/scripts/ checks the rules of the kernel that Commitizen does not know, such as the
+# width of the body and the Signed-off-by line.
+#
+#     cz commit -- -s                    write a commit through the questions below
+#     cz check --rev-range origin/main..HEAD
+
+[tool.commitizen]
+name = "cz_customize"
+message_length_limit = 72
+
+[tool.commitizen.customize]
+message_template = "{{change_type}}({{scope}}): {{summary}}\n\n{{body}}{% if trailers %}\n\n{{trailers}}{% endif %}"
+example = """feat(essentials): refuse amounts below one cent in pay
+
+The pay command must never move money from the receiver to the sender.
+Golem parses every amount as whole cents and refuses anything that is
+not above zero before it touches an account.
+
+Closes: https://github.com/skytekx/golem/issues/12
+Signed-off-by: Florian Kleber <opensource@skytekx.com>"""
+schema = "<type>(<scope>): <summary>\n\n<body>\n\n<trailers>"
+# A subject of at most 72 characters: the type, a scope in parentheses, an optional ! for a
+# breaking change, and a summary that starts in lower case and ends without a full stop. Then a
+# body after an empty line. The check reads no message_length_limit, so the lookahead holds the
+# length.
+schema_pattern = "(?s)(?=[^\\n]{1,72}\\n)(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)\\([A-Za-z0-9_./-]+\\)!?: [a-z0-9][^\\n]*[^.\\s]\\n\\n\\S.*$"
+info = """A commit message is a Conventional Commit in the form of the Linux kernel.
+
+The subject is type(scope): summary, imperative, starting in lower case, without a full stop,
+and at most 72 characters long. The type is one of feat, fix, docs, refactor, perf, test, build,
+ci, chore and revert. The scope is the crate without its golem- prefix or a top level folder.
+
+The body follows an empty line, is wrapped at 72 columns and explains the problem first, then why
+the change solves it, then how. The trailers close the message, and the last of them is
+Signed-off-by."""
+bump_pattern = "^(feat|fix|perf|refactor)(\\(.+\\))?(!)?:"
+
+[tool.commitizen.customize.bump_map]
+"!" = "MAJOR"
+feat = "MINOR"
+fix = "PATCH"
+perf = "PATCH"
+refactor = "PATCH"
+
+[[tool.commitizen.customize.questions]]
+type = "list"
+name = "change_type"
+message = "The type of the change:"
+choices = [
+    { value = "feat", name = "feat: a new behaviour" },
+    { value = "fix", name = "fix: a fix of a bug, a quirk or a security issue" },
+    { value = "docs", name = "docs: documentation and the wiki alone" },
+    { value = "refactor", name = "refactor: a change of code that keeps its behaviour" },
+    { value = "perf", name = "perf: a change that makes Golem faster" },
+    { value = "test", name = "test: a notebook or the harness" },
+    { value = "build", name = "build: the build, the toolchain or a dependency" },
+    { value = "ci", name = "ci: the continuous integration and its scripts" },
+    { value = "chore", name = "chore: anything else, such as the license" },
+    { value = "revert", name = "revert: the revert of an earlier commit" },
+]
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "scope"
+message = "The scope, the crate without its golem- prefix or a top level folder:"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "summary"
+message = "The summary, imperative and in lower case, without a full stop:"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "body"
+message = "The body, wrapped at 72 columns: the problem, why the change solves it, how:"
+
+[[tool.commitizen.customize.questions]]
+type = "input"
+name = "trailers"
+message = "The trailers besides Signed-off-by, such as Closes: or Fixes: (may be empty):"
