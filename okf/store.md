@@ -372,11 +372,14 @@ Each change answers a `Receipt` with the number of the entry and the balances af
 The store hands the permissions to `golem-permissions` as the TOML of
 [config/permissions.toml](../config/permissions.toml), which `Permissions::from_toml` reads into
 the resolver, and takes the seed file the same way, so neither crate names the other and each
-keeps its license. The store keeps a set as it is given and checks only what keeps its rows
-whole: every group that a list names exists, no list names an entry twice, and no group that
-another group or a player names is removed. `golem-permissions` judges the rest, the syntax of a
-node, the group `default` and the cycles of inheritance, so a port loads a changed set into a
-resolver before it writes the change, and loads the set again when the generation moved.
+keeps its license. `PermissionSet::from_toml` takes a player key only where `golem-permissions`
+takes it, as a UUID in lower case with its four dashes, and refuses any other key with the message
+of `golem-permissions`, `players.<key>: the key is not a UUID in lower case with its four dashes`
+and an example. The store keeps a set as it is given and checks only what keeps its rows whole:
+every group that a list names exists, no list names an entry twice, and no group that another
+group or a player names is removed. `golem-permissions` judges the rest, the syntax of a node, the
+group `default` and the cycles of inheritance, so a port loads a changed set into a resolver
+before it writes the change, and loads the set again when the generation moved.
 
 ### Settings and the store itself
 

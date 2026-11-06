@@ -69,6 +69,23 @@ struct PlayerFile {
     nodes: Vec<String>,
 }
 
+/// The refusal of a player key that is no UUID, in the words of golem-permissions.
+const NOT_A_UUID: &str = "the key is not a UUID in lower case with its four dashes, such as 00000000-0000-4000-8000-000000000001";
+
+/// A key as TOML writes it in a path, bare when it can be and quoted otherwise, as
+/// golem-permissions names it in a message.
+fn toml_key(text: &str) -> String {
+    let bare = !text.is_empty()
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-');
+    if bare {
+        text.to_owned()
+    } else {
+        format!("{text:?}")
+    }
+}
+
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_zero(weight: &i32) -> bool {
     *weight == 0
@@ -76,7 +93,9 @@ fn is_zero(weight: &i32) -> bool {
 
 impl PermissionSet {
     /// Reads a set from the TOML of `config/permissions.toml`. It checks the shape of the file
-    /// and that every player is a UUID, and leaves the rest to golem-permissions.
+    /// and that every player is a UUID in lower case with its four dashes, the key that
+    /// golem-permissions takes, with the message golem-permissions gives, and leaves the rest to
+    /// golem-permissions.
     pub fn from_toml(text: &str) -> Result<Self, String> {
         let file: File = toml::from_str(text).map_err(|error| error.message().to_owned())?;
         let groups = file
@@ -91,8 +110,12 @@ impl PermissionSet {
             .collect();
         let mut players = Vec::with_capacity(file.players.len());
         for (key, player) in file.players {
-            let uuid =
-                Uuid::parse(&key).ok_or_else(|| format!("players.{key}: the key is not a UUID"))?;
+            // Uuid::parse takes either case, as the calls of the store do, but a key of the file
+            // in upper case is refused by golem-permissions, and two spellings of one player
+            // would become two entries of the set.
+            let uuid = Uuid::parse(&key)
+                .filter(|_| !key.bytes().any(|byte| byte.is_ascii_uppercase()))
+                .ok_or_else(|| format!("players.{}: {NOT_A_UUID}", toml_key(&key)))?;
             players.push(PlayerPermissions {
                 uuid,
                 groups: player.groups,
