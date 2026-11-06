@@ -207,11 +207,13 @@ window of the last 100 ticks, before the plugins see the tick. `golem_bridge::st
 A negative duration, which the mod never sends, counts as 0. The cap holds the TPS at 20 because
 the server waits out the rest of a tick that ends early.
 
-The duration runs from the first listener of `ServerTickEvent` at the start of a tick, the one of
-the bridge, to its last at the end, so it covers what the mods do at both ends of the tick.
-Minecraft stops its own clock of a tick, which `forge tps` reads, before the listeners at the end
-run, so the MSPT of Golem reads higher. In the idle of the modpack the two read 1.96 and 1.60 ms,
-see [Modpack](../modpack.md).
+The duration runs from the listener of the bridge of the highest priority on `ServerTickEvent` at
+the start of a tick to its listener of the lowest priority at the end, so it covers what most mods
+do at both ends of the tick. Forge runs the listeners of one priority in the order they registered
+in, so another listener of the highest or the lowest priority may fall outside it, such as the
+listener of the lowest priority of Citadel in the modpack. Minecraft stops its own clock of a tick,
+which `forge tps` reads, before the listeners at the end run, so the MSPT of Golem reads higher. In
+the idle of the modpack the two read 1.96 and 1.60 ms, see [Modpack](../modpack.md).
 
 ## The log
 
