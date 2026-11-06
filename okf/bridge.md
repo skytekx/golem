@@ -142,4 +142,81 @@ at the console.
   its hundredth and every further power of ten, so a native that fails on every tick cannot fill
   the log.
 
+## Building the bridge
+
+The host jar and the mod are one Gradle build under `bridge/`, with the projects `host` and `mod`.
+It runs with the system Gradle 8.14.3 and a JDK 17 and carries no Gradle wrapper, whose jar is a
+binary under another license. `python3 -I tests/fetch.py` downloads both into `tests/.cache/`. The
+path of the JDK differs per machine, so it is passed on the command line and never committed:
+
+```text
+JAVA_HOME=$PWD/tests/.cache/jdk-17.0.21+9 tests/.cache/gradle-8.14.3/bin/gradle -p bridge \
+    -Porg.gradle.java.installations.paths=$PWD/tests/.cache/jdk-17.0.21+9 build
+```
+
+`--offline` builds without the network once the Gradle cache is warm. `bridge/gradle.properties`
+holds only what holds on every machine: the heap of Gradle, no daemon, and no download of a JDK.
+
+| Part | Version | Set in |
+| --- | --- | --- |
+| Gradle | 8.14.3, without a wrapper | The command line |
+| JDK | Temurin 17.0.21, every class compiled with `--release 17` | `bridge/build.gradle` |
+| ForgeGradle | `[6.0.24,6.2)`, the range of the MDK of Forge 47, 6.0.54 on 2026-11-06 | `bridge/mod/build.gradle` |
+| Forge | 1.20.1-47.4.18, mappings `official` 1.20.1 | `bridge/mod/build.gradle` |
+| The jars | The version of `[workspace.package]` in `Cargo.toml` | `bridge/build.gradle` |
+
+The build compiles with every lint of javac as an error, writes the version, the vendor and
+`Bundle-License: AGPL-3.0-only` into the manifest of each jar and keeps no file times in them.
+
+| Jar | Lands in | Holds |
+| --- | --- | --- |
+| `golem-host.jar` | `bridge/host/build/libs/` | The class `Host` and `Automatic-Module-Name: com.skytekx.golem.host` |
+| `golem-bridge-<version>.jar` | `bridge/mod/build/libs/` | The mod `golem`, reobfuscated to the SRG names |
+
+ForgeGradle compiles the mod against Minecraft in the official names of Mojang, and its task
+`reobfJar` rewrites the jar in place to the SRG names that the server runs with, so a call of
+`MinecraftServer.getCommands()` reads `m_129892_` in the jar. The mod takes the host project at
+compile time alone, so the host class never enters the mod jar. The JVM host of Golem puts
+`golem-host.jar` on the module path and the mod jar in `mods/`. The mods.toml takes the version
+from the manifest, names the license `AGPL-3.0-only` and sets `displayTest` to
+`IGNORE_SERVER_VERSION`, since a client needs no copy of the mod, and `pack.mcmeta` with pack
+format 15 keeps Forge from warning about missing pack metadata.
+
+The first build on a machine downloads Minecraft and the tools of Forge into the Gradle cache of
+the user and remaps them. That took 5 minutes 20 seconds in a spike in the dev container of
+2026-11-06, and a later build of a fresh copy of `bridge/` took 15 seconds in `05_bridge_build` on
+the same machine that day.
+
+### What the notebook checks
+
+The notebook `tests/notebooks/05_bridge_build.ipynb` builds a copy of `bridge/` and checks the
+jars against this page.
+
+- The host jar holds exactly one class, `com/skytekx/golem/host/Host.class`, of class file version
+  61, and depends on `java.lang` alone. Its manifest names the module, the version of Golem and
+  the license. Its public methods are the 14 natives of the Java block above, each with the
+  descriptor that the notebook derives from that block and that `javap` confirms, and the plain
+  `available()`.
+- The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
+  no `.license` file. It listens for every event of the table and calls every native but
+  `version()`, with the descriptors of the host jar. Every member of Minecraft it uses carries its
+  SRG name, but the methods of `java.lang.Object`, and no official name of Mojang appears.
+
+It then boots a copy of the Forge server of `tests/fetch.py` on port 25633 three times, through
+the java launcher of the JDK with the argument files of the server, as `run.sh` does. Each boot
+must reach `Done`, stop cleanly with no FATAL line and no crash report, and find the mod.
+
+| Boot | The mod must |
+| --- | --- |
+| Without the host jar | Log one warning that the host class is missing, and nothing else |
+| With `golem-host.jar` on the `-p` of a copied `unix_args.txt` | Log one warning that the natives are not registered |
+| With the host jar and stand in natives | Call every native, run every action, and stop the server through the actions |
+
+The stand in natives are a small C library that the notebook compiles and loads with
+`-agentpath`, since HotSpot searches the symbols of an agent library for a native method that no
+library of its class loader holds. A minimal offline client of Minecraft 1.20.1 joins, chats,
+runs a command of the plugins, dies, respawns and leaves. The notebook records the thread of every
+call, and the threads of
+[the rules of the server thread](#the-rules-of-the-server-thread) come from it.
+
 Related: [JVM host](jvm-host.md), [Plugins](plugins/index.md), [Index](index.md).
