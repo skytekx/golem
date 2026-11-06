@@ -25,7 +25,8 @@ these.
    trailer is a Signed-off-by, as the kernel orders them.
 7. A Fixes trailer names at least 12 characters of a hash and the subject in parentheses and
    quotes, and Link and Closes name a URL. In a git repository the hash names one of its commits
-   and the quoted subject is the subject of that commit.
+   and the quoted subject is the subject of that commit. A shallow clone may lack the commit, so
+   there a hash it does not hold passes.
 8. No trailer appears twice with the same value.
 
 Merge commits are left out, since git writes their message. With no range, the commits are those
@@ -94,13 +95,19 @@ def commits(root: Path, revisions: str) -> list[tuple[str, str]]:
     return found
 
 
+#: What the resolver of a shallow clone answers for a hash that the clone does not hold.
+UNKNOWN = object()
+
+
 def resolver(root: Path):
-    """A function that answers the subject of the commit a hash names in `root`, or None, or no
-    function at all when `root` is no git repository."""
-    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-dir"], capture_output=True, text=True,
-                           check=False)
+    """A function that answers the subject of the commit a hash names in `root`, None for no
+    commit, or UNKNOWN in a shallow clone that lacks it, or no function at all when `root` is no
+    git repository."""
+    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--is-shallow-repository"], capture_output=True,
+                           text=True, check=False)
     if probe.returncode != 0:
         return None
+    shallow = probe.stdout.strip() == "true"
 
     def subject_of(abbreviated: str):
         found = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%s", abbreviated + "^{commit}", "--"],
@@ -108,7 +115,7 @@ def resolver(root: Path):
         verified = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet",
                                    abbreviated + "^{commit}"], capture_output=True, text=True, check=False)
         if found.returncode != 0 or verified.returncode != 0:
-            return None
+            return UNKNOWN if shallow else None
         return found.stdout.rstrip("\n")
 
     return subject_of
@@ -205,7 +212,9 @@ def check_message(message: str, subject_of=None) -> list[str]:
         elif canonical == "Fixes" and subject_of is not None:
             abbreviated, quoted = value.split(" ", 1)
             subject = subject_of(abbreviated)
-            if subject is None:
+            if subject is UNKNOWN:
+                pass
+            elif subject is None:
                 failures.append("rule 7: Fixes names %s, which is no commit of the repository" % abbreviated)
             elif quoted != '("%s")' % subject:
                 failures.append('rule 7: Fixes names %s, whose subject is "%s"' % (abbreviated, subject))
