@@ -25,6 +25,9 @@ const SUBCOMMANDS: &[Subcommand] = &[
     permissions::CHECK,
     permissions::GROUPS,
     bridge::PLUGINS,
+    bridge::ACTIONS_ENCODE,
+    bridge::TICK_STATS,
+    bridge::NATIVES,
 ];
 
 fn main() {
