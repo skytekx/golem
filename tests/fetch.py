@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
-"""Golem harness: download the JDK and the Forge server that the notebooks run against.
+"""Golem harness: download the JDK, the Forge server and Gradle that the notebooks run against.
 
     python3 -I tests/fetch.py
     python3 -I tests/fetch.py --only jdk
@@ -15,6 +15,9 @@ git ignores. The pins are these.
 2. The installer of Forge 1.20.1-47.4.18 from the Forge maven, which installs the server into
    tests/.cache/forge-server. It downloads the server jar of Minecraft from Mojang and the
    libraries, as the installer does for every Forge server.
+3. Gradle 8.14.3, which builds the bridge under bridge/ with ForgeGradle, unpacked to
+   tests/.cache/gradle-8.14.3. The bridge carries no Gradle wrapper, whose jar is a binary under
+   another license.
 
 The script accepts the EULA of Minecraft in that test server, with eula=true in its eula.txt,
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
@@ -34,6 +37,7 @@ import subprocess
 import sys
 import tarfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 #: The root of the tree, one level above this file.
@@ -60,6 +64,11 @@ FORGE_INSTALLER = ("https://maven.minecraftforge.net/net/minecraftforge/forge/1.
                    "forge-1.20.1-47.4.18-installer.jar")
 FORGE_SHA256 = "24a530c2b5cc277ee5fc8af2b87ca03b373aa7ce75946c54b430384146f44099"
 FORGE_DIRECTORY = "forge-server"
+
+GRADLE_VERSION = "8.14.3"
+GRADLE_URL = "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
+GRADLE_SHA256 = "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531"
+GRADLE_DIRECTORY = "gradle-8.14.3"
 
 #: The settings of the test server: offline, on localhost, a small world without spawn
 #: protection. A notebook that boots a copy sets its own port in the copy.
@@ -148,6 +157,21 @@ def fetch_forge(cache: Path, java_home: Path) -> Path:
     return server
 
 
+def fetch_gradle(cache: Path) -> Path:
+    """Gradle under `cache`, answering the directory whose bin/ holds the gradle script."""
+    home = cache / GRADLE_DIRECTORY
+    if (home / "bin" / "gradle").is_file():
+        return home
+    archive = cache / ("gradle-%s-bin.zip" % GRADLE_VERSION)
+    download(GRADLE_URL, archive, GRADLE_SHA256)
+    with zipfile.ZipFile(archive) as bundle:
+        bundle.extractall(cache)
+    # The zip format of the standard library keeps no file modes, so the scripts need theirs back.
+    for script in (home / "bin").iterdir():
+        script.chmod(0o755)
+    return home
+
+
 def shown(path: Path) -> str:
     """A path relative to the root where it lies below it, so no machine path is printed."""
     try:
@@ -158,17 +182,21 @@ def shown(path: Path) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Download the JDK and the Forge server of the notebooks.")
-    parser.add_argument("--only", choices=["jdk", "forge"], help="Fetch one of the two alone.")
+    parser.add_argument("--only", choices=["jdk", "forge", "gradle"], help="Fetch one of the three alone.")
     parser.add_argument("--cache", type=Path, default=CACHE, help="The directory, by default tests/.cache.")
     args = parser.parse_args(argv)
     cache = args.cache.resolve()
     cache.mkdir(parents=True, exist_ok=True)
     try:
-        java_home = fetch_jdk(cache)
-        print("fetch: Temurin %s at %s" % (JDK_VERSION, shown(java_home)))
-        if args.only != "jdk":
+        if args.only in (None, "jdk", "forge"):
+            java_home = fetch_jdk(cache)
+            print("fetch: Temurin %s at %s" % (JDK_VERSION, shown(java_home)))
+        if args.only in (None, "forge"):
             server = fetch_forge(cache, java_home)
             print("fetch: Forge %s at %s" % (FORGE_VERSION, shown(server)))
+        if args.only in (None, "gradle"):
+            gradle = fetch_gradle(cache)
+            print("fetch: Gradle %s at %s" % (GRADLE_VERSION, shown(gradle)))
     except (Failure, OSError) as broken:
         print("fetch: %s" % broken, file=sys.stderr)
         return 1
