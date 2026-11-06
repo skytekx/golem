@@ -19,11 +19,13 @@ these.
 4. Every line of the body is at most 72 columns wide, but a line that holds a URL alone, a
    trailer, or an indented quote such as a log line.
 5. The last paragraph is the block of trailers, each a line Token: value with a token of the
-   kernel or of this repository, and no other line.
+   kernel or of this repository, and no other line. No earlier paragraph is made of trailers,
+   since git and the kernel read the last paragraph alone as the block.
 6. The block holds Signed-off-by with a name and an address in angle brackets, and the last
    trailer is a Signed-off-by, as the kernel orders them.
 7. A Fixes trailer names at least 12 characters of a hash and the subject in parentheses and
-   quotes, and Link and Closes name a URL.
+   quotes, and Link and Closes name a URL. In a git repository the hash names one of its commits
+   and the quoted subject is the subject of that commit.
 8. No trailer appears twice with the same value.
 
 Merge commits are left out, since git writes their message. With no range, the commits are those
@@ -92,6 +94,32 @@ def commits(root: Path, revisions: str) -> list[tuple[str, str]]:
     return found
 
 
+def resolver(root: Path):
+    """A function that answers the subject of the commit a hash names in `root`, or None, or no
+    function at all when `root` is no git repository."""
+    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-dir"], capture_output=True, text=True,
+                           check=False)
+    if probe.returncode != 0:
+        return None
+
+    def subject_of(abbreviated: str):
+        found = subprocess.run(["git", "-C", str(root), "log", "-1", "--format=%s", abbreviated + "^{commit}", "--"],
+                               capture_output=True, text=True, check=False)
+        verified = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet",
+                                   abbreviated + "^{commit}"], capture_output=True, text=True, check=False)
+        if found.returncode != 0 or verified.returncode != 0:
+            return None
+        return found.stdout.rstrip("\n")
+
+    return subject_of
+
+
+def known_trailer(line: str) -> bool:
+    """True for a line Token: value whose token is a trailer of the kernel or of this repository."""
+    match = TRAILER.match(line)
+    return bool(match) and match.group("token").lower() in (token.lower() for token in TRAILERS)
+
+
 def paragraphs(lines: list[str]) -> list[list[str]]:
     """The lines grouped at empty lines."""
     groups, current = [], []
@@ -106,8 +134,9 @@ def paragraphs(lines: list[str]) -> list[list[str]]:
     return groups
 
 
-def check_message(message: str) -> list[str]:
-    """The failures of one message, each naming its rule."""
+def check_message(message: str, subject_of=None) -> list[str]:
+    """The failures of one message, each naming its rule. `subject_of` answers the subject of the
+    commit that a hash of a Fixes trailer names, when the lint runs in a repository."""
     failures = []
     # Git drops the lines of a commit message that open with #, so the lint reads it the same way.
     lines = [line.rstrip() for line in message.splitlines() if not line.startswith("#")]
@@ -146,6 +175,10 @@ def check_message(message: str) -> list[str]:
             continue
         failures.append("rule 4: line %d is %d columns wide, more than %d" % (number, len(line), BODY_LIMIT))
 
+    for group in body:
+        if all(known_trailer(line) for line in group):
+            failures.append("rule 5: the paragraph %r holds trailers apart from the last block" % group[0])
+
     if not trailer_block:
         failures.append("rule 5: the last paragraph is no block of trailers")
         last = groups[-1] if groups else []
@@ -169,6 +202,13 @@ def check_message(message: str) -> list[str]:
             failures.append("rule 6: the trailer %s names no Name <address>" % token)
         if canonical == "Fixes" and not FIXES.match(value):
             failures.append('rule 7: Fixes names no hash of 12 characters and ("subject")')
+        elif canonical == "Fixes" and subject_of is not None:
+            abbreviated, quoted = value.split(" ", 1)
+            subject = subject_of(abbreviated)
+            if subject is None:
+                failures.append("rule 7: Fixes names %s, which is no commit of the repository" % abbreviated)
+            elif quoted != '("%s")' % subject:
+                failures.append('rule 7: Fixes names %s, whose subject is "%s"' % (abbreviated, subject))
         if canonical in ("Link", "Closes") and not URL.match(value):
             failures.append("rule 7: the trailer %s names no URL" % token)
         if (token.lower(), value) in seen:
@@ -191,8 +231,9 @@ def main(argv=None) -> int:
     parser.add_argument("--root", type=Path, default=ROOT, help="The repository, by default this one.")
     args = parser.parse_args(argv)
 
+    subject_of = resolver(args.root)
     if args.message_file:
-        failures = check_message(args.message_file.read_text(encoding="utf-8"))
+        failures = check_message(args.message_file.read_text(encoding="utf-8"), subject_of)
         for failure in failures:
             print("commit_lint: %s: %s" % (args.message_file, failure))
         return 1 if failures else 0
@@ -205,7 +246,7 @@ def main(argv=None) -> int:
         return 1
     failed = 0
     for commit, message in found:
-        failures = check_message(message)
+        failures = check_message(message, subject_of)
         subject = message.splitlines()[0] if message.strip() else ""
         for failure in failures:
             print("commit_lint: %s %s: %s" % (commit[:12], subject, failure))

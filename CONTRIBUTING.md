@@ -68,11 +68,13 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 - An empty line follows, then a body wrapped at 72 columns that explains the problem first, then
   why this change solves it, then how. The diff already shows what changed, so the body is no list
   of files. A line that holds a URL alone or an indented log line may be wider.
-- The trailers close the message in the kernel's form, one `Token: value` per line, and the last
-  of them is `Signed-off-by`. A fix of an earlier commit carries
-  `Fixes: <12 characters of the hash> ("<subject>")`, a commit that solves an issue carries
-  `Closes:` with the URL of the issue, and `Link:` points to further discussion. `Reported-by`,
-  `Reviewed-by`, `Tested-by`, `Suggested-by` and `Co-developed-by` are used as the kernel uses them.
+- The trailers close the message in the kernel's form, one `Token: value` per line, all of them in
+  the last paragraph, and the last of them is `Signed-off-by`. A fix of an earlier commit carries
+  `Fixes: <12 characters of the hash> ("<subject>")` with the hash and the subject of a commit of
+  the repository, as `git log -1 --abbrev=12 --format='%h ("%s")' <commit>` prints them. A commit
+  that solves an issue carries `Closes:` with the URL of the issue, and `Link:` points to further
+  discussion. `Reported-by`, `Reviewed-by`, `Tested-by`, `Suggested-by` and `Co-developed-by` are
+  used as the kernel uses them.
 - One logical change per commit. On `main` every commit builds and passes the notebooks on its own,
   so that `git bisect` works. A refactor never rides along with a change of behaviour.
 
