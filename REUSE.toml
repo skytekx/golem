@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The annotations of REUSE for the files that cannot carry their own SPDX tags.
+# Documentation/licensing.md explains why each one is here.
+
+version = 1
+
+# NOTICE quotes the copyright lines and the notices of other projects, so a
+# tag in it would read as a tag of those projects.
+[[annotations]]
+path = "NOTICE"
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Florian Kleber <opensource@skytekx.com>"
+SPDX-License-Identifier = "AGPL-3.0-only"
