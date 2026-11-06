@@ -148,6 +148,15 @@ impl Arguments<'_> {
             .ok_or_else(|| argument(format!("{key:?} is not an integer")))
     }
 
+    /// An integer that may be missing or null, which answers `None`. Any other value that is no
+    /// integer is refused, so a typo never stands in for a default.
+    fn optional_integer(&self, key: &str) -> Result<Option<i64>, StepError> {
+        match self.0.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(_) => self.integer(key).map(Some),
+        }
+    }
+
     fn count(&self, key: &str) -> Result<usize, StepError> {
         let value = self.integer(key)?;
         usize::try_from(value).map_err(|_| argument(format!("{key:?} is below zero")))
@@ -789,14 +798,8 @@ fn permissions(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Ans
                 .player_permissions(arguments.uuid("uuid")?)
                 .map_or(Value::Null, |player| player_permissions_json(&player)),
             "put_permission_group" => {
-                let weight = i32::try_from(
-                    arguments
-                        .0
-                        .get("weight")
-                        .and_then(Value::as_i64)
-                        .unwrap_or(0),
-                )
-                .map_err(|_| argument("\"weight\" does not fit 32 bits".to_owned()))?;
+                let weight = i32::try_from(arguments.optional_integer("weight")?.unwrap_or(0))
+                    .map_err(|_| argument("\"weight\" does not fit 32 bits".to_owned()))?;
                 json!(store.put_permission_group(PermissionGroup {
                     name: arguments.text("name")?.to_owned(),
                     weight,
