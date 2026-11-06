@@ -102,7 +102,9 @@ The parts in detail.
   queue of actions from Rust at the end of every server tick, so Rust never touches game state from
   another thread.
 - The plugin runtime calls Golem plugins on the server thread for events that can be cancelled or
-  changed, with a time budget per call that the API reports. Plugins that only observe use the
+  changed, with a time budget per call that the API reports. Forge 47 fires the chat event on a
+  worker thread beside the server thread, so the runtime runs one call at a time behind a lock, as
+  [Plugins](plugins/index.md) says. Plugins that only observe use the
   subscriptions of the GraphQL API instead.
 - The GraphQL API runs on Aosabi and replaces RCON for operators and tools. It binds to localhost and
   reaches the outside only through the Cloudflare Tunnel with authentication through

@@ -33,11 +33,18 @@ answers its pass value at once with a line on the log, since it would wait for i
 ## Wiring
 
 The program golem builds one runtime, adds its plugins and installs it before the JVM starts.
+Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
+the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from `git rev-parse HEAD`, so a
+build of a checkout names its commit. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
+alone and names the commit unknown without it.
 
 ```rust
-let mut runtime = Runtime::new(DEFAULT_BUDGET);
-let budgets = runtime.budgets_handle();
-runtime.add(Box::new(CorePlugin::new(Source::of_build())));
+let mut runtime = Runtime::new(budget);
+runtime.add(Box::new(CorePlugin::new(Source {
+    version: VERSION.to_owned(),
+    repository: REPOSITORY.to_owned(),
+    commit: COMMIT.to_owned(),
+})));
 let actions = golem_bridge::install(Box::new(runtime));
 ```
 
@@ -166,7 +173,8 @@ The notebook `tests/notebooks/04_plugins.ipynb` drives the runtime, the core plu
 functions behind the natives through `golem-devtool`. The subcommand `plugins` runs a script of
 native calls with test plugins that broadcast, cancel, panic and sleep, `actions-encode` prints the
 wire form of actions, `tick-stats` feeds ticks at given instants to a window and `natives` prints
-the table that `register_natives` hands the JVM. The natives themselves run only inside a JVM,
-which the end to end test with the Forge server and the bridge mod covers.
+the table that `register_natives` hands the JVM. The natives themselves run only inside a JVM:
+`tests/notebooks/07_forge_boot.ipynb` boots the Forge server under `golem run` with the bridge mod,
+so a player, the console and both stop paths go through the real natives.
 
 Related: [Bridge](../bridge.md), [Core plugin](core.md), [Index](../index.md).
