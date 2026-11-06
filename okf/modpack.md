@@ -171,10 +171,17 @@ saved. Arclight keeps the layout of vanilla, so the data of the dimensions lies 
 folders under every loader: `world/`, `world/DIM-1`, `world/DIM1` and
 `world/dimensions/<namespace>/<name>`.
 
-Golem logged two warnings on that world that it does not log on its own: Forge names the mod that
-the world was saved with and that is gone, `arclight (version 1.20.1-1.0.6-SNAPSHOT-6de9fec ->
-MISSING)`, and Minecraft drops the datapack `mod:arclight`. The world that golem saved names
-`mod:golem` and no longer `mod:arclight` among its datapacks.
+Golem logged 28 WARN lines on that world that it did not log on its own world, in the run of the
+day. Two come from the switch: Forge names the mod that the world was saved with and that is gone,
+`arclight (version 1.20.1-1.0.6-SNAPSHOT-6de9fec -> MISSING)`, and Minecraft drops the datapack
+`mod:arclight`. One is the overload of the shared machine, `Can't keep up! Is the server
+overloaded?`, and one names a loot function that Advanced Loot Info met without a tooltip,
+`slimeknights.mantle.loot.function.SetFluidLootFunction`. The other 24 differ from lines of the
+golem boot only in the order of a hash set, which changes from run to run: AlmostUnified lists its
+invalid tags in another order, and in 23 lines Redux names another tag in which it found a biome
+twice. The notebook sorts the items of a list and drops the tag of Redux before it compares, and
+asserts what remains against the pinned list of those four lines, the two of the switch required.
+The world that golem saved names `mod:golem` and no longer `mod:arclight` among its datapacks.
 
 ## Every difference against Arclight
 
