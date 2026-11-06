@@ -6,7 +6,10 @@
 # The job licenses checks that every file states its license and its holder and that every
 # license has its text, as Documentation/licensing.md describes: once with the license lint of
 # Golem and once with reuse lint, the tool of the REUSE specification, pinned by version.
-# The jobs of the Rust code and of the bridge mod join it as the code lands.
+#
+# The job notebooks runs every test case, each a Jupyter notebook under tests/notebooks/, as
+# Documentation/testing.md describes. The jobs of the Rust code and of the bridge mod join them
+# as the code lands.
 #
 # Every action is pinned to the commit of a release, with its tag beside it. No job reads a
 # secret, and the token of every job can only read the repository.
@@ -52,3 +55,49 @@ jobs:
 
       - name: Lint with REUSE
         run: reuse lint
+
+  notebooks:
+    name: Notebooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: tests/pyproject.toml
+
+      # The harness takes the pinned packages of tests/pyproject.toml and runs every notebook
+      # in the kernel golem of tests/.venv. The file names no build backend, so pip takes its
+      # dependencies as a list of requirements.
+      - name: Install the notebook harness
+        run: |
+          python -I - > "$RUNNER_TEMP/requirements.txt" <<'EOF'
+          import tomllib
+
+          with open("tests/pyproject.toml", "rb") as stream:
+              print("\n".join(tomllib.load(stream)["project"]["dependencies"]))
+          EOF
+          python -m venv tests/.venv
+          tests/.venv/bin/python -m pip install --disable-pip-version-check --no-input \
+            --requirement "$RUNNER_TEMP/requirements.txt"
+          tests/.venv/bin/python -m ipykernel install --sys-prefix --name golem \
+            --display-name golem
+
+      - name: Run the notebooks
+        run: tests/.venv/bin/python tests/run.py
+
+      - name: Keep the executed notebooks of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notebooks
+          path: tests/notebooks/out/
+          retention-days: 7
+          if-no-files-found: ignore
