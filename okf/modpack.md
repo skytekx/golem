@@ -62,7 +62,9 @@ copies with `tools/patch_mods.py`, as the live server patches its `mods/`.
 The pack is the one that the repository describes. It is not the `mods/` of the Mac mini jar for
 jar, as the page of the mod set in the wiki of the server says. The live server moved Nostalgic
 Tweaks out of `mods/` by hand, while the index still marks it as required on the server, and it
-runs skytekx-compat 2.1.6, while `local-mods/` holds 2.1.3.
+runs skytekx-compat 2.1.6, while `local-mods/` holds 2.1.3. Issue
+[#102](https://github.com/skytekx/golem/issues/102) asks the repository to hold the live pack, so
+that the pin can move to it.
 
 ## What the notebook checks
 
@@ -148,7 +150,7 @@ there with two of those lines, as it does at every start of the live server: TiC
 0.003 of the file back as a Double, which the check of `define` refuses, so Forge logs that the file
 is not correct and corrects the key from 0.003 to its default, 0.003, and writes the same value
 again. The pack can fix it with a rule of `tools/patch_mods.py` that makes the default a Double, or
-TiCEX upstream.
+TiCEX upstream, see issue [#104](https://github.com/skytekx/golem/issues/104).
 
 Golem reached `Done` before java in all six pairs of boots of the day: 128 against 156 seconds in
 the last run of the notebook, 137 against 206, 158 against 180 and 125 against 150 in the runs
@@ -201,11 +203,11 @@ The world that golem saved names `mod:golem` and no longer `mod:arclight` among 
 
 | Difference | Evidence | Under golem |
 | --- | --- | --- |
-| The redirect `arclight$mutePotion` of Arclight wins over `apoth_sunderingHasEffect` of Apothic Attributes in `LivingEntity`, so Sundering adds no damage | The mixin WARN `@Redirect conflict. Skipping attributeslib.mixins.json:LivingEntityMixin` under Arclight alone | The mixin of Apothic Attributes applies, so Sundering adds its damage, as on plain Forge. skytekx-compat 2.1.6 on the live server adds that damage back on Arclight |
-| The constant of the repair cost of the anvil that Arclight raises for Bukkit goes to Apotheosis | The mixin WARN `@ModifyConstant conflict. Skipping mixins.arclight.core.json:world.inventory.RepairContainerMixin` under Arclight alone | No mixin of Arclight exists, and Apotheosis lifts the cap of the anvil as it does under Arclight |
+| The redirect `arclight$mutePotion` of Arclight wins over `apoth_sunderingHasEffect` of Apothic Attributes in `LivingEntity`, so Sundering adds no damage, see issue [#99](https://github.com/skytekx/golem/issues/99) | The mixin WARN `@Redirect conflict. Skipping attributeslib.mixins.json:LivingEntityMixin` under Arclight alone | The mixin of Apothic Attributes applies, so Sundering adds its damage, as on plain Forge. skytekx-compat 2.1.6 on the live server adds that damage back on Arclight |
+| The constant of the repair cost of the anvil that Arclight raises for Bukkit goes to Apotheosis, see issue [#100](https://github.com/skytekx/golem/issues/100) | The mixin WARN `@ModifyConstant conflict. Skipping mixins.arclight.core.json:world.inventory.RepairContainerMixin` under Arclight alone | No mixin of Arclight exists, and Apotheosis lifts the cap of the anvil as it does under Arclight |
 | Arclight weaves its own mixins into Minecraft | Three more static binding WARNs of Mixin, two of Arclight and one of ModernFix, and WARNs of Arclight about level stems it does not know and about the test level of Supplementaries | None |
 | The version in the server list reads `forge arclight/Trials 1.20.1` | The answer of the status | `1.20.1`, as vanilla |
-| Arclight downloads the 31 libraries of its `installer.json` at the first start from `arclight.hypertention.cn` and `repo.spongepowered.org`, checked by SHA-1 | The `installer.json` and the class `Mirrors` of the jar. The notebook puts the libraries in place, so its boot downloads nothing | Golem downloads nothing at the start |
+| Arclight downloads the 31 libraries of its `installer.json` at the first start from `arclight.hypertention.cn` and `repo.spongepowered.org`, checked by SHA-1, see issue [#101](https://github.com/skytekx/golem/issues/101) | The `installer.json` and the class `Mirrors` of the jar. The notebook puts the libraries in place, so its boot downloads nothing | Golem downloads nothing at the start |
 | The Bukkit layer applies `spigot.yml` and `bukkit.yml`: the activation and tracking ranges, the merge radius of items and experience, the spawn limits | The log of Arclight names them at the start, `Entity Activation Range: An 32 / Mo 32 / Ra 48 / Mi 0`, see [Plan](plan.md#spigot-world-settings) | The values of vanilla until the plugin `golem-world` ports them |
 | At the stop Arclight logs the save of each of the 27 levels, but neither `All chunks are saved` for each level nor `All dimensions are saved`, which vanilla logs once it has flushed them, see issue [#103](https://github.com/skytekx/golem/issues/103) | The log of the stop, and the mixins of the save of Arclight, which the notebook reads with `javap`: `arclight$skipSave` cancels `saveAllChunks` of `MinecraftServer` at its call of `overworld()`, after the save of each level, so it skips the world border and the custom boss events in the data of the world, `level.dat` and both lines, and `arclight$saveLevelDat` does the first three at the end of the save of the overworld instead, as CraftBukkit does | Both lines, for the `save-all flush` and for the `stop`. The notebook checks the stop of every boot by the save of each level and a `level.dat` written after the command to stop as well, which stand for the lines under Arclight |
 | The live server stops over RCON, since a signal starts the shutdown thread of Arclight beside the server thread | The systemd unit and issue [#4](https://github.com/skytekx/golem/issues/4) | `SIGTERM` stops through the server thread |
