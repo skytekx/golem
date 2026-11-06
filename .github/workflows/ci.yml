@@ -24,7 +24,8 @@
 # with Gradle, and boot the Forge server that tests/fetch.py installs, so the job caches the
 # downloads, the registry and the target of cargo, and the cache of Gradle, whose first build
 # remaps Minecraft. Notebook 08 boots the modpack of the live server three times, so the job
-# fetches the pack with tests/fetch.py --only modpack and caches it by the commit it pins.
+# fetches the pack with tests/fetch.py --only modpack and caches it by the commit it pins. The
+# downloads and the pack are saved right after their download, so a failed run keeps them.
 #
 # Every action is pinned to the commit of a release, with its tag beside it. No job reads a
 # secret, and the token of every job can only read the repository.
@@ -196,9 +197,11 @@ jobs:
           restore-keys: notebooks-rust-${{ runner.os }}-
 
       # The unpacked downloads alone: tests/fetch.py keeps a pin that is in place and downloads
-      # nothing then.
-      - name: Cache the downloads of tests/fetch.py
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # nothing then. They are restored here and saved right after the download, so a run whose
+      # notebooks fail keeps what it downloaded.
+      - name: Restore the downloads of tests/fetch.py
+        id: downloads
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             tests/.cache/jdk-17.0.21+9
@@ -208,7 +211,7 @@ jobs:
 
       # The pack of notebook 08 and the clone of the server repository it comes from, about
       # 1.4 GB, keyed by the commit of the server that tests/fetch.py pins, so a new pin fetches
-      # the pack again.
+      # the pack again. It is restored here and saved right after its download as well.
       - name: Read the pin of the modpack
         id: modpack
         run: |
@@ -216,8 +219,9 @@ jobs:
           test -n "$commit"
           echo "commit=$commit" >> "$GITHUB_OUTPUT"
 
-      - name: Cache the modpack
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Restore the modpack
+        id: modpack-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             tests/.cache/modpack
@@ -262,11 +266,30 @@ jobs:
       - name: Download the JDK, the Forge server and Gradle
         run: python3 -I tests/fetch.py
 
+      - name: Save the downloads of tests/fetch.py
+        if: steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            tests/.cache/jdk-17.0.21+9
+            tests/.cache/forge-server
+            tests/.cache/gradle-8.14.3
+          key: fetch-${{ runner.os }}-${{ hashFiles('tests/fetch.py') }}
+
       # The jars of the pack come from Modrinth and GitHub, each checked by the SHA-512 of the
       # index, and the libraries of Arclight from Maven Central and the repository of Sponge,
       # each checked by its pinned SHA-256. A pack in place downloads nothing.
       - name: Download the modpack of the live server
         run: python3 -I tests/fetch.py --only modpack
+
+      - name: Save the modpack
+        if: steps.modpack-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            tests/.cache/modpack
+            tests/.cache/skytekx3-1201-server
+          key: modpack-${{ steps.modpack.outputs.commit }}
 
       - name: Run the notebooks
         run: tests/.venv/bin/python tests/run.py

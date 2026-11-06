@@ -210,9 +210,9 @@ tests/.venv/bin/python tests/run.py --only 08_modpack_boot
 
 The run took 19 minutes, and a boot holds about 7.5 GiB of resident memory, so the notebook runs
 one server at a time. The parameter `arclight = False` leaves out the boot under Arclight and the
-boot on its world. CI fetches the pack after the
-plain fetch and caches it by the pinned commit. The notebook keeps the log and the console of each
-boot in `tests/notebooks/out/08_modpack_boot/`.
+boot on its world. CI fetches the pack after the plain fetch and caches it by the pinned commit,
+saved right after the fetch, so a run whose notebooks fail keeps it. The notebook keeps the log and
+the console of each boot in `tests/notebooks/out/08_modpack_boot/`.
 
 Related: [JVM host](jvm-host.md), [Bridge](bridge.md), [Plugins](plugins/index.md),
 [Plan](plan.md), [Index](index.md).
