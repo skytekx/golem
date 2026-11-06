@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+/*
+ * The host jar, golem-host.jar: the one class whose native methods Golem registers.
+ *
+ * The JVM host of Golem puts the jar on the module path, outside the layers of Forge. It has no
+ * module-info.class and names its module in the manifest, so it becomes an automatic module of
+ * the boot layer that every mod reads. It depends on nothing but java.base.
+ */
+
+plugins {
+	id 'java'
+}
+
+tasks.named('jar', Jar) {
+	// The JVM host finds the jar by this name, whatever the version.
+	archiveFileName = 'golem-host.jar'
+	manifest.attributes(
+		'Automatic-Module-Name': 'com.skytekx.golem.host',
+		'Implementation-Title': 'Golem host',
+	)
+}

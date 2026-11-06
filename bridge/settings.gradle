@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+/*
+ * The Gradle build of the Golem bridge: the host jar, which carries the native methods that
+ * Golem registers, and the Forge bridge mod, which calls them.
+ *
+ * The build runs with Gradle 8.14.3 and a JDK 17, and carries no Gradle wrapper, whose jar is a
+ * binary under another license. okf/bridge.md says how to run it.
+ */
+
+pluginManagement {
+	repositories {
+		gradlePluginPortal()
+		// ForgeGradle is published on the maven of Forge alone.
+		maven {
+			url = 'https://maven.minecraftforge.net/'
+		}
+	}
+}
+
+rootProject.name = 'bridge'
+
+include 'host'

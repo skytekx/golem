@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+/*
+ * The settings that the host jar and the bridge mod share: the version, the Java release, the
+ * encoding, the lints of the compiler and the manifest of every jar.
+ *
+ * The version is the one of the Golem workspace in ../Cargo.toml, so the jars of the bridge
+ * always carry the version of the Golem they are built with, and no second place names it.
+ */
+
+/** Answers the version of [workspace.package] in the Cargo.toml of the Golem workspace. */
+String workspaceVersion() {
+	def manifest = file('../Cargo.toml')
+	def found = manifest.text =~ /(?ms)^\[workspace\.package\]$.*?^version\s*=\s*"([^"]+)"/
+	if (!found.find()) {
+		throw new GradleException("${manifest} names no version in [workspace.package]")
+	}
+	return found.group(1)
+}
+
+def golemVersion = workspaceVersion()
+
+allprojects {
+	group = 'com.skytekx.golem'
+	version = golemVersion
+}
+
+subprojects {
+	plugins.withType(JavaPlugin).configureEach {
+		// The server runs on Java 17, so the classes must load there.
+		java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+		tasks.withType(JavaCompile).configureEach {
+			options.encoding = 'UTF-8'
+			options.release = 17
+			options.compilerArgs += ['-Xlint:all', '-Werror']
+		}
+
+		tasks.named('jar', Jar) {
+			manifest.attributes(
+				'Implementation-Version': project.version,
+				'Implementation-Vendor': 'SkyTekx',
+				'Bundle-License': 'AGPL-3.0-only',
+			)
+		}
+	}
+
+	// The same sources give the same jar bytes on every machine.
+	tasks.withType(AbstractArchiveTask).configureEach {
+		preserveFileTimestamps = false
+		reproducibleFileOrder = true
+	}
+}
