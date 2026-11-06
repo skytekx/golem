@@ -23,6 +23,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
     jvm::ARGFILE,
     jvm::LAUNCH_SPEC,
     permissions::CHECK,
+    permissions::GROUPS,
     bridge::PLUGINS,
 ];
 
