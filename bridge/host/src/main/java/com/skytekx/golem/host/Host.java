@@ -107,13 +107,20 @@ public final class Host {
 	public static native boolean chat(String uuid, String name, String message);
 
 	/**
-	 * Reports the death of a player.
+	 * Reports the death of a player, with where they died.
 	 *
 	 * @param uuid the UUID of the player in its usual form with dashes
 	 * @param name the name of the profile of the player
 	 * @param cause the id of the damage type, such as minecraft:fall
+	 * @param dimension the id of the dimension of the death, such as minecraft:overworld
+	 * @param x the x coordinate of the feet of the player
+	 * @param y the y coordinate of the feet of the player
+	 * @param z the z coordinate of the feet of the player
+	 * @param yaw the rotation of the player around the vertical axis, in degrees
+	 * @param pitch the rotation of the player up and down, in degrees
 	 */
-	public static native void death(String uuid, String name, String cause);
+	public static native void death(String uuid, String name, String cause, String dimension,
+			double x, double y, double z, float yaw, float pitch);
 
 	/**
 	 * Reports the respawn of a player.

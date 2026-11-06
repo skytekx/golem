@@ -71,6 +71,10 @@ The runtime calls every plugin in the order of `add`, each with the event and a 
 | `Death` | `death` | No | Pass |
 | `Respawn` | `respawn` | No | Pass |
 
+`Event::Death` carries the `Location` where the player died: the dimension, the coordinates of
+the feet and the rotation, so a plugin such as the port of `back` keeps the place without asking
+the game.
+
 For a chat message the first plugin that answers `Cancel` ends the chain: the plugins after it
 never see the message, and the native answers true, so the mod cancels `ServerChatEvent`. Every
 other event reaches every plugin, and the runtime answers a pass whatever the plugins answer.

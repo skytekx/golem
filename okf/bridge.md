@@ -54,7 +54,8 @@ public final class Host {
 	public static native void playerJoined(String uuid, String name);
 	public static native void playerLeft(String uuid, String name);
 	public static native boolean chat(String uuid, String name, String message);
-	public static native void death(String uuid, String name, String cause);
+	public static native void death(String uuid, String name, String cause, String dimension,
+			double x, double y, double z, float yaw, float pitch);
 	public static native void respawn(String uuid, String name, String dimension);
 	public static native String[] commandNames();
 	public static native String[] command(String name, String senderUuid, String senderName,
@@ -78,15 +79,19 @@ does not run, instead of failing on every event.
 | `playerJoined(uuid, name)` | On `PlayerLoggedInEvent` | None |
 | `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
 | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
-| `death(uuid, name, cause)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type | None |
+| `death(uuid, name, cause, dimension, x, y, z, yaw, pitch)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type and where the player died | None |
 | `respawn(uuid, name, dimension)` | On `PlayerRespawnEvent`, with the id of the dimension | None |
 | `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
 | `command(name, uuid, senderName, level, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
 | `drain()` | At the end of every server tick, after `tick` | The queued actions, oldest first |
 
-A UUID is in its usual form with dashes. `arguments` is everything after the name and one space,
-or the empty string. The source of a command is one of three, and `level` is its permission level
-from 0 to 4, which the mod reads with `hasPermission`, since Minecraft keeps the level private.
+A UUID is in its usual form with dashes. A dimension is the id of its level, such as
+`minecraft:the_nether`. A location is the dimension, the coordinates `x`, `y` and `z` of the feet
+and the rotation in degrees, `yaw` around the vertical axis and `pitch` up and down, as the game
+keeps them for the entity, so the place of a death is where a plugin sends the player back to.
+`arguments` is everything after the name and one space, or the empty string. The source of a
+command is one of three, and `level` is its permission level from 0 to 4, which the mod reads with
+`hasPermission`, since Minecraft keeps the level private.
 
 | Source | `senderUuid` | `senderName` | `level` |
 | --- | --- | --- | --- |

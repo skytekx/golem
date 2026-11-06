@@ -48,6 +48,7 @@ use crate::{
     Actions,
     Event,
     Handler,
+    Location,
     MAX_LEVEL,
     Player,
     Sender,
@@ -263,16 +264,34 @@ pub fn chat(uuid: Option<&str>, name: Option<&str>, message: Option<&str>) -> bo
     })
 }
 
-/// Reports the death of a player with the id of its damage type.
-pub fn death(uuid: Option<&str>, name: Option<&str>, cause: Option<&str>) {
+/// Reports the death of a player with the id of its damage type and where they died.
+///
+/// The native passes no location when the mod passed null for the dimension, which is logged
+/// as a null of the dimension.
+pub fn death(
+    uuid: Option<&str>,
+    name: Option<&str>,
+    cause: Option<&str>,
+    location: Option<Location>,
+) {
     const NATIVE: &str = "death";
     guard(NATIVE, (), || {
-        let (Some(player), Some(cause)) =
-            (player(NATIVE, uuid, name), required(NATIVE, "cause", cause))
-        else {
+        let player = player(NATIVE, uuid, name);
+        let cause = required(NATIVE, "cause", cause);
+        if location.is_none() {
+            log_null(NATIVE, "dimension");
+        }
+        let (Some(player), Some(cause), Some(location)) = (player, cause, location) else {
             return;
         };
-        dispatch(NATIVE, &Event::Death { player, cause });
+        dispatch(
+            NATIVE,
+            &Event::Death {
+                player,
+                cause,
+                location,
+            },
+        );
     });
 }
 
@@ -413,11 +432,16 @@ fn with_handler<T>(native: &str, pass: T, call: impl FnOnce(&mut dyn Handler, &A
 /// Answers the string of a field that the contract names, or logs its absence.
 fn required(native: &str, field: &str, value: Option<&str>) -> Option<String> {
     if value.is_none() {
-        log(format_args!(
-            "the native {native} got null for {field}, so it answers the pass value"
-        ));
+        log_null(native, field);
     }
     value.map(str::to_owned)
+}
+
+/// Logs that the mod passed null for a field that the contract names.
+fn log_null(native: &str, field: &str) {
+    log(format_args!(
+        "the native {native} got null for {field}, so it answers the pass value"
+    ));
 }
 
 /// Answers the player of a UUID and a name that the contract names, or logs their absence.

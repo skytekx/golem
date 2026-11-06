@@ -35,9 +35,10 @@
 //! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
 //! method, `stats` or `sleep`.
 //!
-//! The test plugins are these. `echo` broadcasts the name of every event but a tick, unless it
-//! is `quiet`, and answers its `commands` with a line, a message to a player sender and a
-//! console command. `cancel` cancels a chat message that holds its `word` and answers cancel to
+//! The test plugins are these. `echo` broadcasts the name of every event but a tick, and the
+//! location of a death, unless it is `quiet`, and answers its `commands` with a line, a message
+//! to a player sender and a console command. A `death` step takes the `dimension`, `x`, `y`,
+//! `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands for null. `cancel` cancels a chat message that holds its `word` and answers cancel to
 //! every other event, which the runtime must ignore. `panic` panics on the events named `on`
 //! and in its `commands`. `slow` sleeps `sleepMs` on the first `times` events named `on`.
 //! `reenter` calls the native `commandNames` from inside its handler on the events named `on`
@@ -57,6 +58,7 @@ use golem_bridge::{
     Actions,
     Event,
     Handler,
+    Location,
     Sender,
     TickStats,
     TickWindow,
@@ -237,6 +239,17 @@ enum Step {
         uuid: Option<String>,
         name: Option<String>,
         cause: Option<String>,
+        dimension: Option<String>,
+        #[serde(default)]
+        x: f64,
+        #[serde(default)]
+        y: f64,
+        #[serde(default)]
+        z: f64,
+        #[serde(default)]
+        yaw: f32,
+        #[serde(default)]
+        pitch: f32,
     },
     Respawn {
         uuid: Option<String>,
@@ -495,8 +508,26 @@ fn native(step: &Step) -> Option<Value> {
             "chat",
             host::chat(uuid.as_deref(), name.as_deref(), message.as_deref()),
         ),
-        Step::Death { uuid, name, cause } => done("death", || {
-            host::death(uuid.as_deref(), name.as_deref(), cause.as_deref());
+        Step::Death {
+            uuid,
+            name,
+            cause,
+            dimension,
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+        } => done("death", || {
+            let location = dimension.clone().map(|dimension| Location {
+                dimension,
+                x: *x,
+                y: *y,
+                z: *z,
+                yaw: *yaw,
+                pitch: *pitch,
+            });
+            host::death(uuid.as_deref(), name.as_deref(), cause.as_deref(), location);
         }),
         Step::Respawn {
             uuid,
@@ -661,8 +692,15 @@ impl Plugin for Echo {
     }
 
     fn on_event(&mut self, event: &Event, context: &mut Context<'_>) -> Verdict {
-        if !self.quiet && !matches!(event, Event::Tick { .. }) {
-            context.broadcast(&format!("{} {}", self.name, event.name()));
+        if self.quiet {
+            return Verdict::Pass;
+        }
+        match event {
+            Event::Tick { .. } => {}
+            Event::Death { location, .. } => {
+                context.broadcast(&format!("{} death at {location}", self.name));
+            }
+            _ => context.broadcast(&format!("{} {}", self.name, event.name())),
         }
         Verdict::Pass
     }

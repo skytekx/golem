@@ -71,7 +71,8 @@ public final class PlayerEvents {
 	}
 
 	/**
-	 * Reports the death of a player with the id of the damage type.
+	 * Reports the death of a player with the id of the damage type and where they died, so a
+	 * plugin can send them back there.
 	 *
 	 * @param event the event of Forge, for any living entity
 	 */
@@ -82,7 +83,9 @@ public final class PlayerEvents {
 		}
 		guard.run("Host.death", () -> {
 			String cause = damageType(event.getSource());
-			Host.death(player.getStringUUID(), name(player), cause);
+			String dimension = player.level().dimension().location().toString();
+			Host.death(player.getStringUUID(), name(player), cause, dimension, player.getX(),
+					player.getY(), player.getZ(), player.getYRot(), player.getXRot());
 		});
 	}
 

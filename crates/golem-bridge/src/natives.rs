@@ -30,6 +30,8 @@ use jni::{
         JNI_FALSE,
         JNI_TRUE,
         jboolean,
+        jdouble,
+        jfloat,
         jint,
         jlong,
         jobjectArray,
@@ -40,6 +42,7 @@ use jni::{
 
 use crate::{
     HOST_CLASS,
+    Location,
     host,
     log, //
 };
@@ -79,7 +82,7 @@ fn table() -> [(&'static str, &'static str, *mut c_void); 14] {
         ),
         (
             "death",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;DDDFF)V",
             death as *mut c_void,
         ),
         (
@@ -299,18 +302,34 @@ extern "system" fn chat<'local>(
     )
 }
 
+// The parameters are those of the native method, which the JNI hands over one by one.
+#[allow(clippy::too_many_arguments)]
 extern "system" fn death<'local>(
     mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     uuid: JString<'local>,
     name: JString<'local>,
     cause: JString<'local>,
+    dimension: JString<'local>,
+    x: jdouble,
+    y: jdouble,
+    z: jdouble,
+    yaw: jfloat,
+    pitch: jfloat,
 ) {
     answer(&mut env, "death", nothing, |env| {
         let uuid = string(env, &uuid)?;
         let name = string(env, &name)?;
         let cause = string(env, &cause)?;
-        host::death(uuid.as_deref(), name.as_deref(), cause.as_deref());
+        let location = string(env, &dimension)?.map(|dimension| Location {
+            dimension,
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+        });
+        host::death(uuid.as_deref(), name.as_deref(), cause.as_deref(), location);
         Ok(())
     });
 }

@@ -21,6 +21,7 @@
 //! | Module | Holds |
 //! | --- | --- |
 //! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
+//! | `game` | [`Location`], the places of the world as the mod reports them |
 //! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
 //! | [`host`] | The global state and one plain function per native method |
 //! | `natives` | The functions the JVM calls, thin wrappers over [`host`], and their registration |
@@ -29,6 +30,7 @@
 //! `tests/notebooks/04_plugins.ipynb` drives the functions of [`host`] through golem-devtool.
 
 mod actions;
+mod game;
 pub mod host;
 mod natives;
 mod ticks;
@@ -39,6 +41,7 @@ pub use crate::{
         Actions,
         SEPARATOR, //
     },
+    game::Location,
     ticks::{
         MAX_TPS,
         TickStats,
@@ -80,7 +83,7 @@ pub enum Sender {
 }
 
 /// What the mod reports, each on the server thread.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// The server is starting, before the worlds load.
     ServerStarting {
@@ -117,6 +120,8 @@ pub enum Event {
         player: Player,
         /// The id of the damage type, such as minecraft:fall.
         cause: String,
+        /// Where they died.
+        location: Location,
     },
     /// A player respawned.
     Respawn {
