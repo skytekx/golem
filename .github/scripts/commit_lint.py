@@ -29,7 +29,9 @@ these.
    there a hash it does not hold passes.
 8. No trailer appears twice with the same value.
 
-Merge commits are left out, since git writes their message. With no range, the commits are those
+Merge commits are left out, since git writes their message. A shallow clone cuts the parents of the
+commits at its edge, so there a commit whose message git writes for a merge, such as the merge of a
+pull request that CI checks out, is left out as well. With no range, the commits are those
 of HEAD that origin/main does not hold, or every commit of HEAD while origin/main does not exist.
 Every failure is printed with the short hash and the subject, and the exit status is 1 when any
 rule fails.
@@ -83,14 +85,29 @@ def default_range(root: Path) -> str:
     return "origin/main..HEAD" if probe.returncode == 0 else "HEAD"
 
 
+#: The subject git gives a merge commit, and GitHub the merge of a pull request.
+MERGE_SUBJECT = re.compile(r"^Merge (branch |remote-tracking branch |tag |pull request |commit |[0-9a-f]{7,40} into )")
+
+
+def shallow_edge(root: Path) -> set[str]:
+    """The commits at the edge of a shallow clone, whose parents git does not hold."""
+    path = Path(git(root, "rev-parse", "--git-path", "shallow").strip())
+    path = path if path.is_absolute() else root / path
+    return set(path.read_text().split()) if path.is_file() else set()
+
+
 def commits(root: Path, revisions: str) -> list[tuple[str, str]]:
     """The hashes and messages of the commits of `revisions`, oldest first, merges left out."""
     output = git(root, "log", "--no-merges", "--reverse", "--format=%H%x00%B%x1e", revisions)
+    edge = shallow_edge(root)
     found = []
     for record in output.split("\x1e"):
         record = record.lstrip("\n")
         if record:
             commit, _, message = record.partition("\x00")
+            # A merge at the edge of a shallow clone has lost its parents, so --no-merges keeps it.
+            if commit in edge and MERGE_SUBJECT.match(message):
+                continue
             found.append((commit, message))
     return found
 
