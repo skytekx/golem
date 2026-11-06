@@ -3,8 +3,9 @@
 /*
  * The listeners of the bridge for the life of the server and for its ticks.
  *
- * The bridge reports how long every server tick took, from the start of its first listener to
- * the end of its last, which is the time that the tick costs the game.
+ * The end of every server tick is the one point where Golem acts on the game: the bridge reports
+ * how long the tick took, drains the actions that Golem queued since the last tick and runs them
+ * there, on the server thread, so Rust never touches the game from another thread.
  */
 package com.skytekx.golem.bridge;
 
@@ -19,15 +20,19 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.versions.forge.ForgeVersion;
 
-/** Reports the life of the server and its ticks. */
+/** Reports the life of the server and its ticks, and runs the actions after each tick. */
 public final class ServerEvents {
+	private static final String[] NONE = {};
+
 	private final Guard guard;
+	private final Actions actions;
 
 	/** When the running tick started, in the nanoseconds of System.nanoTime. */
 	private long tickStart;
 
-	ServerEvents(Guard guard) {
+	ServerEvents(Guard guard, Actions actions) {
 		this.guard = guard;
+		this.actions = actions;
 	}
 
 	/**
@@ -86,7 +91,7 @@ public final class ServerEvents {
 	}
 
 	/**
-	 * Reports the end of a tick, after every other listener.
+	 * Reports the end of a tick, after every other listener, and runs the queued actions.
 	 *
 	 * @param event the event of Forge, of either phase
 	 */
@@ -97,5 +102,7 @@ public final class ServerEvents {
 		}
 		long nanos = System.nanoTime() - tickStart;
 		guard.run("Host.tick", () -> Host.tick(nanos));
+		String[] queued = guard.ask("Host.drain", Host::drain, NONE);
+		actions.run(event.getServer(), queued);
 	}
 }
