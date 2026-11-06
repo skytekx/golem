@@ -380,6 +380,7 @@ fn check_json(check: &Check) -> Value {
         "ledger_mismatches": mismatches,
         "cache_differences": check.cache_differences,
         "rows": check.rows,
+        "copy_us": Duration::from_nanos(check.copy_nanos).as_secs_f64() * 1e6,
     })
 }
 
@@ -1430,6 +1431,65 @@ fn time_calls(store: &Store, players: usize, repeat: usize) -> BTreeMap<&'static
     summaries
 }
 
+/// Runs `work` while a second thread reads a balance in a loop, as the server thread would, and
+/// answers the answer of `work`, the longest read meanwhile in nanoseconds and the reads.
+fn while_reading<T>(store: &Store, work: impl FnOnce() -> T) -> (T, u64, u64) {
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader = {
+        let (store, stop) = (store.clone(), Arc::clone(&stop));
+        std::thread::spawn(move || {
+            let (mut longest, mut reads) = (0_u64, 0_u64);
+            while !stop.load(Ordering::Relaxed) {
+                let started = Instant::now();
+                let _ = black_box(store.balance(bench_uuid(0)));
+                let nanos = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+                longest = longest.max(nanos);
+                reads += 1;
+            }
+            (longest, reads)
+        })
+    };
+    let answer = work();
+    stop.store(true, Ordering::Relaxed);
+    let (longest, reads) = reader.join().unwrap_or((u64::MAX, 0));
+    (answer, longest, reads)
+}
+
+/// Runs `checks` checks while a second thread reads a balance in a loop, and as long again
+/// without them, and answers whether every check passed, the mean time of a check, the median
+/// and the longest time a check held the lock of the cache to copy it, and the longest read with
+/// and without the checks, in microseconds. A longest time holds the noise of the scheduler of a
+/// shared machine, which the read without the checks shows beside it.
+fn check_stall(store: &Store, checks: usize) -> Result<Value, StoreError> {
+    let started = Instant::now();
+    let (outcome, longest_read, reads) = while_reading(store, || {
+        (0..checks)
+            .map(|_| store.check())
+            .collect::<Result<Vec<_>, _>>()
+    });
+    let took = started.elapsed();
+    let done = outcome?;
+    let ((), longest_quiet, quiet_reads) = while_reading(store, || std::thread::sleep(took));
+    let micros = |nanos: u64| Duration::from_nanos(nanos).as_secs_f64() * 1e6;
+    let mut copies: Vec<u64> = done.iter().map(|check| check.copy_nanos).collect();
+    copies.sort_unstable();
+    let median_copy = copies.get(copies.len() / 2).copied().unwrap_or(0);
+    let longest_copy = copies.last().copied().unwrap_or(0);
+    #[allow(clippy::cast_precision_loss)]
+    let mean_ms = took.as_secs_f64() * 1000.0 / checks.max(1) as f64;
+    Ok(json!({
+        "checks": checks,
+        "passed": done.iter().all(Check::passed),
+        "mean_ms": mean_ms,
+        "median_copy_us": micros(median_copy),
+        "longest_copy_us": micros(longest_copy),
+        "longest_read_us": micros(longest_read),
+        "reads": reads,
+        "longest_read_quiet_us": micros(longest_quiet),
+        "quiet_reads": quiet_reads,
+    }))
+}
+
 /// The resident memory of the process in KiB, which Linux names in `/proc/self/status`, or
 /// `None` elsewhere. It bounds the memory of the cache from above.
 fn resident_kib() -> Option<u64> {
@@ -1464,7 +1524,7 @@ fn bench(arguments: &[String]) -> i32 {
         store.flush()?;
         let flush = started.elapsed();
         let after = store.stats();
-        let check = store.check()?;
+        let check = check_stall(&store, 5)?;
         store.close()?;
         let file_bytes = fs::metadata(&options.path).map_or(0, |metadata| metadata.len());
         let millis = |duration: Duration| duration.as_secs_f64() * 1000.0;
@@ -1482,7 +1542,7 @@ fn bench(arguments: &[String]) -> i32 {
                 "largest_batch": after.largest_batch,
                 "busy_ms": millis(Duration::from_nanos(after.busy_nanos - before.busy_nanos)),
             },
-            "check_passed": check.passed(),
+            "check": check,
             "file_bytes": file_bytes,
             "resident_kib_after_open": resident,
         }))

@@ -115,6 +115,9 @@ pub struct Check {
     pub cache_differences: Vec<String>,
     /// The rows of every table.
     pub rows: BTreeMap<String, i64>,
+    /// How long the check held the lock of the cache to copy it, in nanoseconds, which is the
+    /// longest that any other call of the store waited for the check.
+    pub copy_nanos: u64,
 }
 
 impl Check {
@@ -430,7 +433,9 @@ impl Store {
     ///
     /// The copy of the cache and the read of the file join the queue of the writer under one
     /// lock, so a change of another thread lands either in both or in neither, and never counts
-    /// as a difference of a sound store.
+    /// as a difference of a sound store. The copy takes pointers to the tables of the cache and
+    /// no row, so every other call waits for it about as long as for a read, whatever the number
+    /// of players, and [`Check::copy_nanos`] tells how long.
     pub fn check(&self) -> Result<Check, StoreError> {
         self.ask(|cache, reply| {
             let snapshot = crate::compare::snapshot(cache);
@@ -602,8 +607,7 @@ impl Store {
         check_location("the location of a home", &location)?;
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&uuid)
+                .player_mut(&uuid)
                 .ok_or(Refusal::UnknownPlayer(uuid))?;
             let replaced = entry
                 .homes
@@ -622,8 +626,7 @@ impl Store {
     pub fn remove_home(&self, uuid: Uuid, name: &str) -> Result<bool, StoreError> {
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&uuid)
+                .player_mut(&uuid)
                 .ok_or(Refusal::UnknownPlayer(uuid))?;
             if entry.homes.remove(name).is_none() {
                 return Ok((false, None));
@@ -685,7 +688,9 @@ impl Store {
                 location: location.clone(),
                 permission: permission.map(str::to_owned),
             };
-            let replaced = cache.warps.insert(name.to_owned(), warp).is_some();
+            let replaced = Arc::make_mut(&mut cache.warps)
+                .insert(name.to_owned(), warp)
+                .is_some();
             let op = Op::PutWarp {
                 name: name.to_owned(),
                 location,
@@ -698,9 +703,10 @@ impl Store {
     /// Removes the warp `name`, and answers whether there was one.
     pub fn remove_warp(&self, name: &str) -> Result<bool, StoreError> {
         self.change(|cache| {
-            if cache.warps.remove(name).is_none() {
+            if !cache.warps.contains_key(name) {
                 return Ok((false, None));
             }
+            Arc::make_mut(&mut cache.warps).remove(name);
             Ok((true, Some(Op::RemoveWarp(name.to_owned()))))
         })
     }
@@ -723,8 +729,7 @@ impl Store {
         check_token("the group of a spawn", group)?;
         check_location("the location of a spawn", &location)?;
         self.change(|cache| {
-            let replaced = cache
-                .spawns
+            let replaced = Arc::make_mut(&mut cache.spawns)
                 .insert(group.to_owned(), location.clone())
                 .is_some();
             let op = Op::PutSpawn {
@@ -738,9 +743,10 @@ impl Store {
     /// Removes the spawn of a group, and answers whether there was one.
     pub fn remove_spawn(&self, group: &str) -> Result<bool, StoreError> {
         self.change(|cache| {
-            if cache.spawns.remove(group).is_none() {
+            if !cache.spawns.contains_key(group) {
                 return Ok((false, None));
             }
+            Arc::make_mut(&mut cache.spawns).remove(group);
             Ok((true, Some(Op::RemoveSpawn(group.to_owned()))))
         })
     }
@@ -790,8 +796,7 @@ impl Store {
             }
             let id = cache.next_mail;
             let entry = cache
-                .players
-                .get_mut(&receiver)
+                .player_mut(&receiver)
                 .ok_or(Refusal::UnknownPlayer(receiver))?;
             let mail = Mail {
                 id,
@@ -828,8 +833,7 @@ impl Store {
     pub fn mark_mail_read(&self, receiver: Uuid) -> Result<usize, StoreError> {
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&receiver)
+                .player_mut(&receiver)
                 .ok_or(Refusal::UnknownPlayer(receiver))?;
             let unread = entry.unread;
             if unread == 0 {
@@ -847,8 +851,7 @@ impl Store {
     pub fn remove_mail(&self, receiver: Uuid, id: i64) -> Result<bool, StoreError> {
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&receiver)
+                .player_mut(&receiver)
                 .ok_or(Refusal::UnknownPlayer(receiver))?;
             let Some(index) = entry.mail.iter().position(|mail| mail.id == id) else {
                 return Ok((false, None));
@@ -865,8 +868,7 @@ impl Store {
     pub fn clear_mail(&self, receiver: Uuid) -> Result<usize, StoreError> {
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&receiver)
+                .player_mut(&receiver)
                 .ok_or(Refusal::UnknownPlayer(receiver))?;
             let count = entry.mail.len();
             if count == 0 {
@@ -890,8 +892,7 @@ impl Store {
                 return Err(Refusal::UnknownPlayer(other));
             }
             let entry = cache
-                .players
-                .get_mut(&player)
+                .player_mut(&player)
                 .ok_or(Refusal::UnknownPlayer(player))?;
             if !entry.ignores.insert(other) {
                 return Ok((false, None));
@@ -908,8 +909,7 @@ impl Store {
     pub fn unignore(&self, player: Uuid, other: Uuid) -> Result<bool, StoreError> {
         self.change(|cache| {
             let entry = cache
-                .players
-                .get_mut(&player)
+                .player_mut(&player)
                 .ok_or(Refusal::UnknownPlayer(player))?;
             if !entry.ignores.remove(&other) {
                 return Ok((false, None));
@@ -1119,7 +1119,8 @@ impl Store {
     /// [`PermissionSet::to_toml`] turns into the text golem-permissions loads. A resolver that
     /// reloads the set reads it through [`Store::permissions_with_generation`] instead.
     pub fn permissions(&self) -> PermissionSet {
-        self.read(permission_set)
+        let (_, groups, players) = self.read(permission_parts);
+        permission_set(&groups, &players)
     }
 
     /// The count of changes of the permissions since the open, so a resolver loads them again
@@ -1136,17 +1137,20 @@ impl Store {
     /// between them pairs the set before the change with the generation after it, and a
     /// resolver that keeps that pair never reloads the change, such as a node that was revoked.
     pub fn permissions_with_generation(&self) -> (u64, PermissionSet) {
-        self.read(|cache| (cache.permissions_generation, permission_set(cache)))
+        let (generation, groups, players) = self.read(permission_parts);
+        (generation, permission_set(&groups, &players))
     }
 
     /// One group of the permissions.
     pub fn permission_group(&self, name: &str) -> Option<PermissionGroup> {
-        self.read(|cache| cache.groups.get(name).cloned())
+        let group = self.read(|cache| cache.groups.get(name).cloned());
+        group.map(|group| PermissionGroup::clone(&group))
     }
 
     /// The groups and nodes of one player of the permissions.
     pub fn player_permissions(&self, uuid: Uuid) -> Option<PlayerPermissions> {
-        self.read(|cache| cache.permission_players.get(&uuid).cloned())
+        let player = self.read(|cache| cache.permission_players.get(&uuid).cloned());
+        player.map(|player| PlayerPermissions::clone(&player))
     }
 
     /// Puts a whole set in place of the permissions, as the seed of `config/permissions.toml`
@@ -1162,14 +1166,18 @@ impl Store {
             .collect();
         players.sort_by_key(|player| player.uuid);
         self.change(|cache| {
-            cache.groups = groups
-                .iter()
-                .map(|group| (group.name.clone(), group.clone()))
-                .collect();
-            cache.permission_players = players
-                .iter()
-                .map(|player| (player.uuid, player.clone()))
-                .collect();
+            cache.groups = Arc::new(
+                groups
+                    .iter()
+                    .map(|group| (group.name.clone(), Arc::new(group.clone())))
+                    .collect(),
+            );
+            cache.permission_players = Arc::new(
+                players
+                    .iter()
+                    .map(|player| (player.uuid, Arc::new(player.clone())))
+                    .collect(),
+            );
             cache.permissions_generation += 1;
             Ok(((), Some(Op::ReplacePermissions { groups, players })))
         })
@@ -1187,9 +1195,8 @@ impl Store {
             {
                 return Err(Refusal::UnknownGroup(parent.clone()));
             }
-            let replaced = cache
-                .groups
-                .insert(group.name.clone(), group.clone())
+            let replaced = Arc::make_mut(&mut cache.groups)
+                .insert(group.name.clone(), Arc::new(group.clone()))
                 .is_some();
             cache.permissions_generation += 1;
             Ok((replaced, Some(Op::PutGroup(Box::new(group)))))
@@ -1220,7 +1227,7 @@ impl Store {
             {
                 return Err(in_use(format!("the player {}", player.uuid)));
             }
-            cache.groups.remove(name);
+            Arc::make_mut(&mut cache.groups).remove(name);
             cache.permissions_generation += 1;
             Ok((true, Some(Op::RemoveGroup(name.to_owned()))))
         })
@@ -1239,11 +1246,12 @@ impl Store {
                 return Err(Refusal::UnknownGroup(group.clone()));
             }
             cache.permissions_generation += 1;
+            let players = Arc::make_mut(&mut cache.permission_players);
             if player.groups.is_empty() && player.nodes.is_empty() {
-                cache.permission_players.remove(&player.uuid);
+                players.remove(&player.uuid);
                 return Ok(((), Some(Op::RemovePlayerPermissions(player.uuid))));
             }
-            cache.permission_players.insert(player.uuid, player.clone());
+            players.insert(player.uuid, Arc::new(player.clone()));
             Ok(((), Some(Op::PutPlayerPermissions(Box::new(player)))))
         })
     }
@@ -1251,9 +1259,10 @@ impl Store {
     /// Removes a player from the permissions, and answers whether they were in them.
     pub fn remove_player_permissions(&self, uuid: Uuid) -> Result<bool, StoreError> {
         self.change(|cache| {
-            if cache.permission_players.remove(&uuid).is_none() {
+            if !cache.permission_players.contains_key(&uuid) {
                 return Ok((false, None));
             }
+            Arc::make_mut(&mut cache.permission_players).remove(&uuid);
             cache.permissions_generation += 1;
             Ok((true, Some(Op::RemovePlayerPermissions(uuid))))
         })
@@ -1266,7 +1275,7 @@ impl Store {
         check_name("the key of a setting", key)?;
         check_text("the value of a setting", value)?;
         self.change(|cache| {
-            cache.settings.insert(key.to_owned(), value.to_owned());
+            Arc::make_mut(&mut cache.settings).insert(key.to_owned(), value.to_owned());
             let op = Op::PutSetting {
                 key: key.to_owned(),
                 value: value.to_owned(),
@@ -1278,9 +1287,10 @@ impl Store {
     /// Removes a setting, and answers whether it existed.
     pub fn remove_setting(&self, key: &str) -> Result<bool, StoreError> {
         self.change(|cache| {
-            if cache.settings.remove(key).is_none() {
+            if !cache.settings.contains_key(key) {
                 return Ok((false, None));
             }
+            Arc::make_mut(&mut cache.settings).remove(key);
             Ok((true, Some(Op::RemoveSetting(key.to_owned()))))
         })
     }
@@ -1302,11 +1312,33 @@ impl Store {
     }
 }
 
-/// The permissions of the cache as one set.
-fn permission_set(cache: &Cache) -> PermissionSet {
+/// The generation and the permissions of the cache as pointers, which the lock of the cache
+/// hands out at the cost of a count each, so the copy of the rows happens after the lock.
+#[allow(clippy::type_complexity)]
+fn permission_parts(
+    cache: &Cache,
+) -> (u64, Vec<Arc<PermissionGroup>>, Vec<Arc<PlayerPermissions>>) {
+    (
+        cache.permissions_generation,
+        cache.groups.values().cloned().collect(),
+        cache.permission_players.values().cloned().collect(),
+    )
+}
+
+/// The permissions as one set, copied from the pointers of [`permission_parts`].
+fn permission_set(
+    groups: &[Arc<PermissionGroup>],
+    players: &[Arc<PlayerPermissions>],
+) -> PermissionSet {
     PermissionSet {
-        groups: cache.groups.values().cloned().collect(),
-        players: cache.permission_players.values().cloned().collect(),
+        groups: groups
+            .iter()
+            .map(|group| PermissionGroup::clone(group))
+            .collect(),
+        players: players
+            .iter()
+            .map(|player| PlayerPermissions::clone(player))
+            .collect(),
     }
 }
 

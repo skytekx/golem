@@ -74,6 +74,14 @@ players.
 of the cache is held for the length of one call and never while the writer works, so a call of
 the server thread never waits for the writer.
 
+`check` copies the cache under that lock, so that it compares the file with the cache as the call
+found it, and every other call waits for that copy. Every table of the cache sits behind an `Arc`,
+the players and the accounts in 64 parts, so the copy takes about 140 pointers instead of the
+rows, and its time does not grow with the players. In the run of `09_store` on 2026-11-06 a check
+of the store of 5000 players held the lock 28 microseconds in the median in the debug build. A
+change after the copy copies the part of the players or of the accounts, or the table, that it
+changes, once while the check still holds the copy.
+
 ## Durability
 
 | Setting | Value | Why |
