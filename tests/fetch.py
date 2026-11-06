@@ -33,8 +33,10 @@ used, and lands under tests/.cache/, which git ignores. The pins are these.
    four files of settings and tools/patch_mods.py beside them. The jars stay as their authors
    published them, since tools/patch_mods.py rewrites 14 of them, which would then miss their
    hashes, so a notebook patches its own copy as the live server patches its mods/. The file
-   tests/.cache/modpack/modpack.json, written last, names the commit and every jar. A download
-   that broke off goes on where it stopped, and a jar whose hash already matches stays.
+   tests/.cache/modpack/modpack.json, written last, names the commit, every jar and the Arclight
+   jar with its SHA-256. The pack holds what the pin names alone, so a file of an earlier pin is
+   removed. A download that broke off goes on where it stopped, and a jar whose hash already
+   matches stays.
 
 The script accepts the EULA of Minecraft in that test server, with eula=true in its eula.txt,
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
@@ -438,6 +440,24 @@ def replace(source: Path, target: Path) -> None:
     source.rename(target)
 
 
+def prune(folder: Path, wanted: set, prefix: PurePosixPath = PurePosixPath()) -> None:
+    """Remove from `folder` whatever is neither a path of `wanted` nor a folder on the way to one.
+
+    The paths of `wanted` are relative to the folder the first call names.
+    """
+    for path in folder.iterdir():
+        relative = prefix / path.name
+        if str(relative) in wanted:
+            continue
+        directory = path.is_dir() and not path.is_symlink()
+        if directory and any(PurePosixPath(name).is_relative_to(relative) for name in wanted):
+            prune(path, wanted, relative)
+        elif directory:
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+
 def fetch_modpack(cache: Path, given) -> Path:
     """The pack of the live server under `cache`, a server directory but for Forge itself."""
     repository = fetch_server(cache, given)
@@ -477,6 +497,9 @@ def fetch_modpack(cache: Path, given) -> Path:
         raise Failure("the index and local-mods/ name some jars twice: %s" % ", ".join(" and ".join(group) for group in twice))
     mods = pack / "mods"
     mods.mkdir(parents=True, exist_ok=True)
+    # A file of an earlier pin, such as the Arclight jar it named, would stay beside the new ones,
+    # so the pack holds what this pin names alone.
+    prune(pack, {"mods", "modpack.json", *MODPACK_TREES, *MODPACK_FILES})
     # A jar of an earlier pin would load beside the new one, so the folder holds the pack alone.
     wanted = set(names) | {path.name for path in local} | {name + ".part" for name in names}
     for stale in mods.iterdir():
@@ -497,10 +520,11 @@ def fetch_modpack(cache: Path, given) -> Path:
     jars += [{"file": path.name, "source": "local-mods", "sha512": digest(mods / path.name, "sha512"),
               "size": (mods / path.name).stat().st_size} for path in local]
     record = {
-        "schema": "golem-modpack-1",
+        "schema": "golem-modpack-2",
         "repository": SERVER_REPOSITORY,
         "commit": SERVER_COMMIT,
         "pack": {"name": index.get("name"), "version": index.get("versionId"), **index["dependencies"]},
+        "arclight": {"file": ARCLIGHT_JAR, "sha256": ARCLIGHT_SHA256},
         "mods": sorted(jars, key=lambda jar: jar["file"].lower()),
         "left_out": sorted(left_out, key=str.lower),
     }

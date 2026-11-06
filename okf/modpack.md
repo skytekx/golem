@@ -49,10 +49,11 @@ EssentialsXSpawn and LuckPerms, are ported to Golem plugins instead, see
 | `server.properties.example`, `systemd/skytekx3.service` | The settings of the live server and the options of its JVM |
 | The Arclight jar, `arclight.conf`, `bukkit.yml`, `spigot.yml`, `commands.yml` | Arclight as the live server runs it, its jar checked by its SHA-256 |
 | `tools/patch_mods.py` | The patches of the live server for 14 jars, 11 of the index and Traverse, BiblioCraft and Simply Jetpacks 2 of `local-mods/` |
-| `modpack.json` | The commit and every jar with its source and its SHA-512, written last |
+| `modpack.json` | The commit, every jar with its source and its SHA-512, and the Arclight jar with its SHA-256, written last |
 
 The script takes every file from the commit itself, so a checkout that `--server-repo` names may
-hold other work. The jars stay as their authors published them, and the notebook patches its own
+hold other work, and removes from the pack whatever the pin does not name, such as the Arclight jar
+of an earlier pin. The jars stay as their authors published them, and the notebook patches its own
 copies with `tools/patch_mods.py`, as the live server patches its `mods/`.
 
 The pack is the one that the repository describes. It is not the `mods/` of the Mac mini jar for
