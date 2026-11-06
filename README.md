@@ -7,7 +7,12 @@ It owns the server process, starts the JVM inside itself and boots Minecraft 1.2
 47.4.18 and every mod of the pack unchanged. Around the game it adds a GraphQL API, a plugin
 runtime in Rust and native code for the hot paths of world generation. It replaces Arclight.
 
-Nothing of the server is built yet. This repository holds its license and its test harness so far.
+The first milestone is built. `golem run` boots the Forge server of a directory unchanged in its
+embedded JVM and stops it through the server thread on a signal. A Forge mod in `bridge/` reports
+the game to the natives of Golem, which hand it to the plugins in Rust, the first of them the
+command `golem` with the offer of the source. The permissions that replace LuckPerms are a crate
+with the seed of SkyTekx. The GraphQL API and the ports of EssentialsX come next. The
+[wiki](okf/index.md) holds the state and the design.
 
 ## License
 
