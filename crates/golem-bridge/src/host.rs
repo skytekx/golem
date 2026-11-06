@@ -18,12 +18,15 @@
 //! the contract names: a command of the console has no sender, and a null `arguments` reads as
 //! the empty string.
 //!
-//! The handler sits behind a lock that the server thread alone takes. A call that finds the
-//! lock taken comes from inside the handler itself, and it answers the pass value at once, since
-//! waiting on the lock would hang the server thread.
+//! The handler sits behind a lock. The server thread takes it for most natives, but Forge 47
+//! calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, so a
+//! call that finds the lock taken by another thread waits for it, which takes no longer than one
+//! call of the handler. A call from inside the handler itself, on the thread that holds the
+//! lock, answers the pass value at once, since it would wait for itself forever.
 
 use std::{
     any::Any,
+    cell::Cell,
     panic::{
         self,
         AssertUnwindSafe, //
@@ -31,8 +34,7 @@ use std::{
     sync::{
         Mutex,
         OnceLock,
-        PoisonError,
-        TryLockError, //
+        PoisonError, //
     },
     time::Instant, //
 };
@@ -64,17 +66,47 @@ struct Host {
 /// The state of the process, made on its first use.
 static HOST: OnceLock<Host> = OnceLock::new();
 
+thread_local! {
+    /// True while the handler runs on this thread, which tells a call from inside the handler
+    /// apart from a call of another thread that waits for the lock.
+    static IN_HANDLER: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Marks the handler as running on this thread until it is dropped, also when the handler
+/// panics and the panic unwinds through the call.
+struct Inside;
+
+impl Inside {
+    fn enter() -> Self {
+        IN_HANDLER.set(true);
+        Self
+    }
+}
+
+impl Drop for Inside {
+    fn drop(&mut self) {
+        IN_HANDLER.set(false);
+    }
+}
+
 fn host() -> &'static Host {
     HOST.get_or_init(Host::default)
 }
 
 /// Installs the handler that the native methods call, and answers the queue they drain.
 ///
-/// A second call replaces the handler and keeps the queue, with the actions in it. A handler
-/// never calls it, since the handler holds the lock this function waits for.
+/// A second call replaces the handler and keeps the queue, with the actions in it. A call from
+/// inside the handler is logged and keeps the running handler, since the handler holds the lock
+/// this function would wait for.
 pub fn install(handler: Box<dyn Handler>) -> Actions {
     let host = host();
-    *host.handler.lock().unwrap_or_else(PoisonError::into_inner) = Some(handler);
+    if IN_HANDLER.get() {
+        log(format_args!(
+            "install was called from inside the handler, so the running handler stays"
+        ));
+    } else {
+        *host.handler.lock().unwrap_or_else(PoisonError::into_inner) = Some(handler);
+    }
     host.actions.clone()
 }
 
@@ -317,23 +349,24 @@ fn dispatch(native: &str, event: &Event) -> Verdict {
     })
 }
 
-/// Calls the handler with the queue, or answers `pass` without a handler or with its lock taken.
+/// Calls the handler with the queue, or answers `pass` without a handler or from inside it.
+///
+/// A call of another thread waits until the handler is free, so a chat message that arrives
+/// on a worker thread while a tick runs on the server thread still reaches the plugins.
 fn with_handler<T>(native: &str, pass: T, call: impl FnOnce(&mut dyn Handler, &Actions) -> T) -> T {
-    let host = host();
-    let mut slot = match host.handler.try_lock() {
-        Ok(slot) => slot,
-        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-        Err(TryLockError::WouldBlock) => {
-            log(format_args!(
-                "the native {native} was called while the handler runs, so it answers the pass value"
-            ));
-            return pass;
-        }
-    };
-    match slot.as_deref_mut() {
-        Some(handler) => call(handler, &host.actions),
-        None => pass,
+    if IN_HANDLER.get() {
+        log(format_args!(
+            "the native {native} was called from inside the handler, so it answers the pass value"
+        ));
+        return pass;
     }
+    let host = host();
+    let mut slot = host.handler.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(handler) = slot.as_deref_mut() else {
+        return pass;
+    };
+    let _inside = Inside::enter();
+    call(handler, &host.actions)
 }
 
 /// Answers the string of a field that the contract names, or logs its absence.

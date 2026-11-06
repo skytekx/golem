@@ -16,6 +16,12 @@ the [bridge](../bridge.md) and for the commands it declares. The runtime lives i
 only observes the game uses the subscriptions of the GraphQL API instead, since a call on the
 server thread holds up the tick.
 
+Forge 47 calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, as
+the bridge page says. The handler sits behind one lock, so the runtime still runs one call at a
+time: a call of another thread waits until the call before it ends, and a chat message that
+arrives during a tick reaches the plugins after it. A call of a native from inside the handler
+answers its pass value at once with a line on the log, since it would wait for itself.
+
 | Part | Where | What it is |
 | --- | --- | --- |
 | `Plugin` | `golem_plugin::Plugin` | The trait of a plugin: its name, its commands, `on_event` and `on_command` |
