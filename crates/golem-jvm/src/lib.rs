@@ -21,6 +21,7 @@
 //! The JVM host of Golem.
 
 mod argfile;
+mod launch;
 
 use std::path::{
     Path,
@@ -97,21 +98,44 @@ pub struct LaunchSpec {
 impl LaunchSpec {
     /// The launch that the arguments of the java launcher describe, with every @file expanded
     /// relative to `base`.
+    ///
+    /// The @files expand up to the main class, an argument `@@name` stands for `@name`, and
+    /// `--disable-@files` stops the expansion. The options that take a value after a space,
+    /// such as `-p`, `--add-opens` or `-cp`, become the form with `=` or the property
+    /// java.class.path, with the wildcards of a class path expanded relative to `base`. The old
+    /// forms of options get their new names, `-client` and `-server` are dropped, and a launch
+    /// without a class path gets the class path `.`, all as the launcher does. Everything after
+    /// the main class is an argument of main.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`ArgError`] for an @file that does not read, an option that misses its
+    /// value, a launch without a main class, and the options that only the launcher can carry
+    /// out or that Golem does not do, such as `-jar`, `-m`, `--source`, `-version`, `--help` or
+    /// `--dry-run`.
     pub fn from_launcher_args(arguments: &[String], base: &Path) -> Result<Self, ArgError> {
-        let _ = (arguments, base);
-        todo!("golem-jvm: LaunchSpec::from_launcher_args")
+        launch::from_launcher_args(arguments, base)
     }
 
     /// The launch of the Forge server installed in `server`, as its run.sh starts it.
+    ///
+    /// The launch is `@user_jvm_args.txt`, when that file exists, and then the one
+    /// `libraries/net/minecraftforge/forge/*/unix_args.txt`, relative to `server`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`ArgError`] when `server` holds no Forge server or several, and every error
+    /// of [`LaunchSpec::from_launcher_args`].
     pub fn forge_server(server: &Path) -> Result<Self, ArgError> {
-        let _ = server;
-        todo!("golem-jvm: LaunchSpec::forge_server")
+        launch::forge_server(server)
     }
 
     /// Puts `jar` on the module path, so its classes load in the boot layer.
+    ///
+    /// The jar joins the end of the last `--module-path`, the one the JVM takes, or becomes the
+    /// module path when there is none.
     pub fn add_module_path(&mut self, jar: &Path) {
-        let _ = jar;
-        todo!("golem-jvm: LaunchSpec::add_module_path")
+        launch::add_module_path(self, jar);
     }
 }
 
