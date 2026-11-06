@@ -358,6 +358,21 @@ of 2023-09-21, with 1,247 types, 7,942 public methods, 5,900 fields and constant
 coverage check maps every part of it to its equivalent in Golem. The text below is the plan before
 that ruling.
 
+A further ruling of the same day adds a Bukkit layer on the Golem API, so that Bukkit and Spigot
+plugins also run unchanged, and every plugin must work. The layer is Java in the JVM of Forge and
+reaches the Golem API in process. It covers three levels:
+
+1. The public API of Bukkit and Spigot, mapped through the coverage check.
+2. The internals of CraftBukkit that plugins reach by reflection or by name, such as the
+   permissible field `perm` of `CraftHumanEntity` that LuckPerms 5.5.71 replaces
+   (`PermissibleInjector.java:66`), the command map and its known commands. The Golem API offers
+   what they need, and the layer gives them the shapes the plugins expect.
+3. The classes of Minecraft that plugins call by their Spigot names, which the layer maps onto the
+   classes of Forge in the same JVM.
+
+A survey of the plugins that run on Spigot 1.20.1 ranks the internals they reach, so the layer is
+built in the order that makes the most plugins work.
+
 The Bukkit plugins in use are ported, so Golem needs no Bukkit layer for this server. A Bukkit layer
 stays an option for later. It has to be Java, because plugins are Java, and it would build Bukkit
 events only for event types that a plugin listens to and create the Bukkit wrapper objects only when
