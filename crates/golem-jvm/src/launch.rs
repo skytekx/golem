@@ -195,7 +195,9 @@ fn drop_jvm_type(arguments: Vec<String>) -> Result<Vec<String>, ArgError> {
                 "it chooses another JVM than the one of the Java home",
             ));
         }
-        if argument != "-server" && argument != "-client" {
+        // KnownVMIndex of java.c strips a leading -J before it compares with jvm.cfg.
+        let name = argument.strip_prefix("-J").unwrap_or(&argument);
+        if name != "-server" && name != "-client" {
             kept.push(argument);
         }
     }
