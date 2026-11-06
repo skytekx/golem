@@ -20,11 +20,8 @@ allow = [
     # Permissive licenses that the GPL 3 family takes, as the FSF lists them.
     "MIT",
     "Apache-2.0",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
     "ISC",
     "Unicode-3.0",
-    "Zlib",
 ]
 
 [bans]
@@ -40,3 +37,5 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 
 [advisories]
 yanked = "deny"
+# The git of the system reaches the database where the built in client meets a proxy.
+git-fetch-with-cli = true
