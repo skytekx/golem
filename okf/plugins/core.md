@@ -3,8 +3,8 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 type: Spec
 title: Core plugin
-description: The core plugin of Golem and its command golem, which names the license and the source of the running build as section 13 of the AGPL asks, the TPS and MSPT of the server and the budget of every plugin.
-tags: [plugins, core, command, agpl, source, status]
+description: The core plugin of Golem and its command golem, which names the license and the source of the running build as section 13 of the AGPL asks, the TPS and MSPT of the server, the budget of every plugin, who runs a command, and the tools of operators that read the game, teleport a player to a safe place and name them in the player list.
+tags: [plugins, core, command, agpl, source, status, operators, game]
 timestamp: 2026-11-06
 ---
 
@@ -16,19 +16,30 @@ command `golem` and logs once that the bridge is connected. The program golem ad
 
 ## The command golem
 
-The command needs no permission, since section 13 of the AGPL gives every player the right to the
-source, and the status names nothing that a player could misuse. The first word of the arguments
-picks the subcommand, in any case, and the words after it are ignored.
+The subcommands `source`, `status`, `whoami` and `help` need no permission, since section 13 of
+the AGPL gives every player the right to the source, and they name nothing that a player could
+misuse. The tools of operators read the game and change it, so only the console, a player of
+operator level 2 and more and another source of level 2 and more may run them, `OPERATOR_LEVEL`.
+The first word of the arguments picks the subcommand, in any case, and the words after it are its
+arguments, which `source`, `status`, `whoami` and `help` ignore.
 
-| Command | Answer |
-| --- | --- |
-| `/golem` | The help |
-| `/golem help` | The help |
-| `/golem source` | The license, the version, the repository, the commit and the link to its source |
-| `/golem status` | The TPS, the MSPT and the ticks, and the budget of every plugin |
-| `/golem <other>` | `The subcommand <other> of /golem is unknown.` and the help |
+| Command | Who | Answer |
+| --- | --- | --- |
+| `/golem` | Everyone | The help |
+| `/golem help` | Everyone | The help |
+| `/golem source` | Everyone | The license, the version, the repository, the commit and the link to its source |
+| `/golem status` | Everyone | The TPS, the MSPT and the ticks, and the budget of every plugin |
+| `/golem whoami` | Everyone | Who Golem sees run the command, and at which level |
+| `/golem player <name>` | Operators | Where a player is and how they play |
+| `/golem world [<dimension>]` | Operators | The spawn and the heights of a dimension, by default the Overworld |
+| `/golem teleport <name> <dimension> <x> <y> <z>` | Operators | A teleport to the nearest safe place |
+| `/golem listname <name> [<text>]` | Operators | The name of a player in the player list, cleared without a text |
+| `/golem <other>` | Everyone | `The subcommand <other> of /golem is unknown.` and the help |
 
-The console runs the same command, without the slash, and sees the same lines.
+The console runs the same command, without the slash, and sees the same lines. A source below the
+level reads `Only the console and operators of level 2 and more may run /golem <name>.`, and a
+player is judged by their operator level as the game answers it, whoever made the command run as
+them.
 
 ## Source
 
@@ -69,12 +80,68 @@ ticks and the TPS is capped at 20. One line per plugin follows, in the order of 
 the counts of [Plugins](index.md#budgets). The call of the status itself is counted after it
 answers.
 
+## Who runs a command
+
+`/golem whoami` names the sender of [Plugins](index.md#commands) as Golem sees them, one line:
+
+| Sender | Answer |
+| --- | --- |
+| The console and RCON | `You run /golem as the console.` |
+| A player | `You run /golem as the player Tester at the operator level 0.` |
+| Another source | `You run /golem as @ at the level 2.` for a command block, or the name of an entity |
+
+A command block keeps the line as its last output, which `data get block <x> <y> <z> LastOutput`
+shows, and a function sees no line, since the game hides the answers to a silent source.
+
+## The tools of operators
+
+`/golem player <name>` takes the name or the UUID of a player online, in any case, and answers
+six lines from the game:
+
+```text
+Tester (f3d28cb0-7225-3cb1-baeb-2dadd2be89ae): minecraft:overworld -21.50 63.00 -0.50, yaw 0.0, pitch 0.0
+Game mode survival, ping 0 ms, operator level 4, idle 1.2 s
+Display name: Tester
+List name: none
+Respawn point: minecraft:overworld 10 64 10
+Main hand: 3 minecraft:diamond
+```
+
+`/golem world [<dimension>]` answers the shared spawn with its angle and the heights of the blocks,
+the lowest y and the y above the highest:
+
+```text
+minecraft:the_nether: spawn 4 70 4 at the angle 0.0, blocks from y 0 below y 256
+```
+
+`/golem teleport <name> <dimension> <x> <y> <z>` asks the game for the nearest safe place within 3
+blocks of the target, `SAFE_RADIUS`, with the search of [Bridge](../bridge.md#the-game), and queues
+the teleport there with the rotation the player has, also into another dimension. It answers
+`Teleported Tester to minecraft:the_nether -0.50 100.00 0.50, yaw 0.0, pitch 0.0.`, or
+`No safe place within 3 blocks of <target>, so Tester stays.` when there is none, and refuses a
+coordinate that is no number or lies beyond 30000000. It is the teleport of an operator across
+dimensions that never lands a player in a wall, in lava or above the void.
+
+`/golem listname <name> [<text>]` queues the name of the player in the player list, which holds
+until the player leaves, or its clearing without a text, and answers
+`The player list names Tester [AFK] Tester.` or `The player list shows the name of Tester again.`
+
+Each tool answers `No player <name> is online.` for a player who is not, names a dimension the
+server does not have, and answers its usage for words it cannot read. The tools ask the game on
+the server thread alone, so a tool answers `The game gives no answer now, so try again.` when the
+game cannot answer.
+
 ## Help
 
 ```text
 Golem 0.1.0, the subcommands of /golem:
 /golem source: the license of Golem and the source of this build
 /golem status: the TPS, the MSPT and the time every plugin costs
+/golem whoami: who Golem sees run the command, and at which level
+/golem player <name>: where a player is and how they play, for operators
+/golem world [<dimension>]: the spawn and the heights of a dimension, for operators
+/golem teleport <name> <dimension> <x> <y> <z>: a teleport to the nearest safe place, for operators
+/golem listname <name> [<text>]: the name of a player in the player list, for operators
 /golem help: this help
 ```
 
@@ -94,6 +161,13 @@ A later `ServerStarting` logs nothing. Every event passes.
 The notebook `tests/notebooks/04_plugins.ipynb` checks every answer above in its section on the
 core plugin: the five lines of the source with a known commit, with an unknown commit and of the
 build, the help of `/golem` and `/golem help`, the error of an unknown subcommand, the first line
-of the status against the statistics of the bridge, and the single line of the log.
+of the status against the statistics of the bridge, and the single line of the log. Its section on
+the tools of operators checks `whoami` for every sender, the refusal below level 2 and every
+answer and action of `player`, `world`, `teleport` and `listname` against a scripted game. The
+notebook `tests/notebooks/07_forge_boot.ipynb` runs them under `golem run` against the real game:
+`whoami` for the console, the player, an armor stand and a command block, `player` and `world`
+against what the console set, a teleport onto a block of magma in the Nether that lands on the
+nearest obsidian, a teleport into solid obsidian that finds no place, and the name in the player
+list as the client sees it.
 
 Related: [Plugins](index.md), [Bridge](../bridge.md), [Licensing](../../Documentation/licensing.md).

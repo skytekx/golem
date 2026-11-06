@@ -18,12 +18,14 @@
 //! | --- | --- |
 //! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
 //! | `core_plugin` | [`CorePlugin`], the command golem, and [`Source`], the source that the AGPL asks Golem to offer |
+//! | `operator` | The subcommands of /golem that ask the game, most of them for operators |
 //!
 //! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
 //! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
 //! `tests/notebooks/04_plugins.ipynb` drives the runtime through golem-devtool.
 
 mod core_plugin;
+mod operator;
 mod runtime;
 
 use golem_bridge::{
@@ -44,6 +46,10 @@ pub use crate::{
         CorePlugin,
         Source,
         UNKNOWN_COMMIT, //
+    },
+    operator::{
+        OPERATOR_LEVEL,
+        SAFE_RADIUS, //
     },
     runtime::{
         Budget,

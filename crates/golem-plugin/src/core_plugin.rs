@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
- * The core plugin of golem-plugin: the command golem with its subcommands source, status and
- * help, and the source of the running Golem that section 13 of the AGPL asks it to offer.
+ * The core plugin of golem-plugin: the command golem with its subcommands source, status, whoami
+ * and help, the subcommands of operators of operator.rs, and the source of the running Golem that
+ * section 13 of the AGPL asks it to offer.
  */
 
 use golem_bridge::{
@@ -16,6 +17,7 @@ use crate::{
     CommandSpec,
     Context,
     Plugin,
+    operator,
     runtime::milliseconds, //
 };
 
@@ -24,6 +26,18 @@ pub const UNKNOWN_COMMIT: &str = "unknown";
 
 /// The command of the core plugin.
 pub const COMMAND: &str = "golem";
+
+/// The lines of the help after its first, one per subcommand.
+const HELP: [&str; 8] = [
+    "/golem source: the license of Golem and the source of this build",
+    "/golem status: the TPS, the MSPT and the time every plugin costs",
+    "/golem whoami: who Golem sees run the command, and at which level",
+    "/golem player <name>: where a player is and how they play, for operators",
+    "/golem world [<dimension>]: the spawn and the heights of a dimension, for operators",
+    "/golem teleport <name> <dimension> <x> <y> <z>: a teleport to the nearest safe place, for operators",
+    "/golem listname <name> [<text>]: the name of a player in the player list, for operators",
+    "/golem help: this help",
+];
 
 /// The source of the running Golem, which section 13 of the AGPL asks it to offer.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -110,12 +124,12 @@ impl CorePlugin {
 
     /// Answers the lines of `/golem help`.
     fn help(&self) -> Vec<String> {
-        vec![
-            format!("Golem {}, the subcommands of /golem:", self.source.version),
-            "/golem source: the license of Golem and the source of this build".to_owned(),
-            "/golem status: the TPS, the MSPT and the time every plugin costs".to_owned(),
-            "/golem help: this help".to_owned(),
-        ]
+        let mut lines = vec![format!(
+            "Golem {}, the subcommands of /golem:",
+            self.source.version
+        )];
+        lines.extend(HELP.map(str::to_owned));
+        lines
     }
 
     /// Answers the lines of `/golem status`, from the tick statistics of the bridge and the
@@ -158,7 +172,8 @@ impl Plugin for CorePlugin {
     fn commands(&self) -> Vec<CommandSpec> {
         vec![CommandSpec {
             name: COMMAND.to_owned(),
-            summary: "The source, the status and the help of Golem".to_owned(),
+            summary: "The source, the status, the help and the tools of operators of Golem"
+                .to_owned(),
         }]
     }
 
@@ -180,24 +195,30 @@ impl Plugin for CorePlugin {
     fn on_command(
         &mut self,
         _name: &str,
-        _sender: &Sender,
+        sender: &Sender,
         arguments: &str,
         context: &mut Context<'_>,
     ) -> Vec<String> {
-        let subcommand = arguments
-            .split_whitespace()
-            .next()
-            .map(str::to_ascii_lowercase);
-        match subcommand.as_deref() {
-            None | Some("help") => self.help(),
-            Some("source") => self.source.lines(),
-            Some("status") => self.status(context),
+        let words: Vec<&str> = arguments.split_whitespace().collect();
+        let subcommand = words.first().map(|word| word.to_ascii_lowercase());
+        let rest = words.get(1..).unwrap_or_default();
+        let operation: fn(&[&str], &Context<'_>) -> Vec<String> = match subcommand.as_deref() {
+            None | Some("help") => return self.help(),
+            Some("source") => return self.source.lines(),
+            Some("status") => return self.status(context),
+            Some("whoami") => return operator::whoami(sender, context.game()),
+            Some("player") => operator::player,
+            Some("world") => operator::world,
+            Some("teleport") => operator::teleport,
+            Some("listname") => operator::list_name,
             Some(other) => {
                 let mut lines = vec![format!("The subcommand {other} of /golem is unknown.")];
                 lines.extend(self.help());
-                lines
+                return lines;
             }
-        }
+        };
+        let name = subcommand.unwrap_or_default();
+        operator::refusal(&name, sender, context.game()).unwrap_or_else(|| operation(rest, context))
     }
 }
 
