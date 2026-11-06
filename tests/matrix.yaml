@@ -44,3 +44,8 @@ entries:
   # Golem itself: Forge under golem run with the bridge, a player, the core plugin and the stop paths.
   - notebook: 07_forge_boot
     cell_timeout: 1800
+
+  # The real SkyTekx 3 modpack of the live server under java, golem and Arclight: its mods, its
+  # errors, its TPS and its stop. It needs python3 -I tests/fetch.py --only modpack first.
+  - notebook: 08_modpack_boot
+    cell_timeout: 3600
