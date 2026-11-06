@@ -22,6 +22,7 @@ type Subcommand = (&'static str, &'static str, fn(&[String]) -> i32);
 const SUBCOMMANDS: &[Subcommand] = &[
     jvm::ARGFILE,
     jvm::LAUNCH_SPEC,
+    jvm::JVM_RUN,
     permissions::CHECK,
     permissions::GROUPS,
     bridge::PLUGINS,
