@@ -1,7 +1,14 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+// SPDX-FileCopyrightText: LuckPerms contributors
 /*
  * golem-permissions: the permissions of Golem, in place of LuckPerms.
+ *
+ * This crate is the port of LuckPerms 5.5.71 to Golem, and it keeps the MIT license of
+ * LuckPerms with the copyright of its holders, as every port of a Bukkit plugin keeps the license
+ * of its upstream (ports.toml, Documentation/licensing.md section 6). The rest of Golem is under
+ * the AGPL 3 only, which the MIT license combines with.
  *
  * Groups inherit from groups, nodes may end in a wildcard, a node may be denied, and a player
  * may hold nodes and groups of their own. The groups and nodes are a tracked configuration file,

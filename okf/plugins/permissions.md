@@ -11,7 +11,9 @@ timestamp: 2026-11-06
 # Permissions
 
 The crate `golem-permissions` is the one permission system of Golem. It takes the place of
-LuckPerms 5.5.71 and of the permission switches of EssentialsX. The groups and nodes are a tracked
+LuckPerms 5.5.71 and of the permission switches of EssentialsX. As the port of LuckPerms it keeps
+the MIT license of LuckPerms and names its holders, lucko (Luck) and the LuckPerms contributors,
+beside the holder of Golem, see [Licensing](../../Documentation/licensing.md). The groups and nodes are a tracked
 TOML file, [config/permissions.toml](../../config/permissions.toml), and every decision names the
 rule that made it. A plugin asks it whether a player holds a node, and so will the handler of the
 Forge PermissionAPI. The store in SQLite comes later and is seeded from the same file. Today the

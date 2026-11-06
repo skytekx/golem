@@ -1,8 +1,11 @@
-# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+# SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+# SPDX-FileCopyrightText: LuckPerms contributors
 #
 # The permissions of Golem: groups with inheritance, nodes with wildcards and values per player,
-# seeded from a tracked configuration file, in place of LuckPerms.
+# seeded from a tracked configuration file, in place of LuckPerms. The crate is the port of
+# LuckPerms 5.5.71 and keeps its MIT license, see ports.toml.
 
 [package]
 name = "golem-permissions"
@@ -10,7 +13,7 @@ description = "Groups, nodes and player values of Golem, in place of LuckPerms."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-license.workspace = true
+license = "MIT"
 authors.workspace = true
 repository.workspace = true
 publish = false

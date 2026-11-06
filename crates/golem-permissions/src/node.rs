@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+// SPDX-FileCopyrightText: LuckPerms contributors
 /*
  * The syntax of golem-permissions: the nodes of the configuration with their wildcards and
  * denies, the node a check names, the name of a group and the UUID of a player.

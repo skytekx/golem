@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+// SPDX-FileCopyrightText: LuckPerms contributors
 /*
  * The table of one source, a group or the nodes of a player, built once at load time so that a
  * check costs one lookup per level of the node it names and allocates nothing.

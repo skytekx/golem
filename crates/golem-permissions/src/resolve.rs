@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+// SPDX-FileCopyrightText: LuckPerms contributors
 /*
  * The resolution of golem-permissions: which source decides whether a player holds a node, in
  * the order of the rules that lib.rs documents, without a string built on the way.

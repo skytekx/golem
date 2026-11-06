@@ -2,18 +2,26 @@ Golem
 Copyright (C) 2026 Florian Kleber <opensource@skytekx.com>
 
 Golem is licensed under the GNU Affero General Public License version 3
-only, whose text LICENSE holds. This file names the work of others that
-Golem carries or derives code or data from, with the license of each, whose
-text the folder LICENSES/ holds as <identifier>.txt. It adds attribution
-and no condition to the license of Golem.
+only, whose text LICENSE holds, except for its ports. A Golem plugin that
+ports a Bukkit plugin keeps the license of that plugin and names its holders,
+as ports.toml lists them. This file names the work of others that Golem
+carries or derives code or data from, with the license of each, whose text
+the folder LICENSES/ holds as <identifier>.txt. It adds attribution and no
+condition to the license of Golem or of a port.
 
 Each entry names the project, the version Golem follows, the files of Golem
 that derive from it, the license under which Golem takes the work, and the
 copyright lines of the project's license file.
 
-Golem does not carry Minecraft, Forge, Arclight, CraftBukkit, EssentialsX or
-LuckPerms code. The server jar of Minecraft comes from Mojang's download and
-is never part of this repository.
+The AGPL 3 and the GPL 3 each allow, in their section 13, to combine a work
+under one of them with a work under the other into one program. The program
+golem combines its own code under the AGPL 3 only with the ports under the
+GPL 3 or later and under the MIT license that way. Each part keeps its
+license, and the program as a whole is offered under section 13 of the AGPL.
+
+Golem does not carry Minecraft, Forge, Arclight or CraftBukkit code. The
+server jar of Minecraft comes from Mojang's download and is never part of
+this repository.
 
 
 Aosabi
@@ -29,6 +37,40 @@ Copyright (c) 2026 Florian Kleber
 The license lint of Golem is derived from the one of Aosabi and changed by
 the Golem authors. The MIT License asks that its notice be kept with the
 code:
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+
+LuckPerms
+=========
+
+Project: LuckPerms
+URL: https://github.com/LuckPerms/LuckPerms
+Version: 5.5.71, the build that the Mac mini runs
+Files: crates/golem-permissions
+License: MIT
+Copyright (c) lucko (Luck) <luck@lucko.me>
+Copyright (c) contributors
+
+The crate golem-permissions is the port of LuckPerms 5.5.71 to Golem and
+keeps its license. The MIT License asks that its notice be kept with the code:
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the

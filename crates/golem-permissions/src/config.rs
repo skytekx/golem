@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-License-Identifier: MIT
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+// SPDX-FileCopyrightText: lucko (Luck) <luck@lucko.me>
+// SPDX-FileCopyrightText: LuckPerms contributors
 /*
  * The configuration of golem-permissions: the TOML file, its strict validation and the tables it
  * becomes, so that a check finds everything it needs built at load time.

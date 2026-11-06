@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The Golem plugins that port a Bukkit plugin. Each keeps the license of the plugin it ports, as
+# the owner ruled on 2026-11-06, and names the holders of that plugin beside the holder of Golem.
+# Rule 9 of .github/scripts/license_lint.py holds every file below the path of a port to its
+# license and its holders, its Cargo.toml to its license, and NOTICE to a section on its upstream.
+# Documentation/licensing.md section 6 explains the rule.
+#
+# A port has these fields.
+#
+#   name      the crate
+#   path      the directory of the crate, relative to the root
+#   upstream  the plugin and the version it ports, as NOTICE names it
+#   source    where the source of that version lies
+#   license   the SPDX identifier of the license of the upstream, exactly
+#   holders   the copyright holders of the upstream, each of which a SPDX-FileCopyrightText line
+#             of every file of the port must hold
+
+[[port]]
+name = "golem-permissions"
+path = "crates/golem-permissions"
+upstream = "LuckPerms 5.5.71"
+source = "https://github.com/LuckPerms/LuckPerms"
+license = "MIT"
+holders = ["lucko (Luck) <luck@lucko.me>", "LuckPerms contributors"]
