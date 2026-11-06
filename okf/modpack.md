@@ -132,11 +132,13 @@ The four ERROR lines are the same under the first three boots: the client mixin 
 Nostalgic Tweaks, the reflection of AllTheLeaks into Citadel, and the network registry of Forge,
 which lists the channels that turn away the vanilla client of the notebook. The fourth boot lacks
 the line of Nostalgic Tweaks, whose backup the boot before it left. Without the vanilla client and
-without Nostalgic Tweaks, which the live server moved out, the baseline of the server wiki remains:
-the line of AllTheLeaks, and on the live server the warning of EssentialsX about the hybrid. A first
-boot writes 1,705 WARN lines of the configuration of Forge, which fills in new files. The fourth
-boot starts on the files that the third left, and Forge still corrects `ticex-common.toml` there
-with two of those lines, as it does at every start of the live server: TiCEX defines
+without Nostalgic Tweaks, which the live server moved out, the two ERROR lines of the baseline of
+the server wiki remain, the `ModelBakery` mixin of AdvancedAE and the line of AllTheLeaks, as the
+page [Melting](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/content/melting.md)
+of that wiki records them, and on the live server the warning of EssentialsX about the hybrid. A
+first boot writes 1,705 WARN lines of the configuration of Forge, which fills in new files. The
+fourth boot starts on the files that the third left, and Forge still corrects `ticex-common.toml`
+there with two of those lines, as it does at every start of the live server: TiCEX defines
 `avaritia.condensingDropProbability` with a default of the type Float, the parser of TOML reads the
 0.003 of the file back as a Double, which the check of `define` refuses, so Forge logs that the file
 is not correct and corrects the key from 0.003 to its default, 0.003, and writes the same value
