@@ -15,6 +15,7 @@ mod bridge;
 mod game;
 mod jvm;
 mod permissions;
+mod store;
 
 /// A subcommand: its name, a line of help and the function that runs it on the arguments after
 /// its name.
@@ -31,6 +32,9 @@ const SUBCOMMANDS: &[Subcommand] = &[
     bridge::TICK_STATS,
     bridge::NATIVES,
     game::GAME_WIRE,
+    store::SCRIPT,
+    store::DESCRIBE,
+    store::BENCH,
 ];
 
 fn main() {

@@ -106,6 +106,7 @@ dependencies = [
  "golem-jvm",
  "golem-permissions",
  "golem-plugin",
+ "golem-store",
  "serde",
  "serde_json",
 ]
