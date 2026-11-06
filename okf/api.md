@@ -80,8 +80,10 @@ format of the mapping files.
 14. Coverage is three numbers that CI holds so that they only rise: mapped, present in the SDL, and
     proven by a document of the conformance corpus on a booted server.
 15. Bukkit and Spigot plugins also run unchanged through a Bukkit layer in the JVM of Forge, as the
-    owner ruled. The layer is one more client of this schema in process, generated from the same
-    mapping, see [section 17](#17-the-bukkit-layer). It is no form of a Golem plugin.
+    owner ruled. For the public API the layer is one more client of this schema in process,
+    generated from the same mapping, and for the internals of CraftBukkit and the classes of
+    Minecraft it reaches the game beside the schema, see [section 17](#17-the-bukkit-layer). It is
+    no form of a Golem plugin.
 16. Measured on 2026-11-06: a document of seven fields costs about 13 µs through `Service::execute`
     of Aosabi with validation off and about 30 µs with the 27 rules, and a document of one field
     about 7 to 8 µs with validation off, against about 100 ns for a JNI call. That gap is the price
@@ -118,7 +120,7 @@ format of the mapping files.
   ------ JNI ----------------------------------------------------------------------------
    bridge/host: the natives of Host and the generated contract interfaces
    bridge/mod:  generated and hand written Java over Minecraft and Forge, Mixins, frames
-   the Bukkit layer: Java in the JVM of Forge, one more client in process, section 17
+   the Bukkit layer: Java in the JVM of Forge, a client in process for level 1, section 17
    Minecraft 1.20.1, Forge 47.4.18, 265 mods, unchanged
 ```
 
@@ -1952,17 +1954,17 @@ the final judge, and every quirk the port fixes gets its issue, as CONTRIBUTING.
 The owner ruled on 2026-11-06 that Bukkit and Spigot plugins also run unchanged, through a Bukkit
 layer in the JVM of Forge on top of this API, with the public API, the internals of CraftBukkit that
 plugins reach and the classes of Minecraft that they call by their Spigot names
-([Plan](plan.md#bukkit-plugins)). The layer has a page of its own, which a survey of the plugins
-orders. It is no form of a Golem plugin: every Golem plugin is native Rust on Aosabi. This page
-fixes what the layer takes from the API, so the two stay one design.
+([Plan](plan.md#bukkit-plugins)). The layer has a page of its own, [Bukkit layer](bukkit-layer.md),
+which a survey of 503 plugins orders. It is no form of a Golem plugin: every Golem plugin is native
+Rust on Aosabi. This page fixes what the layer takes from the API, so the two stay one design.
 
-- The layer is one more client in process. Its Java implementations of the interfaces of Bukkit,
-  such as `Player` and `World`, are generated from the mapping files: a member of the status
-  `schema` calls its coordinate through the native `Host.call(operation, depth)`, which runs the
-  canonical operation through the executor of Aosabi on the thread of the caller, with the arguments
-  and the answer in the buffers of [7.3](#73-frames-and-buffers). So the layer and the Rust plugins
-  reach the same coordinate functions, and the mapping file is the one source for the schema, the
-  client and the layer.
+- For the public API, level 1 of the layer, the layer is one more client in process. Its Java
+  implementations of the interfaces of Bukkit, such as `Player` and `World`, are generated from the
+  mapping files: a member of the status `schema` calls its coordinate through the native
+  `Host.call(operation, depth)`, which runs the canonical operation through the executor of Aosabi
+  on the thread of the caller, with the arguments and the answer in the buffers of
+  [7.3](#73-frames-and-buffers). So the layer and the Rust plugins reach the same coordinate
+  functions, and the mapping file is the one source for the schema, the client and the layer.
 - A member of the status `lib` is the class of the reference jar itself, such as `Location` and
   `Vector`, which the layer loads as the API that plugins link, and a member of the status `via` is
   its rewrite in Java.
@@ -1970,15 +1972,51 @@ fixes what the layer takes from the API, so the two stay one design.
   of its priority with one JNI call, the layer builds the Bukkit event over the frame when the
   listener first reads it, and its setters write the frame through the mutations of the event, so
   the Rust plugins and the Bukkit plugins share one order.
-- The internals of CraftBukkit that plugins reach, such as the permissible of `CraftHumanEntity` and
-  the command map with its known commands, are coordinates of Golem's own in `api/golem-own.toml`,
-  ranked by the survey, and the layer gives them the shapes the plugins expect.
+- The internals of CraftBukkit that hold state of Golem, such as the permissible of
+  `CraftHumanEntity` and the command map with its known commands, are coordinates of Golem's own in
+  `api/golem-own.toml`, ranked by the survey, and the layer gives them the shapes the plugins
+  expect. The other internals hand out objects of the game, as the paragraphs below say.
 - The threads keep their rules. The layer runs the async tasks of Bukkit on its pool with the
   classes `any` and `snapshot`, and turns `NOT_ON_SERVER_THREAD` into the `IllegalStateException` of
   the `AsyncCatcher` of CraftBukkit.
 - A call from the layer crosses the JNI twice, Java to Rust and Rust to Java, about 200 to 600 ns by
   the figure of the brief, plus one pass of the executor, about 7 to 8 µs until A2 lands, which the
   gates measure with the stub of [6.2](#62-what-contract-gen-writes).
+
+The layer is a client of this schema for level 1 only. The survey of [Bukkit
+layer](bukkit-layer.md), 503 plugins collected and counted by `tools/plugin-survey` on 2026-11-06,
+shows that the stand-ins of level 2 mostly hand plugins live objects of Forge: on code that runs on
+1.20.1, `CraftPlayer.getHandle` returns the `ServerPlayer` for 160 plugins,
+`CraftItemStack.asNMSCopy` a Minecraft `ItemStack` for 130 and `CraftWorld.getHandle` the
+`ServerLevel` for 83. 239 plugins call classes of Minecraft directly, level 3, which the remapper of
+the layer maps onto the classes of Forge. For these plugins the layer reaches the game beside the
+API and not through it: a plugin that holds a `ServerPlayer` changes the game with no coordinate, no
+mutation and no frame of this API in between. So the state that Golem keeps for both ways is the
+state of the game itself, or one object that both ways reach, and never a copy that only one way
+updates.
+
+- **One command registry.** Forge's Brigadier dispatcher, Golem's own commands and the Bukkit
+  command map see one registry. The `knownCommands` of the Bukkit map is live, since 97 plugins read
+  and write it by reflection, so a command that a plugin puts in or takes out is a command that
+  players can or cannot run, and `syncCommands` resends the tree.
+- **One wrapper per entity for its life.** Every entity has exactly one Bukkit wrapper from its
+  spawn to its removal, and `getHandle` and the field `entity` of that wrapper return the live Forge
+  entity, so a plugin that keeps a wrapper, compares wrappers or reads the field meets the entity
+  that the API names.
+- **Permission checks through the permissible in its field.** Every permission check of a Bukkit
+  sender, also one that this API answers for it, goes through the `PermissibleBase` in the field
+  `perm` of its `CraftHumanEntity`, `CraftEntity` or `ServerCommandSender`, which LuckPerms,
+  GroupManager and PowerRanks replace. The answer of [9.9](#99-permissions) from the tables of
+  `golem-permissions` holds while that field holds the permissible of the layer. How Golem's own
+  checks ask a Bukkit permission plugin that owns the decision is open for the owner on
+  [Bukkit layer](bukkit-layer.md#13-decisions-for-the-owner).
+- **Persistent data on the same tags.** The `CraftPersistentDataContainer` of the layer is backed by
+  the `CompoundTag` of its holder, whose raw map NBT-API reads, and the containers of
+  [9.11](#911-persistent-data-containers) live on the same tags, so a value written one way reads
+  the same the other way.
+- **Mirrors hooked in the game.** A mirror of [12.3](#123-the-rules-that-keep-it-there) stays true
+  only when its hook sits in the method of the game that changes the state, since a plugin with a
+  handle calls that method without any coordinate.
 
 ## 18. Real plugins translated
 
