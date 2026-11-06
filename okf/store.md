@@ -405,7 +405,7 @@ until the next change.
 | `close()` | Writes, checkpoints and closes the file and ends the writer, and every later close answers as the first |
 | `stats()` | The changes queued, written, lost and pending, the batches and the time of the writer |
 | `MAX_BATCH` | 4096, the most changes in one transaction of the writer |
-| `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache |
+| `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache as the call found it, which a change of another thread during the check does not disturb |
 | `describe(path)` | The schema of a file that no process holds, as SQLite reports it. As every reader of SQLite it may leave the files `-wal` and `-shm` beside the store |
 
 ## Refusals
@@ -514,10 +514,10 @@ from above. The file was 7.6 MB.
 The notebook `tests/notebooks/09_store.ipynb` drives the store through the subcommands
 `golem-devtool store`, which runs a JSON script of calls and prints the answer of every step as a
 line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`.
-It checks the schema against the tables of this page, every call and every refusal, a reopen after
-a close, a store dropped without a close, a reopen after a kill between changes, a reader of the
-answers that goes away, a writer that fails at a limit of the file size, the files the open
-refuses and the cost above.
+It checks the schema against the tables of this page, every call and every refusal, a check while
+another thread changes the store, a reopen after a close, a store dropped without a close, a
+reopen after a kill between changes, a reader of the answers that goes away, a writer that fails
+at a limit of the file size, the files the open refuses and the cost above.
 
 Related: [Plugins](plugins/index.md), [Permissions](plugins/permissions.md),
 [Plan](plan.md#data-migration), [Index](index.md).

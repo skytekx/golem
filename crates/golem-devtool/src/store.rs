@@ -581,7 +581,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
         )?)),
         _ => {
             let store = session.store()?;
-            lifecycle(store, op)
+            lifecycle(store, op, &arguments)
                 .or_else(|| players(store, op, &arguments))
                 .or_else(|| places(store, op, &arguments))
                 .or_else(|| messages(store, op, &arguments))
@@ -624,14 +624,75 @@ fn repeat(session: &mut Session, arguments: &Arguments<'_>) -> Answer {
     Ok(json!({"rounds": count, "calls": calls, "refused": refused, "nanos_per_call": nanos}))
 }
 
-fn lifecycle(store: &Store, op: &str) -> Option<Answer> {
+fn lifecycle(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> {
     let answer = match op {
         "flush" => store.flush().map(|()| Value::Null),
         "stats" => Ok(stats_json(&store.stats())),
         "check" => store.check().map(|check| check_json(&check)),
+        "check_race" => {
+            return Some(
+                arguments
+                    .count("checks")
+                    .and_then(|checks| check_race(store, checks)),
+            );
+        }
         _ => return None,
     };
     Some(answer.map_err(StepError::from))
+}
+
+/// Runs `checks` checks while a second thread changes a setting and joins players, a change
+/// every 100 microseconds, and answers how many checks failed, in which parts, and the changes
+/// the second thread made. A check compares the file with the cache as the call found it, so a
+/// change that lands while the check runs never counts against it.
+fn check_race(store: &Store, checks: usize) -> Answer {
+    let stop = Arc::new(AtomicBool::new(false));
+    let changer = {
+        let (store, stop) = (store.clone(), Arc::clone(&stop));
+        std::thread::spawn(move || -> Result<u64, StoreError> {
+            let mut change = 0_u64;
+            while !stop.load(Ordering::Relaxed) {
+                change += 1;
+                if change.is_multiple_of(2) {
+                    let player =
+                        Uuid(0xc4ec_0000_0000_4000_8000_0000_0000_0000 | u128::from(change % 64));
+                    store.join(
+                        player,
+                        &format!("checker{}", change % 64),
+                        i64::try_from(change).unwrap_or(0),
+                    )?;
+                } else {
+                    store.set_setting("check_race", &change.to_string())?;
+                }
+                std::thread::sleep(Duration::from_micros(100));
+            }
+            Ok(change)
+        })
+    };
+    let mut failed = 0_u64;
+    let mut parts: BTreeMap<String, u64> = BTreeMap::new();
+    let mut outcome = Ok(());
+    for _ in 0..checks {
+        match store.check() {
+            Ok(check) if check.passed() => {}
+            Ok(check) => {
+                failed += 1;
+                for part in check.cache_differences {
+                    *parts.entry(part).or_default() += 1;
+                }
+            }
+            Err(error) => {
+                outcome = Err(error);
+                break;
+            }
+        }
+    }
+    stop.store(true, Ordering::Relaxed);
+    let made = changer
+        .join()
+        .map_err(|_| argument("the thread of the changes panicked".to_owned()))??;
+    outcome?;
+    Ok(json!({"checks": checks, "failed": failed, "parts": parts, "changes": made}))
 }
 
 fn players(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> {

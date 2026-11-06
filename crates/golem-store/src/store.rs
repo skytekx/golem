@@ -357,17 +357,20 @@ impl Store {
         read(&self.lock().cache)
     }
 
-    /// Sends a message that carries a reply to the writer and waits for the reply.
+    /// Sends a message that carries a reply to the writer and waits for the reply. The message
+    /// is built and sent under the lock of the cache, as every change sends its operation, so
+    /// the cache that `message` sees is the file plus exactly the changes before the message in
+    /// the queue.
     fn ask<T>(
         &self,
-        message: impl FnOnce(mpsc::SyncSender<Result<T, StoreError>>) -> Message,
+        message: impl FnOnce(&Cache, mpsc::SyncSender<Result<T, StoreError>>) -> Message,
     ) -> Result<T, StoreError> {
         let (reply, answer) = mpsc::sync_channel(1);
         {
             let state = self.lock();
             let sender = state.sender.as_ref().ok_or(StoreError::Closed)?;
             sender
-                .send(message(reply))
+                .send(message(&state.cache, reply))
                 .map_err(|_| StoreError::Failed("the writer thread ended".to_owned()))?;
         }
         answer
@@ -380,7 +383,7 @@ impl Store {
         &self,
         query: impl FnOnce(&Connection) -> Result<T, StoreError> + Send + 'static,
     ) -> Result<T, StoreError> {
-        self.ask(|reply| {
+        self.ask(|_, reply| {
             Message::Read(Box::new(move |connection| {
                 let _ = reply.send(query(connection));
             }))
@@ -390,7 +393,7 @@ impl Store {
     /// Waits until every change before the call is in the file and synced. Not for the server
     /// thread, which never waits for the disk.
     pub fn flush(&self) -> Result<(), StoreError> {
-        self.ask(Message::Flush)
+        self.ask(|_, reply| Message::Flush(reply))
     }
 
     /// Writes every change into the file, checkpoints the log into it, closes it and ends the
@@ -424,15 +427,17 @@ impl Store {
     /// Checks the file after every change before the call: the integrity of `SQLite`, the foreign
     /// keys, every balance against the log, and the file against the cache as the call found
     /// it. Not for the server thread, since it reads the whole file.
+    ///
+    /// The copy of the cache and the read of the file join the queue of the writer under one
+    /// lock, so a change of another thread lands either in both or in neither, and never counts
+    /// as a difference of a sound store.
     pub fn check(&self) -> Result<Check, StoreError> {
-        let snapshot = {
-            let state = self.lock();
-            if state.sender.is_none() {
-                return Err(StoreError::Closed);
-            }
-            crate::compare::snapshot(&state.cache)
-        };
-        self.query(move |connection| crate::compare::check(connection, &snapshot))
+        self.ask(|cache, reply| {
+            let snapshot = crate::compare::snapshot(cache);
+            Message::Read(Box::new(move |connection| {
+                let _ = reply.send(crate::compare::check(connection, &snapshot));
+            }))
+        })
     }
 
     // The players.
