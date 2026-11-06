@@ -106,6 +106,11 @@ pub use crate::{
     writer::MAX_BATCH,
 };
 
+/// The version of `SQLite` that the store runs, the amalgamation that `libsqlite3-sys` bundles.
+pub fn sqlite_version() -> &'static str {
+    rusqlite::version()
+}
+
 /// Writes one line to the log of the server, the standard error, behind the prefix
 /// `[golem] store:`. A line that the standard error does not take is lost.
 pub(crate) fn log(message: std::fmt::Arguments<'_>) {

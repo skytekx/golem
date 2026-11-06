@@ -19,11 +19,12 @@ licenses of their upstreams, which combine with it under section 13 of the GPL 3
 see [Licensing](../Documentation/licensing.md). The migration tool of the
 [plan](plan.md#data-migration) writes it from the data of EssentialsX and LuckPerms.
 
-SQLite is the amalgamation 3.53.2 that `libsqlite3-sys` 0.38.2 bundles, through `rusqlite`
-0.40.2, pinned exactly in the `Cargo.toml` of the workspace, so every host runs the same SQLite
-whatever its system has, and the build compiles it with the C compiler of the host. `rusqlite`
-and `libsqlite3-sys` are MIT and SQLite is in the public domain, so `cargo deny check` passes them
-against `deny.toml` with no new license.
+SQLite is the amalgamation 3.53.2 that `libsqlite3-sys` 0.38.2 bundles, through `rusqlite` 0.40.2,
+both pinned exactly in the `Cargo.toml` of the workspace, since `rusqlite` asks for any
+`libsqlite3-sys` 0.38. So every host runs the same SQLite whatever its system has, and the build
+compiles it with the C compiler of the host. `golem_store::sqlite_version()` answers the version the
+store runs. `rusqlite` and `libsqlite3-sys` are MIT and SQLite is in the public domain, so
+`cargo deny check` passes them against `deny.toml` with no new license.
 
 The notebook `tests/notebooks/09_store.ipynb` holds the store to this page through
 `golem-devtool`.

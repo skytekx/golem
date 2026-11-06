@@ -30,8 +30,9 @@
 //! `path`, which opens a second store beside the one of the script and closes it again, `reopen`,
 //! which closes the store and opens the same file, `repeat`, which runs its `steps` `count` times
 //! with `{i}` in a string replaced by the round from 1 and prints one line for all rounds, `sleep`
-//! with `ms`, and `wait`, which prints its line and then waits until its standard input ends, for
-//! a notebook that kills the process there.
+//! with `ms`, `sqlite_version`, which answers the version of `SQLite` that the store runs and
+//! needs no store, and `wait`, which prints its line and then waits until its standard input
+//! ends, for a notebook that kills the process there.
 //!
 //! A store that no step closed closes at the end of the script, and the exit code is 1 when that
 //! close fails. A store that a step closed answered its close in that step and is not closed
@@ -581,6 +582,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
             std::thread::sleep(Duration::from_millis(millis));
             Ok(Value::Null)
         }
+        "sqlite_version" => Ok(json!(golem_store::sqlite_version())),
         "describe" => Ok(description_json(&golem_store::describe(
             arguments.text("path")?.as_ref(),
         )?)),
