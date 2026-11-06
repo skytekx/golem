@@ -25,6 +25,7 @@ itself are on [Plan](plan.md#owner-requirements).
 | 2026-11-06 | Commits are Conventional Commits as Commitizen writes them, in the form of the Linux kernel | Built, checked in CI | [CONTRIBUTING.md](../CONTRIBUTING.md#3-commit-messages) |
 | 2026-11-06 | Test cases are Jupyter notebooks, as in Aosabi | Built | [Testing](../Documentation/testing.md) |
 | 2026-11-06 | An agent answers its own blocking questions instead of asking | In force | This page records the answers it gave |
+| 2026-11-06 | The Golem API covers an equivalent of the whole Bukkit API, Spigot included, so that every Bukkit or Spigot plugin can be converted to a Golem plugin | In work: the surface of spigot-api 1.20.1 is 1,247 types, 7,942 public methods, 5,900 fields and constants and 268 events, and a coverage check will hold the Golem API to it | [Plan](plan.md#bukkit-plugins) |
 | 2026-11-06 | Every Golem plugin ported from a Bukkit plugin keeps the license of that plugin | Built: `golem-essentials` and `golem-essentials-spawn` under GPL-3.0-or-later, `golem-permissions` under MIT, checked by rule 9 of the license lint | [Licensing](../Documentation/licensing.md#6-the-ports-and-what-golem-never-carries) |
 
 ## Answers of the agents

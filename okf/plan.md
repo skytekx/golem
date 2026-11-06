@@ -345,6 +345,13 @@ guide, section 11.
 
 ## Bukkit plugins
 
+A later ruling of 2026-11-06 replaces the scope of this section: the Golem API covers an equivalent
+of the whole Bukkit API, Spigot included, so that every Bukkit or Spigot plugin can be converted to
+a Golem plugin, not only the ones in use. The reference is `spigot-api` 1.20.1 R0.1, the last build
+of 2023-09-21, with 1,247 types, 7,942 public methods, 5,900 fields and constants and 268 events. A
+coverage check maps every part of it to its equivalent in Golem. The text below is the plan before
+that ruling.
+
 The Bukkit plugins in use are ported, so Golem needs no Bukkit layer for this server. A Bukkit layer
 stays an option for later. It has to be Java, because plugins are Java, and it would build Bukkit
 events only for event types that a plugin listens to and create the Bukkit wrapper objects only when
