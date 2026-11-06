@@ -40,6 +40,8 @@ SkyTekx 3 server and its modpack stay in the
 | [Plugins](plugins/index.md) | The plugin runtime: order, cancel chain, panics, budgets, threads, commands and tick statistics |
 | [Core plugin](plugins/core.md) | The command `golem`: source, status and help |
 | [Permissions](plugins/permissions.md) | The permissions in place of LuckPerms: the format, the rules of resolution, the seed and the quirks they fix |
+| [Plugin API](api.md) | The design of the GraphQL API of Golem on Aosabi, an equivalent of the whole Bukkit API: the schema, the client through the executor, the contract with the bridge, threads, events, remote clients, coverage, the Bukkit layer and the work breakdown |
+| [API coverage](api-coverage.md) | The format of the mapping that holds the API to every member of spigot-api 1.20.1, its statuses, the three numbers and how CI holds them |
 | [Change log](log.md) | What changed, oldest first |
 | [Decisions](decisions.md) | Every ruling of the owner |
 | [Open items](open-items.md) | What is still open |
