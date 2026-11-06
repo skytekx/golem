@@ -73,14 +73,16 @@ public interface Game {
 
 	/**
 	 * Answers the nearest place near a target where a player stands safely: x, y and z of the
-	 * feet, in the middle of the block.
+	 * feet, in the middle of the block. The search reads the blocks of loaded chunks alone and
+	 * loads none.
 	 *
 	 * @param dimension the id of the dimension, such as minecraft:overworld
 	 * @param x the x coordinate of the target
 	 * @param y the y coordinate of the target
 	 * @param z the z coordinate of the target
 	 * @param radius how far from the block of the target to look, in blocks, at most 8
-	 * @return the place, the empty string when there is none within the radius, or null when the
+	 * @return the place, the empty string when there is none within the radius, the word unloaded
+	 *     when the search met a chunk that is not loaded before it found a place, or null when the
 	 *     server has no such dimension or the target is no finite number
 	 */
 	String safeLocation(String dimension, double x, double y, double z, int radius);

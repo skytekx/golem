@@ -185,7 +185,7 @@ that may be empty is an `Option` inside, so `?` takes the outer one.
 | `spawn(dimension)` | The shared spawn of a dimension as a `Spawn`, its block and angle |
 | `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
 | `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |
-| `safe_location(target, radius)` | The nearest safe place within the radius, at most 8, with the dimension and the rotation of the target, or `Some(None)` |
+| `safe_location(target, radius)` | The `SafePlace` of the search within the radius, at most 8: `Found` with the nearest safe place, with the dimension and the rotation of the target, `Nowhere`, or `Unloaded` when a chunk it must read is not loaded, since a question loads no chunk |
 
 A question reads the game at once, through the JNI, and its time counts into the budget of the
 plugin that asks, so a plugin asks what it needs and keeps no answer longer than its call, since

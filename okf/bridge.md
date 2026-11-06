@@ -169,7 +169,7 @@ display name that a mod made, has it replaced by a space.
 | `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
 | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
 | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
-| `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
+| `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block, or the one field `unloaded` when the search met a chunk that is not loaded | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
 
 The game mode is the name of the game, `survival`, `creative`, `adventure` or `spectator`. The
 permission level is the operator level of the profile, 0 to 4, from `getProfilePermissions`. The
@@ -188,8 +188,13 @@ the world border. The blocks that hurt are fire, soul fire, campfires, cactus, m
 bushes, wither roses, powder snow, pointed dripstone and lava. The search looks at every block
 within the sphere of the radius around the block of the target, at most 8 blocks, in this order:
 the nearest first, then the higher, then the lower `x`, then the lower `z`, so a world always gives
-the same answer. It reads the blocks through the level, which loads the chunks it looks at, as a
-teleport there would, and it reads at most 2109 places.
+the same answer. It reads at most 2109 places, and only those of loaded chunks: at the first
+place in its order whose chunk is not loaded, before it found a safe one, it stops and answers
+`unloaded`, so an answer with a place is always the answer of the whole search. A question never
+loads a chunk, since a load on the server thread waits for the workers of the server, which may
+wait for the handler of Golem that asks, and so could stall the tick or hang the server. A
+plugin that wants a place in a chunk that is not loaded asks again once a player or a ticket of
+the game loads it.
 
 The Rust side asks through the trait `golem_bridge::Game`, which the handler gets on every call.
 

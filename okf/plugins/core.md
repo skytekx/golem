@@ -119,7 +119,10 @@ blocks of the target, `SAFE_RADIUS`, with the search of [Bridge](../bridge.md#th
 the teleport there with the rotation the player has, also into another dimension. It answers
 `Teleported Tester to minecraft:the_nether -0.50 100.00 0.50, yaw 0.0, pitch 0.0.`, or
 `No safe place within 3 blocks of <target>, so Tester stays.` when there is none, and refuses a
-coordinate that is no number or lies beyond 30000000. It is the teleport of an operator across
+coordinate that is no number or lies beyond 30000000. The search loads no chunk, so a target
+whose chunks are not loaded answers `The chunks near <target> are not loaded, so Tester stays,
+since the search for a safe place loads no chunk.`, and the teleport works once a player nearby
+or `/forceload add` loads them. It is the teleport of an operator across
 dimensions that never lands a player in a wall, in lava or above the void.
 
 `/golem listname <name> [<text>]` queues the name of the player in the player list, which holds
@@ -167,7 +170,8 @@ answer and action of `player`, `world`, `teleport` and `listname` against a scri
 notebook `tests/notebooks/07_forge_boot.ipynb` runs them under `golem run` against the real game:
 `whoami` for the console, the player, an armor stand and a command block, `player` and `world`
 against what the console set, a teleport onto a block of magma in the Nether that lands on the
-nearest obsidian, a teleport into solid obsidian that finds no place, and the name in the player
-list as the client sees it.
+nearest obsidian, a teleport into solid obsidian that finds no place, a teleport to a chunk that
+was never generated, which answers that it is not loaded and generates nothing, and the name in
+the player list as the client sees it.
 
 Related: [Plugins](index.md), [Bridge](../bridge.md), [Licensing](../../Documentation/licensing.md).

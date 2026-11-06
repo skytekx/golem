@@ -67,6 +67,7 @@ use crate::{
     NoGame,
     OnlinePlayer,
     Player,
+    SafePlace,
     Sender,
     Spawn,
     TickStats,
@@ -244,7 +245,7 @@ impl Game for ServerThread<'_> {
             .flatten()
     }
 
-    fn safe_location(&self, target: &Location, radius: u32) -> Option<Option<Location>> {
+    fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace> {
         Self::allowed("safeLocation")
             .then(|| self.0.safe_location(target, radius))
             .flatten()

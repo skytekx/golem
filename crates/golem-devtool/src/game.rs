@@ -22,7 +22,8 @@
 //! ```
 //!
 //! A player without `respawn` has none and one without `mainHand` holds nothing. A dimension
-//! with `safe` answers that place to every search for a safe place, and one without answers
+//! with `safe` answers that place to every search for a safe place, one with `"safe":
+//! "unloaded"` answers that a chunk the search must read is not loaded, and one without answers
 //! that there is none. A script without `game` asks a game that answers nothing.
 
 use golem_bridge::{
@@ -34,6 +35,7 @@ use golem_bridge::{
     Item,
     Location,
     OnlinePlayer,
+    SafePlace,
     Sender,
     Spawn,
     Verdict,
@@ -165,7 +167,24 @@ struct DimensionSpec {
     spawn: SpawnSpec,
     min_y: i32,
     max_y: i32,
-    safe: Option<PlaceSpec>,
+    safe: Option<SafeSpec>,
+}
+
+/// What every search for a safe place in a scripted dimension answers.
+#[derive(Clone, Deserialize)]
+#[serde(untagged)]
+enum SafeSpec {
+    /// The place.
+    Place(PlaceSpec),
+    /// The word unloaded, for a chunk that is not loaded.
+    Word(Unloaded),
+}
+
+/// The word unloaded of a [`SafeSpec`].
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Unloaded {
+    Unloaded,
 }
 
 /// The spawn of a scripted dimension.
@@ -275,14 +294,18 @@ impl Game for ScriptedGame {
         })
     }
 
-    fn safe_location(&self, target: &Location, _radius: u32) -> Option<Option<Location>> {
+    fn safe_location(&self, target: &Location, _radius: u32) -> Option<SafePlace> {
         let dimension = self.dimension(&target.dimension)?;
-        Some(dimension.safe.as_ref().map(|place| Location {
-            x: place.x,
-            y: place.y,
-            z: place.z,
-            ..target.clone()
-        }))
+        Some(match &dimension.safe {
+            None => SafePlace::Nowhere,
+            Some(SafeSpec::Word(Unloaded::Unloaded)) => SafePlace::Unloaded,
+            Some(SafeSpec::Place(place)) => SafePlace::Found(Location {
+                x: place.x,
+                y: place.y,
+                z: place.z,
+                ..target.clone()
+            }),
+        })
     }
 }
 
@@ -320,6 +343,18 @@ fn item_json(item: &Item) -> Value {
 /// Answers heights as JSON.
 fn heights_json(heights: Heights) -> Value {
     json!({"min": heights.min, "max": heights.max})
+}
+
+/// Answers a safe place as JSON: null when the game cannot answer or the answer does not read,
+/// `{"none": true}` when no place is safe, `{"unloaded": true}` when a chunk is not loaded, and
+/// the place otherwise.
+fn safe_json(answer: Option<SafePlace>) -> Value {
+    match answer {
+        None => Value::Null,
+        Some(SafePlace::Nowhere) => json!({"none": true}),
+        Some(SafePlace::Unloaded) => json!({"unloaded": true}),
+        Some(SafePlace::Found(place)) => location_json(&place),
+    }
 }
 
 /// Answers an answer that may be empty as JSON: null when the game cannot answer or the answer
@@ -380,7 +415,7 @@ impl Ask {
                     yaw: 0.0,
                     pitch: 0.0,
                 };
-                maybe(game.safe_location(&target, radius), location_json)
+                safe_json(game.safe_location(&target, radius))
             }
             _ => json!({"error": format!("no question {arguments}")}),
         }
@@ -470,7 +505,7 @@ fn read_wire(entry: WireEntry) -> Result<Value, String> {
                 .target
                 .ok_or("a safeLocation entry needs a target")?
                 .into();
-            maybe(wire::safe_location(&target, answer), location_json)
+            safe_json(wire::safe_location(&target, answer))
         }
         other => return Err(format!("no question {other}")),
     };

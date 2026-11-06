@@ -155,6 +155,18 @@ pub struct Item {
     pub count: u32,
 }
 
+/// What the search for a safe place answers.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SafePlace {
+    /// The nearest safe place, with the dimension and the rotation of the target.
+    Found(Location),
+    /// No place within the radius is safe.
+    Nowhere,
+    /// The search met a chunk that is not loaded before it found a safe place. The game loads
+    /// no chunk for a question, so a plugin asks again once the chunk is loaded.
+    Unloaded,
+}
+
 /// The heights of the blocks of a dimension.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Heights {
@@ -192,9 +204,11 @@ pub trait Game {
     fn heights(&self, dimension: &str) -> Option<Heights>;
 
     /// Answers the nearest place within `radius` blocks of `target` where a player stands
-    /// safely, with the dimension and the rotation of the target, or `Some(None)` when there is
-    /// none. The radius is held to at most 8, and the search loads the chunks it looks at.
-    fn safe_location(&self, target: &Location, radius: u32) -> Option<Option<Location>>;
+    /// safely, with the dimension and the rotation of the target, or that there is none. The
+    /// radius is held to at most 8. The search reads loaded chunks alone and loads none, so at
+    /// the first place in its order whose chunk is not loaded, before it found a safe one, it
+    /// answers [`SafePlace::Unloaded`].
+    fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace>;
 
     /// Answers the player online whose name or UUID is `who`, in any case, or `Some(None)` when
     /// nobody online has it.
@@ -235,7 +249,7 @@ impl Game for NoGame {
         None
     }
 
-    fn safe_location(&self, _target: &Location, _radius: u32) -> Option<Option<Location>> {
+    fn safe_location(&self, _target: &Location, _radius: u32) -> Option<SafePlace> {
         None
     }
 }
@@ -246,7 +260,8 @@ impl Game for NoGame {
 /// Each function reads the answer of one method of the interface Game of the host jar, which is
 /// not null, and answers `None` when it does not read: a wrong number of fields, a number that
 /// does not read or is not finite, or a game mode the game does not have. The empty answer is
-/// the inner `None` of the answers that may be empty.
+/// the inner `None` of the answers that may be empty, and [`SafePlace::Nowhere`] for a safe
+/// place.
 pub mod wire {
     use crate::{
         BlockLocation,
@@ -256,8 +271,12 @@ pub mod wire {
         Location,
         OnlinePlayer,
         SEPARATOR,
+        SafePlace,
         Spawn, //
     };
+
+    /// The answer of `safeLocation` when the search met a chunk that is not loaded.
+    pub const UNLOADED: &str = "unloaded";
 
     /// Answers the fields of an answer.
     fn fields(answer: &str) -> Vec<&str> {
@@ -378,14 +397,16 @@ pub mod wire {
     }
 
     /// Reads the answer of `safeLocation` for `target`, whose dimension and rotation it keeps.
-    pub fn safe_location(target: &Location, answer: &str) -> Option<Option<Location>> {
-        if answer.is_empty() {
-            return Some(None);
+    pub fn safe_location(target: &Location, answer: &str) -> Option<SafePlace> {
+        match answer {
+            "" => return Some(SafePlace::Nowhere),
+            UNLOADED => return Some(SafePlace::Unloaded),
+            _ => {}
         }
         let [x, y, z] = fields(answer)[..] else {
             return None;
         };
-        Some(Some(Location {
+        Some(SafePlace::Found(Location {
             x: coordinate(x)?,
             y: coordinate(y)?,
             z: coordinate(z)?,

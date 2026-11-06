@@ -35,6 +35,9 @@ final class GameQueries implements Game {
 	/** The unit separator between the fields of an answer. */
 	private static final String SEPARATOR = "\u001F";
 
+	/** The answer of safeLocation when the search met a chunk that is not loaded. */
+	private static final String UNLOADED = "unloaded";
+
 	private final Guard guard;
 
 	private GameQueries(Guard guard) {
@@ -126,7 +129,11 @@ final class GameQueries implements Game {
 			return null;
 		}
 		return ofLevel("Game.safeLocation", dimension, level -> {
-			BlockPos feet = SafeLocation.find(level, x, y, z, radius);
+			SafeLocation.Answer answer = SafeLocation.find(level, x, y, z, radius);
+			if (answer.unloaded()) {
+				return UNLOADED;
+			}
+			BlockPos feet = answer.feet();
 			if (feet == null) {
 				return "";
 			}

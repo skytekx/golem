@@ -54,6 +54,7 @@ pub use crate::{
         Location,
         NoGame,
         OnlinePlayer,
+        SafePlace,
         Spawn,
         wire, //
     },

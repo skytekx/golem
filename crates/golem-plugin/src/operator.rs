@@ -15,6 +15,7 @@ use golem_bridge::{
     Game,
     Location,
     OnlinePlayer,
+    SafePlace,
     Sender, //
 };
 
@@ -172,15 +173,19 @@ pub fn teleport(words: &[&str], context: &Context<'_>) -> Vec<String> {
         ..now
     };
     match game.safe_location(&target, SAFE_RADIUS) {
-        Some(Some(place)) => {
+        Some(SafePlace::Found(place)) => {
             if context.teleport(&player.uuid, &place) {
                 vec![format!("Teleported {} to {place}.", player.name)]
             } else {
                 vec![format!("{place} is no place to teleport to.")]
             }
         }
-        Some(None) => vec![format!(
+        Some(SafePlace::Nowhere) => vec![format!(
             "No safe place within {SAFE_RADIUS} blocks of {target}, so {} stays.",
+            player.name
+        )],
+        Some(SafePlace::Unloaded) => vec![format!(
+            "The chunks near {target} are not loaded, so {} stays, since the search for a safe place loads no chunk.",
             player.name
         )],
         None => vec![NO_ANSWER.to_owned()],

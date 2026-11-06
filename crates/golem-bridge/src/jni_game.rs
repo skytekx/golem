@@ -40,6 +40,7 @@ use crate::{
     Item,
     Location,
     OnlinePlayer,
+    SafePlace,
     Spawn,
     game::wire,
     log, //
@@ -199,7 +200,7 @@ impl Game for JniGame<'_, '_> {
         wire::heights(&answer).or_else(|| unread("heights", &answer))
     }
 
-    fn safe_location(&self, target: &Location, radius: u32) -> Option<Option<Location>> {
+    fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace> {
         if !target.is_finite() {
             return None;
         }
