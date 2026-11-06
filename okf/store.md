@@ -68,7 +68,7 @@ players.
 | --- | --- | --- |
 | Every read, such as `player`, `home`, `balance` or `permissions` | Any, the server thread first | No |
 | Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No |
-| `flush`, `close`, `check`, `ledger` | Not the server thread | Yes |
+| `flush`, `close`, `check`, `ledger`, `durability` | Not the server thread | Yes |
 | `open` | The start of the program, before the server thread runs | Yes |
 
 `Store` is a handle that clones, so every plugin holds one, and it is `Send` and `Sync`. The lock
@@ -100,11 +100,14 @@ What this gives:
 - A change is in the file and synced once `flush` or `close` answers. Between a change and its
   commit lies the lag of the writer, which is one commit for a change now and then and longer
   for a burst of thousands.
-- A crash of the process or a kill at any moment, which `09_store` holds to, and a loss of power,
-  which the sync of every commit covers as SQLite documents for WAL with `FULL`, leave the file
-  with every change up to some point and none after it, in the order the store took them. At worst
-  it misses the last changes before the crash, never one in the middle. The next open replays the
-  log.
+- A crash of the process or a kill at any moment, and a loss of power, which the sync of every
+  commit covers as SQLite documents for WAL with `FULL`, leave the file with every change up to
+  some point and none after it, in the order the store took them. At worst it misses the last
+  changes before the crash, never one in the middle. The next open replays the log. `09_store`
+  kills the process once in the middle of a burst of changes, which holds the store to a crash of
+  the process. A kill keeps the cache of the system, so it cannot show a loss of power, and the
+  notebook holds the settings of the table above instead, as `durability()` reads them from the
+  connection of the writer, since each holds per connection.
 - No second process can open the file while the store is open, a second Golem as little as the
   migration tool or the `sqlite3` shell, so the cache stays the truth of the file. The open of the
   second one answers `another process holds the file, so it is open in a second Golem or a tool`.
@@ -420,6 +423,7 @@ until the next change.
 | `close()` | Writes, checkpoints and closes the file and ends the writer, and every later close answers as the first |
 | `stats()` | The changes queued, written, lost and pending, the batches and the time of the writer |
 | `MAX_BATCH` | 4096, the most changes in one transaction of the writer |
+| `durability()` | The settings of the table of [Durability](#durability) as the connection of the writer reports them, read through the writer |
 | `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache as the call found it, which a change of another thread during the check does not disturb |
 | `describe(path)` | The schema of a file that no process holds, as SQLite reports it. As every reader of SQLite it may leave the files `-wal` and `-shm` beside the store |
 

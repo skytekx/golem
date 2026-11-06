@@ -315,6 +315,46 @@ fn configure(connection: &Connection) -> rusqlite::Result<()> {
     connection.execute_batch("BEGIN IMMEDIATE; COMMIT;")
 }
 
+/// The settings of `SQLite` that the durability of the store rests on, as the connection of the
+/// writer reports them, so a notebook holds the store to the table of okf/store.md. They hold per
+/// connection, so only the connection of the writer can tell them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Durability {
+    /// The journal mode, `wal` for a store.
+    pub journal_mode: String,
+    /// The synchronous mode as `SQLite` numbers it, 2 for FULL.
+    pub synchronous: i64,
+    /// Whether a sync reaches the drive itself on macOS.
+    pub fullfsync: bool,
+    /// The locking mode, `exclusive` for a store.
+    pub locking_mode: String,
+    /// Whether `SQLite` holds every foreign key.
+    pub foreign_keys: bool,
+    /// Whether the schema may run functions of the application.
+    pub trusted_schema: bool,
+    /// How long the connection waits for a lock that another process holds, in milliseconds.
+    pub busy_timeout_ms: i64,
+}
+
+/// Reads the settings of [`Durability`] from a connection.
+pub fn durability(connection: &Connection) -> rusqlite::Result<Durability> {
+    let text = |name: &str| -> rusqlite::Result<String> {
+        connection.pragma_query_value(None, name, |row| row.get(0))
+    };
+    let number = |name: &str| -> rusqlite::Result<i64> {
+        connection.pragma_query_value(None, name, |row| row.get(0))
+    };
+    Ok(Durability {
+        journal_mode: text("journal_mode")?,
+        synchronous: number("synchronous")?,
+        fullfsync: number("fullfsync")? != 0,
+        locking_mode: text("locking_mode")?,
+        foreign_keys: number("foreign_keys")? != 0,
+        trusted_schema: number("trusted_schema")? != 0,
+        busy_timeout_ms: number("busy_timeout")?,
+    })
+}
+
 /// Brings the schema of the file from `version` to [`SCHEMA_VERSION`], one migration per
 /// transaction, so a crash during a migration leaves the file at the version before it.
 fn migrate(connection: &Connection, version: i32) -> Result<(), String> {

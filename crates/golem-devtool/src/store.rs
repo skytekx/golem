@@ -68,6 +68,7 @@ use std::{
 use golem_store::{
     Check,
     Description,
+    Durability,
     Location,
     Mail,
     PermissionGroup,
@@ -389,6 +390,18 @@ fn check_json(check: &Check) -> Value {
     })
 }
 
+fn durability_json(durability: &Durability) -> Value {
+    json!({
+        "journal_mode": durability.journal_mode,
+        "synchronous": durability.synchronous,
+        "fullfsync": durability.fullfsync,
+        "locking_mode": durability.locking_mode,
+        "foreign_keys": durability.foreign_keys,
+        "trusted_schema": durability.trusted_schema,
+        "busy_timeout": durability.busy_timeout_ms,
+    })
+}
+
 fn description_json(description: &Description) -> Value {
     let tables: Vec<Value> = description
         .tables
@@ -636,6 +649,9 @@ fn lifecycle(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answe
         "flush" => store.flush().map(|()| Value::Null),
         "stats" => Ok(stats_json(&store.stats())),
         "check" => store.check().map(|check| check_json(&check)),
+        "durability" => store
+            .durability()
+            .map(|durability| durability_json(&durability)),
         "check_race" => {
             return Some(
                 arguments

@@ -52,7 +52,7 @@
 //! | --- | --- | --- |
 //! | Every read, such as [`Store::player`] and [`Store::balance`] | Any thread, the server thread first | No |
 //! | Every change, such as [`Store::set_home`] and [`Store::transfer`] | Any thread, the server thread first | No |
-//! | [`Store::flush`], [`Store::close`], [`Store::check`], [`Store::ledger`] | Not the server thread | Yes |
+//! | [`Store::flush`], [`Store::close`], [`Store::check`], [`Store::ledger`], [`Store::durability`] | Not the server thread | Yes |
 //! | [`Store::open`] | The start of the program, before the server thread runs | Yes |
 //!
 //! A change is checked against the cache and refused with a [`Refusal`] before anything changes,
@@ -92,6 +92,7 @@ pub use crate::{
         APPLICATION_ID,
         ColumnDescription,
         Description,
+        Durability,
         SCHEMA_VERSION,
         TableDescription,
         describe, //

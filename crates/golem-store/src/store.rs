@@ -60,7 +60,10 @@ use crate::{
         check_group,
         check_player, //
     },
-    schema,
+    schema::{
+        self,
+        Durability, //
+    },
     writer::{
         self,
         Message,
@@ -444,6 +447,16 @@ impl Store {
             Message::Read(Box::new(move |connection| {
                 let _ = reply.send(crate::compare::check(connection, &snapshot));
             }))
+        })
+    }
+
+    /// The settings of `SQLite` that the durability of the store rests on, as the connection of
+    /// the writer reports them, read after every change before the call. Not for the server
+    /// thread, since it waits for the writer.
+    pub fn durability(&self) -> Result<Durability, StoreError> {
+        self.query(|connection| {
+            schema::durability(connection)
+                .map_err(|error| StoreError::Database(schema::describe_error(&error)))
         })
     }
 
