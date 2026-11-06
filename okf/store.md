@@ -126,10 +126,14 @@ What this gives:
 - When a transaction fails, because the disk is full or SQLite refuses a row, the writer rolls it
   back and applies its operations again one by one, each in a transaction of its own, until the one
   that fails. The file then holds every change before it. The writer drops every change after it,
-  logs `[golem] store: the writer failed and the store takes no more changes: <reason>` and every
-  later change, `flush` and `close` answer `the store takes no more changes, since the writer
-  failed: <reason>`. Reads still answer from the cache, which may hold changes that the file
-  lacks, so the server is restarted, which reads the file again.
+  logs `[golem] store: the writer failed and the store takes no more changes: <reason>`, and from
+  then on every change, `flush` and `close` answer `the store takes no more changes, since the
+  writer failed: <reason>`. The store learns of the failure only once the writer has tried the
+  failed batch change by change, so every change it took after the failing one until then
+  answered `Ok`, changed the cache and is lost with it, and `stats()` counts it among the lost
+  changes with the rest of the batch. Reads still answer from the cache, which then holds changes
+  that the file lacks, so the server is restarted, which reads the file again. A writer thread
+  that panics fails the store the same way, with the reason `the writer thread panicked`.
 - `close` applies every change, checkpoints the log into the file with `wal_checkpoint(TRUNCATE)`,
   closes it and ends the writer, and answers whether every change reached the file. A change after
   it answers `the store is closed`. A second close, also one on another thread while the first
@@ -565,10 +569,10 @@ checks the schema against the tables of this page, every call and every refusal,
 another thread changes the store, a reopen after a close, a store dropped without a close, a reopen
 after a kill between changes, a reader of the answers that goes away, a writer that fails at a limit
 of the file size, a batch that fails part way at a limit of the pages of the file, a row that the
-file refuses behind the cache, the files the open refuses and the cost above. The steps
-`pause_writer`, `limit_pages` and `execute_behind` of `golem-devtool store` reach the writer through
-the hooks of the feature `testing` of `golem-store`, which only `golem-devtool` turns on and which
-the program `golem` never calls.
+file refuses behind the cache, a writer thread that panics, the files the open refuses and the cost
+above. The steps `pause_writer`, `limit_pages`, `execute_behind` and `panic_writer` of
+`golem-devtool store` reach the writer through the hooks of the feature `testing` of `golem-store`,
+which only `golem-devtool` turns on and which the program `golem` never calls.
 
 Related: [Plugins](plugins/index.md), [Permissions](plugins/permissions.md),
 [Plan](plan.md#data-migration), [Index](index.md).

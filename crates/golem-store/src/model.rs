@@ -206,6 +206,12 @@ pub enum StoreError {
     Refused(Refusal),
     /// The writer failed to write an earlier change, so the store takes no more changes. The
     /// file holds every change before the one that failed.
+    ///
+    /// The store learns of the failure only once the writer has tried the failed batch change by
+    /// change, so every change it took after the failing one until then answered `Ok`, changed
+    /// the cache and is lost with it. [`Stats::lost`](crate::Stats::lost) counts them with the
+    /// rest of the failed batch. The cache keeps them until the restart that reads the file
+    /// again.
     Failed(String),
     /// The store is closed.
     Closed,

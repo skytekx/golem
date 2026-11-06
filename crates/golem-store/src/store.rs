@@ -364,8 +364,14 @@ impl Store {
         if state.sender.is_none() {
             return Err(StoreError::Closed);
         }
-        if let Some(reason) = self.inner.shared.failure() {
+        if let Some(reason) = shared.failure() {
             return Err(StoreError::Failed(reason));
+        }
+        // A writer that is gone takes no change, so the change is refused before it touches the
+        // cache. Only a writer that ends between this look and the send below leaves the change
+        // in the cache of a failed store.
+        if shared.ended.load(Ordering::Acquire) {
+            return Err(StoreError::Failed("the writer thread ended".to_owned()));
         }
         let (value, op) = change(&mut state.cache)?;
         if let Some(op) = op {
@@ -1391,6 +1397,18 @@ impl Store {
                 .map_err(sqlite)?;
             Ok((count, limit))
         })
+    }
+
+    /// Makes the writer thread panic after every change before the call, and answers once the
+    /// thread is gone, so a notebook sees what the store does without its writer.
+    pub fn testing_panic_writer(&self) -> Result<(), StoreError> {
+        let answer = self.query(|_| -> Result<(), StoreError> {
+            panic!("golem-devtool makes the writer panic")
+        });
+        while !self.inner.shared.ended.load(Ordering::Acquire) {
+            std::thread::yield_now();
+        }
+        answer
     }
 
     /// Runs `sql` on the connection of the writer after every change before the call, behind the

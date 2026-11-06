@@ -233,12 +233,15 @@ impl Shared {
     }
 }
 
-/// Marks the writer as ended when its thread leaves [`run`], also on a panic, and wakes every
-/// change that waits for room, so none waits for a writer that is gone.
+/// Marks the writer as ended when its thread leaves [`run`], also on a panic, which fails the
+/// store, and wakes every change that waits for room, so none waits for a writer that is gone.
 struct Ended<'a>(&'a Shared);
 
 impl Drop for Ended<'_> {
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.0.fail("the writer thread panicked".to_owned());
+        }
         self.0.ended.store(true, Ordering::Release);
         self.0.free_room();
     }

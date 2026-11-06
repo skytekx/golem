@@ -34,10 +34,10 @@
 //! needs no store, and `wait`, which prints its line and then waits until its standard input
 //! ends, for a notebook that kills the process there.
 //!
-//! Three steps reach the writer through the hooks of the feature `testing` of golem-store, so a
+//! Four steps reach the writer through the hooks of the feature `testing` of golem-store, so a
 //! notebook drives the paths of a failure: `pause_writer` with `ms` holds the writer still,
-//! `limit_pages` with `pages` lets the file grow by that many pages at most, and `execute_behind`
-//! with `sql` changes the file behind the cache.
+//! `limit_pages` with `pages` lets the file grow by that many pages at most, `execute_behind` with
+//! `sql` changes the file behind the cache, and `panic_writer` makes the writer thread panic.
 //!
 //! A store that no step closed closes at the end of the script, and the exit code is 1 when that
 //! close fails. A store that a step closed answered its close in that step and is not closed
@@ -676,6 +676,7 @@ fn lifecycle(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answe
                 Ok(json!({"page_count": count, "max_page_count": limit}))
             }));
         }
+        "panic_writer" => store.testing_panic_writer().map(|()| Value::Null),
         "execute_behind" => {
             return Some(
                 arguments
