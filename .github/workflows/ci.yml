@@ -196,9 +196,26 @@ jobs:
           key: notebooks-rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
           restore-keys: notebooks-rust-${{ runner.os }}-
 
-      # The unpacked downloads alone: tests/fetch.py keeps a pin that is in place and downloads
-      # nothing then. They are restored here and saved right after the download, so a run whose
-      # notebooks fail keeps what it downloaded.
+      # The unpacked downloads alone, keyed by their pins, which the step reads from
+      # tests/fetch.py, so a change to the code of the modpack in the same file keeps them.
+      # tests/fetch.py keeps a pin that is in place and downloads nothing then.
+      - name: Read the pins of the downloads
+        id: pins
+        run: |
+          digest=$(python3 -I - <<'EOF' | sha256sum | cut -c 1-64
+          import importlib.util
+
+          spec = importlib.util.spec_from_file_location("fetch", "tests/fetch.py")
+          fetch = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(fetch)
+          print(fetch.JDK_PACKAGES, fetch.JDK_DIRECTORY, fetch.FORGE_INSTALLER, fetch.FORGE_SHA256,
+                fetch.FORGE_DIRECTORY, fetch.GRADLE_URL, fetch.GRADLE_SHA256, fetch.GRADLE_DIRECTORY)
+          EOF
+          )
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # Restored here and saved right after the download, so a run whose notebooks fail keeps
+      # what it downloaded.
       - name: Restore the downloads of tests/fetch.py
         id: downloads
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -207,7 +224,7 @@ jobs:
             tests/.cache/jdk-17.0.21+9
             tests/.cache/forge-server
             tests/.cache/gradle-8.14.3
-          key: fetch-${{ runner.os }}-${{ hashFiles('tests/fetch.py') }}
+          key: fetch-${{ runner.os }}-${{ steps.pins.outputs.digest }}
 
       # The pack of notebook 08 and the clone of the server repository it comes from, about
       # 1.4 GB, keyed by the commit of the server that tests/fetch.py pins, so a new pin fetches
@@ -274,7 +291,7 @@ jobs:
             tests/.cache/jdk-17.0.21+9
             tests/.cache/forge-server
             tests/.cache/gradle-8.14.3
-          key: fetch-${{ runner.os }}-${{ hashFiles('tests/fetch.py') }}
+          key: fetch-${{ runner.os }}-${{ steps.pins.outputs.digest }}
 
       # The jars of the pack come from Modrinth and GitHub, each checked by the SHA-512 of the
       # index, and the libraries of Arclight from Maven Central and the repository of Sponge,
