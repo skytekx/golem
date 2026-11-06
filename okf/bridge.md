@@ -69,7 +69,7 @@ does not run, instead of failing on every event.
 
 | Native method | Called by the mod | Answer |
 | --- | --- | --- |
-| `version()` | Once, through `available()` | The version of Golem, such as `0.1.0` |
+| `version()` | Once, through `available()`, while Forge constructs the mod | The version of Golem, such as `0.1.0` |
 | `serverStarting(forge, minecraft)` | On `ServerStartingEvent` | None |
 | `serverStarted()` | On `ServerStartedEvent` | None |
 | `serverStopping()` | On `ServerStoppingEvent` | None |
@@ -77,10 +77,10 @@ does not run, instead of failing on every event.
 | `tick(nanos)` | At the end of every server tick, with the nanoseconds since its start | None |
 | `playerJoined(uuid, name)` | On `PlayerLoggedInEvent` | None |
 | `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
-| `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text | True cancels the event |
+| `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
 | `death(uuid, name, cause)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type | None |
 | `respawn(uuid, name, dimension)` | On `PlayerRespawnEvent`, with the id of the dimension | None |
-| `commandNames()` | Once on `RegisterCommandsEvent` | The names of the commands of the plugins |
+| `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
 | `command(name, uuid, playerName, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
 | `drain()` | At the end of every server tick, after `tick` | The queued actions, oldest first |
 
@@ -95,6 +95,14 @@ and as the same literal with one argument `arguments` of the type greedy string.
 message. A command of a plugin needs no permission level in Brigadier: the plugin checks the
 sender itself, through `golem-permissions`.
 
+Forge builds the commands when it loads the data packs: once at the start, before
+`ServerStartingEvent`, and again on every `/reload`. So `commandNames()` answers before
+`serverStarting()`, and the plugins must know their commands by then. A name that is empty or holds
+whitespace cannot be typed as the first word of a command, so the mod skips it with a warning. A
+command block, a function and every other source that is not a player run as the console, with a
+null sender. When `command` throws, the sender reads that the command failed and the log of the
+server holds the exception.
+
 ## Actions
 
 `drain()` answers each action as one string, its fields joined by the character U+001F, the unit
@@ -106,19 +114,32 @@ separator, which no field may hold. The first field is the kind.
 | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
 | `broadcast` | The text | Sends the text as a system message to every player and the console |
 
-The mod logs an action of an unknown kind once and skips it. The host stops the server with the
+The mod logs an action of an unknown kind, or of a known kind with the wrong number of fields,
+once and skips it. Each action runs on its own, so an action that throws, such as a message to a
+UUID that does not parse, is logged and the next action runs. The host stops the server with the
 actions `command save-all flush` and `command stop`, so the stop path is the same as an operator's
 at the console.
 
 ## The rules of the server thread
 
-- Every native method runs on the thread that calls it, which is the server thread for every
-  method of this page. A handler in Rust answers before the game goes on, so it must be quick. The
-  plugin runtime times every call against its budget.
-- Rust never touches game state from another thread. Whatever Rust wants done is an action.
+- Every native method runs on the thread that calls it. That is the server thread for every
+  method of this page but three, as Forge 47.4.18 calls them and the notebook `05_bridge_build`
+  records. `version()` runs on a thread of the mod loader, `modloading-worker-<n>`, while Forge
+  constructs the mods. `commandNames()` runs on the main thread, `main`, when Forge builds the
+  commands at the start, and on the server thread on a reload. `chat()` runs on a worker thread of
+  Forge, `Worker-Main-<n>`, while the server thread goes on, since Forge fires `ServerChatEvent`
+  there.
+- A handler in Rust answers before the event goes on, so it must be quick. The plugin runtime times
+  every call against its budget.
+- Rust never touches game state from another thread. Whatever Rust wants done is an action. A
+  handler of `chat()` runs beside the server thread, so it must be thread safe and may only answer
+  and queue actions. Its answer still cancels the message.
 - A native method never lets a panic of Rust cross into the JVM. It catches it, logs it and
   answers what a pass would answer: nothing, false, or an empty array.
-- The mod catches every exception of its own around a native call, logs it and lets the game go
-  on, so a fault of the bridge never stops the server.
+- The mod catches every exception of its own around a native call, logs it with the logger
+  `golem` and lets the game go on, so a fault of the bridge never stops the server. A call that
+  fails again and again logs its first failure with the stack trace and after that only its tenth,
+  its hundredth and every further power of ten, so a native that fails on every tick cannot fill
+  the log.
 
 Related: [JVM host](jvm-host.md), [Plugins](plugins/index.md), [Index](index.md).
