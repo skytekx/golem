@@ -248,7 +248,7 @@ plugin needs no permission level in Brigadier, and the plugin checks the sender 
 `config/permissions.toml` and of the store seeded from it are the only place that grants a
 command.
 
-Issue: to be filed.
+Issue: [#1](https://github.com/skytekx/golem/issues/1).
 
 ### The permissions live only in a database on one host
 
@@ -260,7 +260,7 @@ Mac mini (`okf/modpack/plugins.md` line 64), and a new host needs the jar and th
 Golem keeps the groups and nodes in the tracked file `config/permissions.toml`, which seeds the
 store, and the notebook 06_permissions compares it with the list of the wiki on every run.
 
-Issue: to be filed.
+Issue: [#2](https://github.com/skytekx/golem/issues/2).
 
 ### A wildcard deny of a player loses to a node of a group
 
@@ -274,6 +274,6 @@ Golem asks the nodes of the player before any group, so `-essentials.*` on a pla
 `essentials.home` with the reason `The player denies essentials.*`. The notebook holds the case in
 its section on the player before the groups.
 
-Issue: to be filed.
+Issue: [#3](https://github.com/skytekx/golem/issues/3).
 
 Related: [Plan](../plan.md#luckperms-5571), [Bridge](../bridge.md), [Index](../index.md).

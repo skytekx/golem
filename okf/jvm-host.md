@@ -216,6 +216,8 @@ same as the one of an operator. A signal during the load of the worlds waits for
 later signal logs that the stop is already queued and changes nothing.
 
 When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run` exits with 0.
+This replaces the signal stop of Arclight, whose shutdown thread worked on chunks beside the server
+thread, issue [#4](https://github.com/skytekx/golem/issues/4).
 
 A server without the bridge mod in `mods/`, or a signal before Forge constructs the mod, has no
 tick that drains the queue. The first signal then logs
@@ -272,12 +274,12 @@ ways. The path must be UTF-8, since the module path is an option string of the J
 
 Each difference is on purpose, and `03_launch_args` checks that it is the only one.
 
-| Difference | Why |
-| --- | --- |
-| `getInputArguments` ends with `exit` and `abort` | The hooks are options of `JNI_CreateJavaVM`, and HotSpot records every option |
-| `--disable-@files` works | The launcher of Java 17 passes the option on to the JVM, which refuses it as unrecognized |
-| A NUL byte in an argument file is an error | The launcher cuts the token at the byte |
-| `JDK_JAVA_OPTIONS` and `CLASSPATH` do not apply | The launch is the files of the server alone |
-| No warnings for `-checksource`, `-cs`, `-noasyncgc` and `-Xfuture` | A library of the host prints no lines of the launcher, and the options act the same |
+| Difference | Why | Issue |
+| --- | --- | --- |
+| `getInputArguments` ends with `exit` and `abort` | The hooks are options of `JNI_CreateJavaVM`, and HotSpot records every option | None |
+| `--disable-@files` works | The launcher of Java 17 passes the option on to the JVM, which refuses it as unrecognized | [#7](https://github.com/skytekx/golem/issues/7) |
+| A NUL byte in an argument file is an error | The launcher cuts the token at the byte | [#6](https://github.com/skytekx/golem/issues/6) |
+| `JDK_JAVA_OPTIONS` and `CLASSPATH` do not apply | The launch is the files of the server alone | [#5](https://github.com/skytekx/golem/issues/5) |
+| No warnings for `-checksource`, `-cs`, `-noasyncgc` and `-Xfuture` | A library of the host prints no lines of the launcher, and the options act the same | None |
 
 Related: [Bridge](bridge.md), [Plan](plan.md#architecture), [Index](index.md).
