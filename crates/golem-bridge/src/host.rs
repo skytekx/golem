@@ -15,8 +15,8 @@
 //! panics: a panic of the handler is caught, logged and answered with the pass value, which is
 //! nothing, `false` or an empty list. A null where the contract names a string is a fault of
 //! the mod, which is logged and answered with the pass value as well, with two exceptions that
-//! the contract names: a command of the console has no sender, and a null `arguments` reads as
-//! the empty string.
+//! the contract names: a command of the console has neither a sender UUID nor a sender name,
+//! and a null `arguments` reads as the empty string.
 //!
 //! The handler sits behind a lock. The server thread takes it for most natives, but Forge 47
 //! calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, so a
@@ -48,6 +48,7 @@ use crate::{
     Actions,
     Event,
     Handler,
+    MAX_LEVEL,
     Player,
     Sender,
     TickStats,
@@ -299,13 +300,15 @@ pub fn command_names() -> Vec<String> {
 
 /// Runs a command and answers the lines its sender sees.
 ///
-/// A sender with neither a UUID nor a name is the console. A sender with only one of them is a
-/// fault of the mod, and the command is refused rather than run as the console, which may do
-/// more than any player.
+/// A sender with a UUID and a name is a player, one with neither at the level 4 is the console,
+/// and one with a name alone is another source at its level. Every other sender is a fault of
+/// the mod, and the command is refused rather than run as the console, which may do more than
+/// any other source.
 pub fn command(
     name: Option<&str>,
     sender_uuid: Option<&str>,
     sender_name: Option<&str>,
+    level: i32,
     arguments: Option<&str>,
 ) -> Vec<String> {
     const NATIVE: &str = "command";
@@ -313,24 +316,48 @@ pub fn command(
         let Some(name) = required(NATIVE, "name", name) else {
             return Vec::new();
         };
-        let sender = match (sender_uuid, sender_name) {
-            (None, None) => Sender::Console,
-            (Some(uuid), Some(player)) => Sender::Player(Player {
-                uuid: uuid.to_owned(),
-                name: player.to_owned(),
-            }),
-            _ => {
-                log(format_args!(
-                    "the native command got a sender with only one of senderUuid and senderName, so it refuses the command {name}"
-                ));
-                return Vec::new();
-            }
+        let Some(sender) = sender(sender_uuid, sender_name, level, &name) else {
+            return Vec::new();
         };
         let arguments = arguments.unwrap_or_default();
         with_handler(NATIVE, Vec::new(), |handler, actions| {
             handler.command(&name, &sender, arguments, actions)
         })
     })
+}
+
+/// Answers the sender of the command `name` from what the mod passed, or logs why there is
+/// none.
+fn sender(uuid: Option<&str>, name: Option<&str>, level: i32, command: &str) -> Option<Sender> {
+    let Some(level) = u8::try_from(level).ok().filter(|level| *level <= MAX_LEVEL) else {
+        log(format_args!(
+            "the native command got the level {level}, which is no permission level, so it refuses the command {command}"
+        ));
+        return None;
+    };
+    match (uuid, name) {
+        (Some(uuid), Some(name)) => Some(Sender::Player(Player {
+            uuid: uuid.to_owned(),
+            name: name.to_owned(),
+        })),
+        (None, None) if level == MAX_LEVEL => Some(Sender::Console),
+        (None, Some(name)) => Some(Sender::Other {
+            name: name.to_owned(),
+            level,
+        }),
+        (None, None) => {
+            log(format_args!(
+                "the native command got neither senderUuid nor senderName at the level {level}, which only the console has at 4, so it refuses the command {command}"
+            ));
+            None
+        }
+        (Some(_), None) => {
+            log(format_args!(
+                "the native command got senderUuid without senderName, so it refuses the command {command}"
+            ));
+            None
+        }
+    }
 }
 
 /// Takes every queued action, oldest first, each in its wire form.

@@ -117,10 +117,19 @@ plugins and of their declarations.
 | The name is unknown | `The command <name> is unknown.` |
 | The owner panics | `The command <name> failed, and the log of the server holds the cause.` |
 
-The sender of a command is `Sender::Console` when the mod passes null for both `senderUuid` and
-`senderName`, and `Sender::Player` when it passes both. A sender with only one of them is a fault
-of the mod, and the bridge refuses the command with an empty answer instead of running it as the
-console, which may do more than any player. A null `arguments` reads as the empty string.
+The sender of a command follows the source of the command, as [Bridge](../bridge.md#the-host-class)
+says. A null `arguments` reads as the empty string.
+
+| Sender | Source |
+| --- | --- |
+| `Sender::Player(player)` | A player, also when the console or a command block runs the command as them |
+| `Sender::Console` | The console and RCON, with no entity at the level `MAX_LEVEL`, 4 |
+| `Sender::Other { name, level }` | Every other source, such as a command block at level 2 or a command that runs as an armor stand |
+
+A plugin judges a player by who they are, through `golem-permissions` and their operator level,
+and every other sender by its level. A source that the mod passes wrong, a UUID without a name,
+neither of them below level 4 or a level outside 0 to 4, is refused with an empty answer instead
+of running as the console, which may do more than any other source.
 
 ## The context of a call
 

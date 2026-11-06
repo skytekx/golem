@@ -30,6 +30,7 @@ use jni::{
         JNI_FALSE,
         JNI_TRUE,
         jboolean,
+        jint,
         jlong,
         jobjectArray,
         jsize,
@@ -93,7 +94,7 @@ fn table() -> [(&'static str, &'static str, *mut c_void); 14] {
         ),
         (
             "command",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)[Ljava/lang/String;",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/String;)[Ljava/lang/String;",
             command as *mut c_void,
         ),
         ("drain", "()[Ljava/lang/String;", drain as *mut c_void),
@@ -345,6 +346,7 @@ extern "system" fn command<'local>(
     name: JString<'local>,
     sender_uuid: JString<'local>,
     sender_name: JString<'local>,
+    level: jint,
     arguments: JString<'local>,
 ) -> jobjectArray {
     answer(&mut env, "command", empty_array, |env| {
@@ -356,6 +358,7 @@ extern "system" fn command<'local>(
             name.as_deref(),
             sender_uuid.as_deref(),
             sender_name.as_deref(),
+            level,
             arguments.as_deref(),
         );
         string_array(env, &lines)

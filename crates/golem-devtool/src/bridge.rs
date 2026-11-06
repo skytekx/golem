@@ -28,8 +28,8 @@
 //! A step is a native method by its Java name with its Java parameters, where a missing
 //! parameter is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`,
 //! `serverStopped`, `tick` (with `nanos`, and `repeat` and `sleepMs` of the devtool),
-//! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` and
-//! `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
+//! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` (with
+//! `level`, 4 when left out) and `drain`. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
 //! `install` (a fresh handler of the same script), `sleep` and `together`, which runs its
 //! `steps` each on a thread of its own, the next one `staggerMs` after the one before, as Forge
 //! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
@@ -191,6 +191,11 @@ fn one() -> u32 {
     1
 }
 
+/// The default level of a command of the script, the level of the console.
+fn max_level() -> i32 {
+    i32::from(golem_bridge::MAX_LEVEL)
+}
+
 /// A step of a script: a native method with its parameters, or a step of the devtool.
 #[derive(Deserialize)]
 #[serde(
@@ -243,6 +248,8 @@ enum Step {
         name: Option<String>,
         sender_uuid: Option<String>,
         sender_name: Option<String>,
+        #[serde(default = "max_level")]
+        level: i32,
         arguments: Option<String>,
     },
     Drain,
@@ -503,6 +510,7 @@ fn native(step: &Step) -> Option<Value> {
             name,
             sender_uuid,
             sender_name,
+            level,
             arguments,
         } => answer(
             "command",
@@ -510,6 +518,7 @@ fn native(step: &Step) -> Option<Value> {
                 name.as_deref(),
                 sender_uuid.as_deref(),
                 sender_name.as_deref(),
+                *level,
                 arguments.as_deref(),
             ),
         ),
@@ -674,6 +683,7 @@ impl Plugin for Echo {
                 );
                 player.name.clone()
             }
+            Sender::Other { name, level } => format!("{name} at level {level}"),
         };
         context.run_command(&format!("/say {} ran {name}", self.name));
         vec![format!(

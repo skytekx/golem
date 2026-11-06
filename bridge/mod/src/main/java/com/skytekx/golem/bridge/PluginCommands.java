@@ -5,8 +5,9 @@
  *
  * Every name that Golem answers becomes a literal that runs on its own and the same literal with
  * one greedy string argument, so the plugin parses its arguments itself. Brigadier asks for no
- * permission level: the plugin checks the sender through golem-permissions. A command block, a
- * function and the console all run as the console, with no player, as okf/bridge.md specifies.
+ * permission level: the plugin checks the sender through golem-permissions. The natives learn who
+ * runs a command and at which permission level, so a command block or a function never passes for
+ * the console, as okf/bridge.md specifies.
  */
 package com.skytekx.golem.bridge;
 
@@ -20,6 +21,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -97,15 +99,32 @@ public final class PluginCommands {
 		return Command.SINGLE_SUCCESS;
 	}
 
-	/** Asks the plugin, with the player who runs the command or with no one for the console. */
+	/**
+	 * Asks the plugin with the source of the command and its permission level: a player with
+	 * their UUID and name, the console and RCON with neither, and every other source with its
+	 * name alone.
+	 */
 	private static String[] ask(CommandSourceStack source, String name, String arguments) {
+		int level = level(source);
+		Entity entity = source.getEntity();
 		String uuid = null;
-		String player = null;
-		if (source.getEntity() instanceof ServerPlayer sender) {
-			uuid = sender.getStringUUID();
-			player = sender.getGameProfile().getName();
+		String sender = null;
+		if (entity instanceof ServerPlayer player) {
+			uuid = player.getStringUUID();
+			sender = player.getGameProfile().getName();
+		} else if (entity != null || level < Commands.LEVEL_OWNERS) {
+			sender = source.getTextName();
 		}
-		String[] lines = Host.command(name, uuid, player, arguments);
+		String[] lines = Host.command(name, uuid, sender, level, arguments);
 		return lines == null ? NONE : lines;
+	}
+
+	/** Answers the permission level of the source, which Minecraft keeps private, from 0 to 4. */
+	private static int level(CommandSourceStack source) {
+		int level = Commands.LEVEL_OWNERS;
+		while (level > Commands.LEVEL_ALL && !source.hasPermission(level)) {
+			level--;
+		}
+		return level;
 	}
 }

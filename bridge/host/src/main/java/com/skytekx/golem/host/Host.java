@@ -135,13 +135,15 @@ public final class Host {
 	 * Runs a command of a plugin.
 	 *
 	 * @param name the name of the command, one of {@link #commandNames()}
-	 * @param senderUuid the UUID of the player who runs it, or null for the console
-	 * @param senderName the name of the player who runs it, or null for the console
+	 * @param senderUuid the UUID of the player who runs it, or null for every other source
+	 * @param senderName the name of the player who runs it, null for the console and RCON, or
+	 *     the name of any other source, such as @ for a command block
+	 * @param level the permission level of the source, from 0 to 4
 	 * @param arguments everything after the name and one space, or the empty string
 	 * @return the lines the sender sees
 	 */
 	public static native String[] command(String name, String senderUuid, String senderName,
-			String arguments);
+			int level, String arguments);
 
 	/**
 	 * Answers the actions that Golem queued since the last call, oldest first.

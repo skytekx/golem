@@ -58,7 +58,7 @@ public final class Host {
 	public static native void respawn(String uuid, String name, String dimension);
 	public static native String[] commandNames();
 	public static native String[] command(String name, String senderUuid, String senderName,
-			String arguments);
+			int level, String arguments);
 	public static native String[] drain();
 }
 ```
@@ -81,11 +81,26 @@ does not run, instead of failing on every event.
 | `death(uuid, name, cause)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type | None |
 | `respawn(uuid, name, dimension)` | On `PlayerRespawnEvent`, with the id of the dimension | None |
 | `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
-| `command(name, uuid, playerName, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
+| `command(name, uuid, senderName, level, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
 | `drain()` | At the end of every server tick, after `tick` | The queued actions, oldest first |
 
-A UUID is in its usual form with dashes. For a command of the console, `senderUuid` and
-`senderName` are null. `arguments` is everything after the name and one space, or the empty string.
+A UUID is in its usual form with dashes. `arguments` is everything after the name and one space,
+or the empty string. The source of a command is one of three, and `level` is its permission level
+from 0 to 4, which the mod reads with `hasPermission`, since Minecraft keeps the level private.
+
+| Source | `senderUuid` | `senderName` | `level` |
+| --- | --- | --- | --- |
+| A player, also when another source runs the command as them | The UUID of the player | The name of the profile | The level of the source |
+| The console and RCON: no entity at level 4 | Null | Null | 4 |
+| Every other source: a command block, a function, a command that runs as an entity that is no player | Null | The name of the source, such as `@` for a command block | The level of the source |
+
+The natives answer a player as `Sender::Player`, the console and RCON as `Sender::Console` and every
+other source as `Sender::Other` with its name and level. A command that runs as a player through
+`execute as` reaches the plugins as that player, as Bukkit hands it to a plugin, so a plugin judges
+the player and not the source that made the command run. A function that runs at level 4 has no
+entity and the rights of the console, so it reads as the console. The natives refuse the command of
+a source that the mod passes wrong with an empty answer instead of guessing who runs it: a UUID
+without a name, neither of them below level 4, or a level outside 0 to 4.
 
 ## Commands
 
@@ -104,9 +119,8 @@ through `golem-permissions`.
 Forge builds the commands when it loads the data packs: once at the start, before
 `ServerStartingEvent`, and again on every `/reload`. So `commandNames()` answers before
 `serverStarting()`, and the plugins must know their commands by then. A name that is empty or holds
-whitespace cannot be typed as the first word of a command, so the mod skips it with a warning. A
-command block, a function and every other source that is not a player run as the console, with a
-null sender. When `command` throws, the sender reads that the command failed and the log of the
+whitespace cannot be typed as the first word of a command, so the mod skips it with a warning.
+When `command` throws, the sender reads that the command failed and the log of the
 server holds the exception.
 
 ## Actions

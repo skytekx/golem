@@ -59,13 +59,24 @@ pub struct Player {
     pub name: String,
 }
 
+/// The permission level of the console and of RCON, the highest level of the game.
+pub const MAX_LEVEL: u8 = 4;
+
 /// Who runs a command of a plugin.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Sender {
-    /// The server console, which includes RCON.
+    /// The server console or RCON: a source without an entity at the level [`MAX_LEVEL`].
     Console,
-    /// A player in the game.
+    /// A player in the game, also when another source runs the command as them.
     Player(Player),
+    /// Every other source: a command block, a function, or a command that runs as an entity
+    /// that is no player.
+    Other {
+        /// The name of the source as the game gives it, such as `@` for a command block.
+        name: String,
+        /// The permission level of the source, from 0 to [`MAX_LEVEL`].
+        level: u8,
+    },
 }
 
 /// What the mod reports, each on the server thread.
