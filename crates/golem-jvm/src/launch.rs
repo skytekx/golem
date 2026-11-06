@@ -435,11 +435,11 @@ impl Parser {
 }
 
 /// Whether the main class names a source file, `IsSourceFile` of java.c, which the launcher would
-/// compile. The launcher takes the suffix .java in lower case alone.
+/// compile. `JLI_HasSuffix` compares the text from the last dot with .java in any case.
 fn is_source_file(main_class: &str, base: &Path) -> bool {
     main_class
-        .strip_suffix("java")
-        .is_some_and(|stem| stem.ends_with('.'))
+        .rfind('.')
+        .is_some_and(|dot| main_class[dot..].eq_ignore_ascii_case(".java"))
         && base.join(main_class).exists()
 }
 
