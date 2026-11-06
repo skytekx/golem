@@ -42,6 +42,7 @@ SkyTekx 3 server and its modpack stay in the
 | [Permissions](plugins/permissions.md) | The permissions in place of LuckPerms: the format, the rules of resolution, the seed and the quirks they fix |
 | [Plugin API](api.md) | The design of the GraphQL API of Golem on Aosabi, an equivalent of the whole Bukkit API: the schema, the client through the executor, the contract with the bridge, threads, events, remote clients, coverage, the Bukkit layer and the work breakdown |
 | [API coverage](api-coverage.md) | The format of the mapping that holds the API to every member of spigot-api 1.20.1, its statuses, the three numbers and how CI holds them |
+| [Bukkit layer](bukkit-layer.md) | The layer that runs Bukkit and Spigot plugins unchanged on the Golem API: what it is, the three levels a survey of 503 plugins measures, the stand-ins of CraftBukkit, the remapper, the needs outside the levels, the order of work and the decisions open for the owner |
 | [Change log](log.md) | What changed, oldest first |
 | [Decisions](decisions.md) | Every ruling of the owner |
 | [Open items](open-items.md) | What is still open |
