@@ -5,9 +5,11 @@
     python3 -I tests/fetch.py
     python3 -I tests/fetch.py --only jdk
     python3 -I tests/fetch.py --cache path/to/cache
+    python3 -I tests/fetch.py --only modpack
+    python3 -I tests/fetch.py --only modpack --server-repo path/to/skytekx3-1201-server
 
-Every download is checked by its SHA-256 before it is used, and lands under tests/.cache/, which
-git ignores. The pins are these.
+Every download is checked by its SHA-256, or by the SHA-512 of the index of the pack, before it is
+used, and lands under tests/.cache/, which git ignores. The pins are these.
 
 1. Temurin 17.0.21+9 of Eclipse Adoptium, the JDK the Mac mini runs the server on, unpacked to
    tests/.cache/jdk-17.0.21+9. On macOS the Java home is the Contents/Home of the bundle, and
@@ -18,6 +20,19 @@ git ignores. The pins are these.
 3. Gradle 8.14.3, which builds the bridge under bridge/ with ForgeGradle, unpacked to
    tests/.cache/gradle-8.14.3. The bridge carries no Gradle wrapper, whose jar is a binary under
    another license.
+4. The SkyTekx 3 modpack as the live server runs it, from the repository of the server at one
+   commit, only with --only modpack, since it is about 1 GB. The script clones that commit into
+   tests/.cache/skytekx3-1201-server, or reads it from a checkout that --server-repo names and
+   leaves that checkout as it is. Every file comes from the commit itself, not from the work
+   tree of a checkout. It downloads the files of modrinth.index.json that the server requires
+   into tests/.cache/modpack/mods, each checked by the SHA-512 and the size the index gives,
+   adds the jars of local-mods/, and copies config/, defaultconfigs/, kubejs/, world/datapacks/,
+   server.properties.example, the systemd unit of the live server, the Arclight jar with its
+   four files of settings and tools/patch_mods.py beside them. The jars stay as their authors
+   published them, since tools/patch_mods.py rewrites 14 of them, which would then miss their
+   hashes, so a notebook patches its own copy as the live server patches its mods/. The file
+   tests/.cache/modpack/modpack.json, written last, names the commit and every jar. A download
+   that broke off goes on where it stopped, and a jar whose hash already matches stays.
 
 The script accepts the EULA of Minecraft in that test server, with eula=true in its eula.txt,
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
@@ -25,20 +40,28 @@ localhost only and runs in offline mode, so no account of Mojang is involved.
 
 A pin that is already in place is kept, so a second run downloads nothing. The exit status is 1
 when a download fails or its hash differs.
+
+The jars of the pack are the work of their authors under their own licenses, the files of the
+server repository are the work of SkyTekx. The script only puts them where the notebooks find
+them, in the ignored cache, and Golem ships none of them.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
+import json
 import platform
 import shutil
 import subprocess
 import sys
 import tarfile
+import urllib.parse
 import urllib.request
 import zipfile
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path, PurePosixPath
 
 #: The root of the tree, one level above this file.
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +92,27 @@ GRADLE_VERSION = "8.14.3"
 GRADLE_URL = "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
 GRADLE_SHA256 = "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531"
 GRADLE_DIRECTORY = "gradle-8.14.3"
+
+#: The repository of the SkyTekx 3 server and the commit whose pack the notebooks boot.
+SERVER_REPOSITORY = "https://github.com/skytekx/skytekx3-1201-server"
+SERVER_COMMIT = "3fa5ae681d12233fe81003fbfe5a2d3c529747fc"
+SERVER_DIRECTORY = "skytekx3-1201-server"
+MODPACK_DIRECTORY = "modpack"
+#: The hosts that a download of the index may name, as the format of Modrinth packs allows them.
+MODPACK_HOSTS = ("cdn.modrinth.com", "github.com")
+#: The directories of the server repository that the pack takes beside its mods.
+MODPACK_TREES = ("config", "defaultconfigs", "kubejs", "world/datapacks")
+#: The jar of Arclight that the live server runs, which arclight.jar of the repository links to.
+ARCLIGHT_JAR = "arclight-forge-1.20.1-1.0.6-6de9fec-safeiter2.jar"
+ARCLIGHT_SHA256 = "c55ad477b92250ef31baf965aae3158ffa99239b9b44a60b3a9dd5206dc1557f"
+#: The files of the server repository that the pack takes: the settings of the live server and the
+#: systemd unit with the options of its JVM, the jar of Arclight with the files of settings it
+#: reads, and the script that patches jars of mods/ on the live server.
+MODPACK_FILES = ("server.properties.example", "systemd/skytekx3.service", ARCLIGHT_JAR, "arclight.conf",
+                 "bukkit.yml", "spigot.yml", "commands.yml", "tools/patch_mods.py")
+#: The downloads that run at once, and the tries of one download before the script gives up.
+MODPACK_WORKERS = 4
+MODPACK_TRIES = 3
 
 #: The settings of the test server: offline, on localhost, a small world without spawn
 #: protection. A notebook that boots a copy sets its own port in the copy.
@@ -172,6 +216,189 @@ def fetch_gradle(cache: Path) -> Path:
     return home
 
 
+def digest(path: Path, algorithm: str) -> str:
+    """The hex digest of the file at `path` by `algorithm` of hashlib."""
+    state = hashlib.new(algorithm)
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1 << 20), b""):
+            state.update(block)
+    return state.hexdigest()
+
+
+def git(arguments: list, cwd: Path, output=subprocess.PIPE) -> bytes:
+    """Run git with `arguments` in `cwd` and answer what it printed, raising on a failure."""
+    result = subprocess.run(["git", "-c", "advice.detachedHead=false", *arguments], cwd=cwd, stdout=output,
+                            stderr=subprocess.PIPE, check=False)
+    if result.returncode != 0:
+        raise Failure("git %s failed: %s" % (arguments[0], result.stderr.decode(errors="replace").strip()))
+    return result.stdout
+
+
+def holds_commit(repository: Path) -> bool:
+    """Whether the git repository at `repository` holds the pinned commit of the server."""
+    if not (repository / ".git").exists():
+        return False
+    try:
+        git(["cat-file", "-e", SERVER_COMMIT + "^{commit}"], repository)
+    except Failure:
+        return False
+    return True
+
+
+def fetch_server(cache: Path, given) -> Path:
+    """The server repository at the pinned commit: the checkout `given`, or a clone in `cache`."""
+    if given is not None:
+        repository = given.resolve()
+        if not holds_commit(repository):
+            raise Failure("%s holds no commit %s of the server" % (repository, SERVER_COMMIT))
+        return repository
+    repository = cache / SERVER_DIRECTORY
+    if holds_commit(repository):
+        return repository
+    shutil.rmtree(repository, ignore_errors=True)
+    repository.mkdir(parents=True)
+    print("fetch: %s at %s" % (SERVER_REPOSITORY, SERVER_COMMIT), flush=True)
+    git(["init", "--quiet"], repository)
+    git(["fetch", "--quiet", "--depth", "1", "--no-tags", SERVER_REPOSITORY, SERVER_COMMIT], repository)
+    git(["checkout", "--quiet", "--detach", "FETCH_HEAD"], repository)
+    return repository
+
+
+def server_files(index: dict) -> tuple:
+    """The entries of `index` that the server requires, and the names of those it leaves out."""
+    if index.get("formatVersion") != 1 or index.get("game") != "minecraft":
+        raise Failure("modrinth.index.json is no index of a Minecraft pack in format 1")
+    pins = index.get("dependencies", {})
+    if "%s-%s" % (pins.get("minecraft"), pins.get("forge")) != FORGE_VERSION:
+        raise Failure("the pack names Forge %s, the pin is %s" % (pins.get("forge"), FORGE_VERSION))
+    required, left_out = [], []
+    for entry in index["files"]:
+        path = PurePosixPath(entry["path"])
+        name = path.name
+        if path.parts != ("mods", name) or name.startswith(".") or "\\" in name or not name.endswith(".jar"):
+            raise Failure("the index names the file %r, which is no jar in mods/" % entry["path"])
+        if entry.get("env", {}).get("server") != "required":
+            left_out.append(name)
+            continue
+        url = entry["downloads"][0]
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https" or parts.hostname not in MODPACK_HOSTS:
+            raise Failure("the index downloads %s from %s, which is none of %s" % (name, parts.hostname, MODPACK_HOSTS))
+        required.append({"file": name, "url": url, "sha512": entry["hashes"]["sha512"], "size": entry["fileSize"]})
+    return required, left_out
+
+
+def fetch_jar(entry: dict, mods: Path) -> bool:
+    """Download one jar of the index into `mods`, answering whether it had to be downloaded.
+
+    A jar whose size and SHA-512 match stays. A partial download goes on with a range request
+    where it stopped, and starts over when the server answers with the whole file instead.
+    """
+    target = mods / entry["file"]
+    if target.is_file() and target.stat().st_size == entry["size"] and digest(target, "sha512") == entry["sha512"]:
+        return False
+    partial = target.with_name(target.name + ".part")
+    for attempt in range(1, MODPACK_TRIES + 1):
+        offset = partial.stat().st_size if partial.is_file() else 0
+        if offset >= entry["size"]:
+            partial.unlink()
+            offset = 0
+        headers = {"User-Agent": "golem-harness"}
+        if offset:
+            headers["Range"] = "bytes=%d-" % offset
+        print("fetch: %s%s" % (entry["url"], " from byte %d" % offset if offset else ""), flush=True)
+        try:
+            request = urllib.request.Request(entry["url"], headers=headers)
+            with urllib.request.urlopen(request, timeout=300) as response:
+                resumed = offset > 0 and response.status == 206
+                with open(partial, "ab" if resumed else "wb") as stream:
+                    shutil.copyfileobj(response, stream)
+        except (OSError, http.client.HTTPException) as broken:
+            if attempt == MODPACK_TRIES:
+                raise Failure("%s: %s" % (entry["url"], broken)) from broken
+            continue
+        if partial.stat().st_size < entry["size"]:
+            continue
+        found = digest(partial, "sha512")
+        if partial.stat().st_size == entry["size"] and found == entry["sha512"]:
+            partial.replace(target)
+            return True
+        partial.unlink()
+        raise Failure("%s has SHA-512 %s, the index names %s" % (entry["url"], found, entry["sha512"]))
+    raise Failure("%s broke off %d times" % (entry["url"], MODPACK_TRIES))
+
+
+def replace(source: Path, target: Path) -> None:
+    """Put `source` at `target`, removing what stood there before."""
+    if target.is_dir() and not target.is_symlink():
+        shutil.rmtree(target)
+    elif target.exists() or target.is_symlink():
+        target.unlink()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source.rename(target)
+
+
+def fetch_modpack(cache: Path, given) -> Path:
+    """The pack of the live server under `cache`, a server directory but for Forge itself."""
+    repository = fetch_server(cache, given)
+    pack = cache / MODPACK_DIRECTORY
+    stamp = pack / "modpack.json"
+    if stamp.exists():
+        stamp.unlink()
+    index = json.loads(git(["show", SERVER_COMMIT + ":modrinth.index.json"], repository))
+    required, left_out = server_files(index)
+    tree = cache / "unpack-modpack"
+    shutil.rmtree(tree, ignore_errors=True)
+    tree.mkdir(parents=True)
+    archive = cache / "modpack-tree.tar"
+    with open(archive, "wb") as stream:
+        git(["archive", "--format=tar", SERVER_COMMIT, "--", "local-mods", *MODPACK_TREES, *MODPACK_FILES],
+            repository, output=stream)
+    with tarfile.open(archive) as bundle:
+        bundle.extractall(tree, filter="data")
+    archive.unlink()
+    if digest(tree / ARCLIGHT_JAR, "sha256") != ARCLIGHT_SHA256:
+        raise Failure("%s of the commit differs from its pin %s" % (ARCLIGHT_JAR, ARCLIGHT_SHA256))
+    local = sorted(path for path in (tree / "local-mods").iterdir() if path.suffix == ".jar")
+    names = [entry["file"] for entry in required]
+    clash = sorted(set(names) & {path.name for path in local})
+    if clash or len(set(names)) != len(names):
+        raise Failure("the index and local-mods/ name some jars twice: %s" % clash)
+    mods = pack / "mods"
+    mods.mkdir(parents=True, exist_ok=True)
+    # A jar of an earlier pin would load beside the new one, so the folder holds the pack alone.
+    wanted = set(names) | {path.name for path in local} | {name + ".part" for name in names}
+    for stale in mods.iterdir():
+        if stale.name not in wanted:
+            if stale.is_dir() and not stale.is_symlink():
+                shutil.rmtree(stale)
+            else:
+                stale.unlink()
+    with ThreadPoolExecutor(MODPACK_WORKERS) as workers:
+        downloaded = sum(workers.map(lambda entry: fetch_jar(entry, mods), required))
+    for path in local:
+        shutil.copyfile(path, mods / path.name)
+    for part in (*MODPACK_TREES, *MODPACK_FILES):
+        replace(tree / part, pack / part)
+    shutil.rmtree(tree)
+    jars = [{"file": entry["file"], "source": "modrinth.index.json", "sha512": entry["sha512"], "size": entry["size"]}
+            for entry in required]
+    jars += [{"file": path.name, "source": "local-mods", "sha512": digest(mods / path.name, "sha512"),
+              "size": (mods / path.name).stat().st_size} for path in local]
+    record = {
+        "schema": "golem-modpack-1",
+        "repository": SERVER_REPOSITORY,
+        "commit": SERVER_COMMIT,
+        "pack": {"name": index.get("name"), "version": index.get("versionId"), **index["dependencies"]},
+        "mods": sorted(jars, key=lambda jar: jar["file"].lower()),
+        "left_out": sorted(left_out, key=str.lower),
+    }
+    stamp.write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
+    print("fetch: %d jars of the index, %d of them downloaded now, %d of local-mods, %d left out as not for the "
+          "server" % (len(required), downloaded, len(local), len(left_out)))
+    return pack
+
+
 def shown(path: Path) -> str:
     """A path relative to the root where it lies below it, so no machine path is printed."""
     try:
@@ -182,9 +409,14 @@ def shown(path: Path) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Download the JDK and the Forge server of the notebooks.")
-    parser.add_argument("--only", choices=["jdk", "forge", "gradle"], help="Fetch one of the three alone.")
+    parser.add_argument("--only", choices=["jdk", "forge", "gradle", "modpack"],
+                        help="Fetch one of the three alone, or the modpack, which only this fetches.")
     parser.add_argument("--cache", type=Path, default=CACHE, help="The directory, by default tests/.cache.")
+    parser.add_argument("--server-repo", type=Path,
+                        help="A checkout of the server repository that holds the pinned commit, read and not cloned.")
     args = parser.parse_args(argv)
+    if args.server_repo is not None and args.only != "modpack":
+        parser.error("--server-repo belongs to --only modpack")
     cache = args.cache.resolve()
     cache.mkdir(parents=True, exist_ok=True)
     try:
@@ -197,6 +429,9 @@ def main(argv=None) -> int:
         if args.only in (None, "gradle"):
             gradle = fetch_gradle(cache)
             print("fetch: Gradle %s at %s" % (GRADLE_VERSION, shown(gradle)))
+        if args.only == "modpack":
+            pack = fetch_modpack(cache, args.server_repo)
+            print("fetch: the modpack of %s at %s" % (SERVER_COMMIT[:12], shown(pack)))
     except (Failure, OSError) as broken:
         print("fetch: %s" % broken, file=sys.stderr)
         return 1
