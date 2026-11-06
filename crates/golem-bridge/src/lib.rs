@@ -200,6 +200,12 @@ pub fn stats() -> TickStats {
     host::stats()
 }
 
+/// Answers whether the bridge mod has reached the natives, so that it runs the queued actions.
+/// A server without the mod in `mods/`, or before Forge constructs it, never runs them.
+pub fn connected() -> bool {
+    host::connected()
+}
+
 /// Writes one line to the log of the server, the standard error, behind the prefix `[golem]`.
 ///
 /// It never panics, so a native method may log on its way out of a panic. A line that the

@@ -34,7 +34,11 @@ use std::{
     sync::{
         Mutex,
         OnceLock,
-        PoisonError, //
+        PoisonError,
+        atomic::{
+            AtomicBool,
+            Ordering, //
+        }, //
     },
     time::Instant, //
 };
@@ -65,6 +69,9 @@ struct Host {
 
 /// The state of the process, made on its first use.
 static HOST: OnceLock<Host> = OnceLock::new();
+
+/// True once the mod has called `version()`, which it does while Forge constructs it.
+static CONNECTED: AtomicBool = AtomicBool::new(false);
 
 thread_local! {
     /// True while the handler runs on this thread, which tells a call from inside the handler
@@ -152,9 +159,16 @@ pub fn panic_message(payload: &(dyn Any + Send)) -> &str {
     }
 }
 
-/// Answers the version of Golem, the answer of `version()`.
+/// Answers the version of Golem, the answer of `version()`, and marks the bridge connected.
 pub fn version() -> &'static str {
+    CONNECTED.store(true, Ordering::Release);
     VERSION
+}
+
+/// Answers whether the mod has called `version()`, after which it drains the queue of actions
+/// at the end of every server tick.
+pub fn connected() -> bool {
+    CONNECTED.load(Ordering::Acquire)
 }
 
 /// Reports `ServerStartingEvent` with the versions of Forge and Minecraft.
