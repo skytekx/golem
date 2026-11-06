@@ -5,10 +5,11 @@
  *
  * golem-permissions reads that TOML into its resolver, so the store hands its set to the
  * resolver as text and takes the seed file the same way, without either crate naming the other.
- * The store keeps the set as it is given and checks only that every group a list names exists.
- * golem-permissions judges the rest, the syntax of a node, the group default and the cycles of
- * inheritance, when it loads the text, so a port loads a changed set into a resolver before it
- * writes the change.
+ * The store keeps the set as it is given and checks only what keeps its rows whole: every name
+ * and node is one token of check_token, no list names an entry twice, and every group a list
+ * names exists. golem-permissions judges the rest, the syntax of a node, the group default and
+ * the cycles of inheritance, when it loads the text, so a port loads a changed set into a
+ * resolver before it writes the change.
  */
 
 use std::collections::{

@@ -15,15 +15,16 @@ use std::{
     path::PathBuf, //
 };
 
-/// The longest name the store takes, in characters: a home, a warp, a group, a setting key, the
-/// name or the nickname of a player.
+/// The longest name the store takes, in characters: a home, a warp, a setting key, the name or the
+/// nickname of a player, and the name of the sender of a mail.
 pub const MAX_NAME_CHARS: usize = 64;
 
-/// The longest text the store takes, in bytes: a mail, the note of a transfer, the value of a
-/// setting, a dimension or a permission node.
+/// The longest text the store takes, in bytes: a mail, the note of a transfer and the value of a
+/// setting.
 pub const MAX_TEXT_BYTES: usize = 65536;
 
-/// The longest permission node or group of the permissions, and the longest dimension, in bytes.
+/// The longest token the store takes, in bytes: a node or a group of the permissions, the group of
+/// a spawn, the permission of a warp and a dimension.
 pub const MAX_NODE_BYTES: usize = 256;
 
 /// The UUID of a player, kept as its 128 bits and written in lower case with its four dashes.

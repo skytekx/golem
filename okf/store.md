@@ -415,10 +415,10 @@ for at all.
 | `Twice` | `the nodes of the group default name "essentials.home" twice` |
 | `Invalid` | `the name of a home is empty`, `the name of a home has 65 characters, more than 64`, `the location of a home has the x NaN, which is not a finite number` |
 
-The rules of a value: a name of a player, a home, a warp, a setting key or a nickname has 1 to 64
-characters and no control character. A node, a group or a dimension has 1 to 256 bytes and no white
-space or control character. A text of a mail, a note or a setting value has at most 65536 bytes
-and no NUL, and a mail is not empty. A location is finite.
+The rules of a value: a name of a player, a home, a warp, a setting key, a nickname or the sender of
+a mail has 1 to 64 characters and no control character. A node, a group or a dimension has 1 to 256
+bytes and no white space or control character. A text of a mail, a note or a setting value has at
+most 65536 bytes and no NUL, and a mail is not empty. A location is finite.
 
 ## The place in the program golem
 
