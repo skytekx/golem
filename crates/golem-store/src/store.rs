@@ -878,7 +878,8 @@ impl Store {
         })
     }
 
-    // The accounts.
+    // The accounts. Every change of an account checks its note first, then its amount or the
+    // balance it sets, then the accounts it names, in the order okf/store.md gives the refusals.
 
     /// Opens the account of a player with `starting` cents, which the log records as a deposit
     /// with `note` when it is above zero.
@@ -889,10 +890,10 @@ impl Store {
         at: i64,
         note: &str,
     ) -> Result<Receipt, StoreError> {
+        check_text("the note of a transfer", note)?;
         if starting < 0 {
             return Err(Refusal::Negative(starting).into());
         }
-        check_text("the note of a transfer", note)?;
         self.change(|cache| {
             if !cache.players.contains_key(&uuid) {
                 return Err(Refusal::UnknownPlayer(uuid));
@@ -988,10 +989,10 @@ impl Store {
         at: i64,
         note: &str,
     ) -> Result<Receipt, StoreError> {
+        check_text("the note of a transfer", note)?;
         if balance < 0 {
             return Err(Refusal::Negative(balance).into());
         }
-        check_text("the note of a transfer", note)?;
         self.change(|cache| {
             let current = cache
                 .accounts
