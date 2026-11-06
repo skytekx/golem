@@ -29,12 +29,19 @@
 //! which runs its `steps` `count` times with `{i}` in a string replaced by the round from 1 and
 //! prints one line for all rounds, `sleep` with `ms`, and `wait`, which prints its line and then
 //! waits until its standard input ends, for a notebook that kills the process there.
+//!
+//! When the standard output is gone, such as a pipe whose reader closed, a subcommand stops at
+//! once, a script closes its store first, and the exit code is 1 with the reason on the standard
+//! error.
 
 use std::{
     collections::BTreeMap,
     fs,
     hint::black_box,
-    io::Read as _,
+    io::{
+        Read as _,
+        Write as _, //
+    },
     path::PathBuf,
     time::{
         Duration,
@@ -83,9 +90,25 @@ pub const BENCH: Subcommand = (
     bench,
 );
 
+/// Reports a failure on the standard error and answers the exit code. A standard error that is
+/// gone loses the line, but never panics.
 fn fail(name: &str, message: &str) -> i32 {
-    eprintln!("golem-devtool: {name}: {message}");
+    let _ = writeln!(std::io::stderr().lock(), "golem-devtool: {name}: {message}");
     1
+}
+
+/// Writes one line of JSON on the standard output, or answers why it could not, such as a pipe
+/// whose reader is gone. Rust ignores `SIGPIPE`, so a closed pipe is an error here and not a
+/// signal, and `println!` would panic on it.
+fn emit(line: &Value) -> std::io::Result<()> {
+    let mut output = std::io::stdout().lock();
+    writeln!(output, "{line}")?;
+    output.flush()
+}
+
+/// The failure of a closed standard output, after which a subcommand stops.
+fn output_closed(name: &str, error: &std::io::Error) -> i32 {
+    fail(name, &format!("the standard output is closed: {error}"))
 }
 
 /// A failure of one step: the kind and the message.
@@ -864,10 +887,14 @@ fn script(arguments: &[String]) -> i32 {
         return fail(name, &format!("{path}: the script has no list \"steps\""));
     };
     let mut session = Session::default();
+    let mut printed = Ok(());
     for (index, step) in steps.iter().enumerate() {
         let op = step.get("op").and_then(Value::as_str).unwrap_or_default();
         if op == "wait" {
-            println!("{}", json!({"step": index, "op": op, "ok": "waiting"}));
+            printed = emit(&json!({"step": index, "op": op, "ok": "waiting"}));
+            if printed.is_err() {
+                break;
+            }
             let mut rest = Vec::new();
             let _ = std::io::stdin().read_to_end(&mut rest);
             continue;
@@ -880,12 +907,18 @@ fn script(arguments: &[String]) -> i32 {
                 "error": {"kind": error.kind, "message": error.message},
             }),
         };
-        println!("{line}");
+        printed = emit(&line);
+        if printed.is_err() {
+            break;
+        }
     }
-    // A store the script left open closes here, so its last changes reach the file.
-    if let Some(store) = session.store.take()
-        && let Err(error) = store.close()
-    {
+    // A store the script left open closes here, so its last changes reach the file, also when
+    // the reader of the answers went away and the script stopped early.
+    let closed = session.store.take().map_or(Ok(()), |store| store.close());
+    if let Err(error) = printed {
+        return output_closed(name, &error);
+    }
+    if let Err(error) = closed {
         return fail(name, &error.to_string());
     }
     0
@@ -898,10 +931,10 @@ fn describe(arguments: &[String]) -> i32 {
         return fail(name, "give the store file");
     };
     match golem_store::describe(path.as_ref()) {
-        Ok(description) => {
-            println!("{}", description_json(&description));
-            0
-        }
+        Ok(description) => match emit(&description_json(&description)) {
+            Ok(()) => 0,
+            Err(error) => output_closed(name, &error),
+        },
         Err(error) => fail(name, &error.to_string()),
     }
 }
@@ -1228,10 +1261,10 @@ fn bench(arguments: &[String]) -> i32 {
         }))
     };
     match run() {
-        Ok(summary) => {
-            println!("{summary}");
-            0
-        }
+        Ok(summary) => match emit(&summary) {
+            Ok(()) => 0,
+            Err(error) => output_closed(name, &error),
+        },
         Err(error) => fail(name, &error.to_string()),
     }
 }
