@@ -40,7 +40,9 @@ public final class GolemBridge {
 			return;
 		}
 		Guard guard = new Guard();
-		MinecraftForge.EVENT_BUS.register(new ServerEvents(guard, new Actions(guard)));
+		ListNames names = new ListNames();
+		MinecraftForge.EVENT_BUS.register(names);
+		MinecraftForge.EVENT_BUS.register(new ServerEvents(guard, new Actions(guard, names)));
 		MinecraftForge.EVENT_BUS.register(new PlayerEvents(guard));
 		MinecraftForge.EVENT_BUS.register(new PluginCommands(guard));
 		Object version = context.getContainer().getModInfo().getVersion();

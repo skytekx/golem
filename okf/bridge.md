@@ -138,12 +138,25 @@ separator, which no field may hold. The first field is the kind.
 | `command` | The command without its slash | Runs it as the console, through the command source stack of the server |
 | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
 | `broadcast` | The text | Sends the text as a system message to every player and the console |
+| `teleport` | The UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` | Teleports the player there, if they are online, also into another dimension |
+| `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
+
+A number travels as the shortest decimal that reads back as the same number, which `Display` of
+Rust writes and `Double.parseDouble` and `Float.parseFloat` of Java read. A teleport does what the
+command `tp` does: it keeps the chunk of the place loaded for a moment with the ticket
+`post_teleport`, wakes a sleeping player, lets a rider dismount, stops the fall and wraps the yaw
+to -180 to 180 and the pitch to -90 to 90, and `ServerPlayer.teleportTo` moves the player into
+another dimension. It takes the place as it is, so a plugin that wants a safe place asks the game
+for one first. A name of the player list is answered on `PlayerEvent.TabListNameFormat` after
+every other listener, so it wins over the name of another mod, and `refreshTabListName` sends it
+to every client. It holds until Golem clears it or the player leaves.
 
 The mod logs an action of an unknown kind, or of a known kind with the wrong number of fields,
-once and skips it. Each action runs on its own, so an action that throws, such as a message to a
-UUID that does not parse, is logged and the next action runs. The host stops the server with the
-actions `command save-all flush` and `command stop`, so the stop path is the same as an operator's
-at the console.
+once and skips it, and so a teleport into a dimension the server does not have, once per
+dimension, and to a place that is no finite number. Each action runs on its own, so an action that
+throws, such as a message to a UUID that does not parse, is logged and the next action runs. The
+host stops the server with the actions `command save-all flush` and `command stop`, so the stop
+path is the same as an operator's at the console.
 
 ## The rules of the server thread
 

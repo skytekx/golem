@@ -13,8 +13,11 @@
 The client speaks protocol 763 in offline mode: the handshake, the login with the plugin
 requests of Forge answered as a vanilla client would, the keep alive, chat and commands without
 signatures, the respawn and the close. A thread reads its packets as they come and records every
-system chat message as raw text in `messages`. It is no game client: it sends no movement and
-loads no chunk, which a server in offline mode on localhost accepts.
+system chat message as raw text in `messages`, every place the server puts the player in
+`positions`, the dimension of every respawn or change of dimension in `dimensions` and the name
+of every player in the player list in `list_names`. It confirms every teleport, as a vanilla
+client does. It is no game client: it sends no movement and loads no chunk, which a server in
+offline mode on localhost accepts.
 """
 
 from __future__ import annotations
@@ -59,6 +62,52 @@ def parse_varint(data: bytes, offset: int = 0) -> tuple[int, int]:
         shift += 7
 
 
+def parse_string(data: bytes, offset: int = 0) -> tuple[str, int]:
+    """The String at `offset` of `data` and the offset after it."""
+    length, offset = parse_varint(data, offset)
+    return data[offset:offset + length].decode("utf-8", "replace"), offset + length
+
+
+def parse_player_info(payload: bytes) -> list:
+    """The players of a Player Info Update whose name in the list it sets, each as its UUID and
+    the JSON text of the name, or None when the client shows the name of the profile."""
+    actions, offset = payload[0], 1
+    count, offset = parse_varint(payload, offset)
+    named = []
+    for _ in range(count):
+        player = str(uuid.UUID(bytes=payload[offset:offset + 16]))
+        offset += 16
+        if actions & 0x01:
+            _, offset = parse_string(payload, offset)
+            properties, offset = parse_varint(payload, offset)
+            for _ in range(properties):
+                _, offset = parse_string(payload, offset)
+                _, offset = parse_string(payload, offset)
+                signed, offset = payload[offset], offset + 1
+                if signed:
+                    _, offset = parse_string(payload, offset)
+        if actions & 0x02:
+            session, offset = payload[offset], offset + 1
+            if session:
+                offset += 16 + 8
+                for _ in range(2):
+                    length, offset = parse_varint(payload, offset)
+                    offset += length
+        if actions & 0x04:
+            _, offset = parse_varint(payload, offset)
+        if actions & 0x08:
+            offset += 1
+        if actions & 0x10:
+            _, offset = parse_varint(payload, offset)
+        if actions & 0x20:
+            present, offset = payload[offset], offset + 1
+            name = None
+            if present:
+                name, offset = parse_string(payload, offset)
+            named.append((player, name))
+    return named
+
+
 class Client:
     """A player in offline mode, whose packets a thread reads as they come."""
 
@@ -68,6 +117,7 @@ class Client:
         self.stream = self.socket.makefile("rb")
         self.threshold, self.uuid = -1, None
         self.lock, self.messages, self.play = threading.Lock(), [], threading.Event()
+        self.positions, self.dimensions, self.list_names = [], [], {}
         self.closed = threading.Event()
 
     def send(self, packet: int, payload: bytes = b"") -> None:
@@ -123,6 +173,14 @@ class Client:
                     self.play.set()
                 elif packet == 0x64:
                     self.messages.append(payload.decode("utf-8", "replace"))
+                elif packet == 0x3C:
+                    self.positions.append(struct.unpack(">dddff", payload[:32]))
+                    self.send(0x00, varint(parse_varint(payload, 33)[0]))
+                elif packet == 0x41:
+                    _, offset = parse_string(payload)
+                    self.dimensions.append(parse_string(payload, offset)[0])
+                elif packet == 0x3A:
+                    self.list_names.update(parse_player_info(payload))
         except (EOFError, OSError, ValueError, zlib.error):
             pass
         finally:

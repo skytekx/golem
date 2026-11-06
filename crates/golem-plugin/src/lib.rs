@@ -30,8 +30,10 @@ use golem_bridge::{
     Action,
     Actions,
     Event,
+    Location,
     Sender,
-    Verdict, //
+    Verdict,
+    log, //
 };
 
 pub use crate::{
@@ -115,6 +117,44 @@ impl<'a> Context<'a> {
     pub fn run_command(&self, command: &str) {
         let command = command.strip_prefix('/').unwrap_or(command);
         self.actions.push(Action::Command(command.to_owned()));
+    }
+
+    /// Queues a teleport of the player with `uuid` to `location`, also into another dimension,
+    /// which the mod runs if they are online, and answers whether it queued one.
+    ///
+    /// A location with a coordinate or an angle that is no finite number is refused with a line
+    /// on the log, since the game cannot hold the player there. The place is taken as it is, so
+    /// a plugin that wants a safe one asks the game for it first.
+    pub fn teleport(&self, uuid: &str, location: &Location) -> bool {
+        if !location.is_finite() {
+            log(format_args!(
+                "a plugin asked to teleport {uuid} to {location}, which is no finite place, so the runtime refuses it"
+            ));
+            return false;
+        }
+        self.actions.push(Action::Teleport {
+            uuid: uuid.to_owned(),
+            location: location.clone(),
+        });
+        true
+    }
+
+    /// Queues the name that the player list shows for the player with `uuid` until they leave
+    /// or a plugin clears it, such as their name with a mark for away. An empty name clears it.
+    pub fn set_list_name(&self, uuid: &str, name: &str) {
+        self.actions.push(Action::ListName {
+            uuid: uuid.to_owned(),
+            name: (!name.is_empty()).then(|| name.to_owned()),
+        });
+    }
+
+    /// Queues the clearing of the name in the player list of the player with `uuid`, so the
+    /// list shows what it showed before a plugin named them.
+    pub fn clear_list_name(&self, uuid: &str) {
+        self.actions.push(Action::ListName {
+            uuid: uuid.to_owned(),
+            name: None,
+        });
     }
 }
 

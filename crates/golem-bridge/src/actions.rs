@@ -3,6 +3,9 @@
 /*
  * The actions of golem-bridge: what Rust asks the server thread to do, the queue the mod drains
  * at the end of every server tick, and the wire form in which drain() hands each action to Java.
+ *
+ * A number of an action travels as the shortest decimal that reads back as the same number,
+ * which Display of Rust writes and Double.parseDouble of Java reads.
  */
 
 use std::{
@@ -19,11 +22,13 @@ use std::{
     }, //
 };
 
+use crate::Location;
+
 /// The character between the fields of an action on the wire, U+001F, the unit separator.
 pub const SEPARATOR: char = '\u{1f}';
 
 /// What Rust asks the server thread to do.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     /// Run a command as the console, without its leading slash.
     Command(String),
@@ -36,6 +41,20 @@ pub enum Action {
     },
     /// Send a system message to every player and the console.
     Broadcast(String),
+    /// Teleport a player to a location, also into another dimension.
+    Teleport {
+        /// The UUID of the player.
+        uuid: String,
+        /// Where the player goes.
+        location: Location,
+    },
+    /// Set or clear the name of a player in the player list.
+    ListName {
+        /// The UUID of the player.
+        uuid: String,
+        /// The name the player list shows, or `None` for the name the client shows by itself.
+        name: Option<String>,
+    },
 }
 
 /// Whether a field with the separator in it was already logged, so that a player who keeps
@@ -49,6 +68,27 @@ impl Action {
             Self::Command(_) => "command",
             Self::Message { .. } => "message",
             Self::Broadcast(_) => "broadcast",
+            Self::Teleport { .. } => "teleport",
+            Self::ListName { .. } => "listName",
+        }
+    }
+
+    /// Answers the fields of the wire form after the kind.
+    fn fields(&self) -> Vec<String> {
+        match self {
+            Self::Command(command) => vec![command.clone()],
+            Self::Message { uuid, text } => vec![uuid.clone(), text.clone()],
+            Self::Broadcast(text) => vec![text.clone()],
+            Self::Teleport { uuid, location } => vec![
+                uuid.clone(),
+                location.dimension.clone(),
+                location.x.to_string(),
+                location.y.to_string(),
+                location.z.to_string(),
+                location.yaw.to_string(),
+                location.pitch.to_string(),
+            ],
+            Self::ListName { uuid, name } => vec![uuid.clone(), name.clone().unwrap_or_default()],
         }
     }
 
@@ -56,21 +96,17 @@ impl Action {
     ///
     /// The fields are joined by [`SEPARATOR`], and the first of them is the kind. No field may
     /// hold the separator, so a field that holds it has it replaced by a space, and the first
-    /// such replacement of the process is logged.
+    /// such replacement of the process is logged. A list name of `None` and an empty one are
+    /// both the empty field, which clears the name.
     pub fn encode(&self) -> String {
-        let fields: &[&str] = match self {
-            Self::Command(command) => &[command],
-            Self::Message { uuid, text } => &[uuid, text],
-            Self::Broadcast(text) => &[text],
-        };
         let mut wire = String::from(self.kind());
-        for field in fields {
+        for field in self.fields() {
             wire.push(SEPARATOR);
             if field.contains(SEPARATOR) {
                 log_separator(self.kind());
                 wire.extend(field.chars().map(|c| if c == SEPARATOR { ' ' } else { c }));
             } else {
-                wire.push_str(field);
+                wire.push_str(&field);
             }
         }
         wire
@@ -78,7 +114,8 @@ impl Action {
 
     /// Decodes the wire form of an action, as the mod reads it.
     ///
-    /// Answers `None` for an unknown kind or a wrong number of fields, which the mod skips.
+    /// Answers `None` for an unknown kind, a wrong number of fields or a number that does not
+    /// read, which the mod skips. An empty list name reads as `None`.
     pub fn decode(wire: &str) -> Option<Self> {
         let fields: Vec<&str> = wire.split(SEPARATOR).collect();
         match fields.as_slice() {
@@ -88,6 +125,21 @@ impl Action {
                 text: (*text).to_owned(),
             }),
             ["broadcast", text] => Some(Self::Broadcast((*text).to_owned())),
+            ["teleport", uuid, dimension, x, y, z, yaw, pitch] => Some(Self::Teleport {
+                uuid: (*uuid).to_owned(),
+                location: Location {
+                    dimension: (*dimension).to_owned(),
+                    x: x.parse().ok()?,
+                    y: y.parse().ok()?,
+                    z: z.parse().ok()?,
+                    yaw: yaw.parse().ok()?,
+                    pitch: pitch.parse().ok()?,
+                },
+            }),
+            ["listName", uuid, name] => Some(Self::ListName {
+                uuid: (*uuid).to_owned(),
+                name: (!name.is_empty()).then(|| (*name).to_owned()),
+            }),
             _ => None,
         }
     }

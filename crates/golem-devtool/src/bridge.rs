@@ -42,7 +42,8 @@
 //! every other event, which the runtime must ignore. `panic` panics on the events named `on`
 //! and in its `commands`. `slow` sleeps `sleepMs` on the first `times` events named `on`.
 //! `reenter` calls the native `commandNames` from inside its handler on the events named `on`
-//! and broadcasts how many names it got.
+//! and broadcasts how many names it got. `mover` answers its `commands` with the helpers of the
+//! context that teleport a player to its place `to` and name them in the player list.
 
 use std::{
     fs,
@@ -186,6 +187,12 @@ enum PluginSpec {
     },
     /// A plugin that calls a native from inside the handler on the events of one name.
     Reenter { name: String, on: String },
+    /// A plugin that teleports players and names them in the player list on its commands.
+    Mover {
+        name: String,
+        commands: Vec<String>,
+        to: LocationSpec,
+    },
 }
 
 /// The default of a count of the script.
@@ -291,9 +298,52 @@ enum Step {
     deny_unknown_fields
 )]
 enum ActionSpec {
-    Command { command: String },
-    Message { uuid: String, text: String },
-    Broadcast { text: String },
+    Command {
+        command: String,
+    },
+    Message {
+        uuid: String,
+        text: String,
+    },
+    Broadcast {
+        text: String,
+    },
+    Teleport {
+        uuid: String,
+        #[serde(flatten)]
+        location: LocationSpec,
+    },
+    ListName {
+        uuid: String,
+        name: Option<String>,
+    },
+}
+
+/// A location as JSON, its fields beside the others of an action or a step.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LocationSpec {
+    dimension: String,
+    x: f64,
+    y: f64,
+    z: f64,
+    #[serde(default)]
+    yaw: f32,
+    #[serde(default)]
+    pitch: f32,
+}
+
+impl From<LocationSpec> for Location {
+    fn from(spec: LocationSpec) -> Self {
+        Self {
+            dimension: spec.dimension,
+            x: spec.x,
+            y: spec.y,
+            z: spec.z,
+            yaw: spec.yaw,
+            pitch: spec.pitch,
+        }
+    }
 }
 
 impl From<ActionSpec> for Action {
@@ -302,8 +352,25 @@ impl From<ActionSpec> for Action {
             ActionSpec::Command { command } => Self::Command(command),
             ActionSpec::Message { uuid, text } => Self::Message { uuid, text },
             ActionSpec::Broadcast { text } => Self::Broadcast(text),
+            ActionSpec::Teleport { uuid, location } => Self::Teleport {
+                uuid,
+                location: location.into(),
+            },
+            ActionSpec::ListName { uuid, name } => Self::ListName { uuid, name },
         }
     }
+}
+
+/// Answers a location as JSON, in the form of [`LocationSpec`].
+fn location_json(location: &Location) -> Value {
+    json!({
+        "dimension": location.dimension,
+        "x": location.x,
+        "y": location.y,
+        "z": location.z,
+        "yaw": location.yaw,
+        "pitch": location.pitch,
+    })
 }
 
 /// Answers an action as JSON, in the form of [`ActionSpec`].
@@ -312,6 +379,13 @@ fn action_json(action: &Action) -> Value {
         Action::Command(command) => json!({"kind": "command", "command": command}),
         Action::Message { uuid, text } => json!({"kind": "message", "uuid": uuid, "text": text}),
         Action::Broadcast(text) => json!({"kind": "broadcast", "text": text}),
+        Action::Teleport { uuid, location } => {
+            let mut value = location_json(location);
+            value["kind"] = json!("teleport");
+            value["uuid"] = json!(uuid);
+            value
+        }
+        Action::ListName { uuid, name } => json!({"kind": "listName", "uuid": uuid, "name": name}),
     }
 }
 
@@ -661,6 +735,11 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             left: times,
         }),
         PluginSpec::Reenter { name, on } => Box::new(Reenter { name, on }),
+        PluginSpec::Mover { name, commands, to } => Box::new(Mover {
+            name,
+            commands,
+            to: to.into(),
+        }),
     }
 }
 
@@ -828,6 +907,60 @@ impl Plugin for Reenter {
             context.broadcast(&format!("{} got {} names", self.name, names.len()));
         }
         Verdict::Pass
+    }
+}
+
+/// A test plugin that answers its commands with the helpers of the context for the actions on
+/// players: `teleport <uuid>` to its place, `nowhere <uuid>` to a place that is no number,
+/// `name <uuid> <text>` and `clear <uuid>`.
+struct Mover {
+    name: String,
+    commands: Vec<String>,
+    to: Location,
+}
+
+impl Plugin for Mover {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn commands(&self) -> Vec<CommandSpec> {
+        specs(&self.name, &self.commands)
+    }
+
+    fn on_command(
+        &mut self,
+        _name: &str,
+        _sender: &Sender,
+        arguments: &str,
+        context: &mut Context<'_>,
+    ) -> Vec<String> {
+        let mut words = arguments.splitn(3, ' ');
+        let (verb, uuid, rest) = (
+            words.next().unwrap_or_default(),
+            words.next().unwrap_or_default(),
+            words.next().unwrap_or_default(),
+        );
+        let answer = match verb {
+            "teleport" => format!("queued {}", context.teleport(uuid, &self.to)),
+            "nowhere" => {
+                let nowhere = Location {
+                    x: f64::NAN,
+                    ..self.to.clone()
+                };
+                format!("queued {}", context.teleport(uuid, &nowhere))
+            }
+            "name" => {
+                context.set_list_name(uuid, rest);
+                "named".to_owned()
+            }
+            "clear" => {
+                context.clear_list_name(uuid);
+                "cleared".to_owned()
+            }
+            other => format!("{} knows no {other}", self.name),
+        };
+        vec![answer]
     }
 }
 
