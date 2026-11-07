@@ -214,15 +214,21 @@ fn number(word: &str) -> Option<f64> {
 
 /// Answers the lines of `/golem listname <name> [<text>]` and queues the name, or its clearing
 /// without a text.
-pub fn list_name(words: &[&str], context: &Context<'_>) -> Vec<String> {
-    let Some((who, text)) = words.split_first() else {
+///
+/// `arguments` is everything after the subcommand as it was typed. One whitespace character
+/// after the name separates it from the text, which is taken as it is, runs of spaces included.
+pub fn list_name(arguments: &str, context: &Context<'_>) -> Vec<String> {
+    let arguments = arguments.trim_start();
+    let (who, text) = arguments
+        .split_once(char::is_whitespace)
+        .unwrap_or((arguments, ""));
+    if who.is_empty() {
         return vec!["Usage: /golem listname <name> [<text>]".to_owned()];
-    };
+    }
     let player = match online(context.game(), who) {
         Ok(player) => player,
         Err(lines) => return lines,
     };
-    let text = text.join(" ");
     if text.is_empty() {
         context.clear_list_name(&player.uuid);
         vec![format!(
@@ -230,7 +236,7 @@ pub fn list_name(words: &[&str], context: &Context<'_>) -> Vec<String> {
             player.name
         )]
     } else {
-        context.set_list_name(&player.uuid, &text);
+        context.set_list_name(&player.uuid, text);
         vec![format!("The player list names {} {text}.", player.name)]
     }
 }

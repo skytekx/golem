@@ -202,6 +202,10 @@ impl Plugin for CorePlugin {
         let words: Vec<&str> = arguments.split_whitespace().collect();
         let subcommand = words.first().map(|word| word.to_ascii_lowercase());
         let rest = words.get(1..).unwrap_or_default();
+        if subcommand.as_deref() == Some("listname") {
+            return operator::refusal("listname", sender, context.game())
+                .unwrap_or_else(|| operator::list_name(after_first_word(arguments), context));
+        }
         let operation: fn(&[&str], &Context<'_>) -> Vec<String> = match subcommand.as_deref() {
             None | Some("help") => return self.help(),
             Some("source") => return self.source.lines(),
@@ -210,7 +214,6 @@ impl Plugin for CorePlugin {
             Some("player") => operator::player,
             Some("world") => operator::world,
             Some("teleport") => operator::teleport,
-            Some("listname") => operator::list_name,
             Some(other) => {
                 let mut lines = vec![format!("The subcommand {other} of /golem is unknown.")];
                 lines.extend(self.help());
@@ -220,6 +223,14 @@ impl Plugin for CorePlugin {
         let name = subcommand.unwrap_or_default();
         operator::refusal(&name, sender, context.game()).unwrap_or_else(|| operation(rest, context))
     }
+}
+
+/// Answers the arguments after their first word, as they were typed, with the whitespace before
+/// the next word.
+fn after_first_word(arguments: &str) -> &str {
+    let trimmed = arguments.trim_start();
+    let end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+    &trimmed[end..]
 }
 
 /// Answers `nanos` in milliseconds.

@@ -21,7 +21,8 @@ the AGPL gives every player the right to the source, and they name nothing that 
 misuse. The tools of operators read the game and change it, so only the console, a player of
 operator level 2 and more and another source of level 2 and more may run them, `OPERATOR_LEVEL`.
 The first word of the arguments picks the subcommand, in any case, and the words after it are its
-arguments, which `source`, `status`, `whoami` and `help` ignore.
+arguments, which `source`, `status`, `whoami` and `help` ignore, while `listname` takes its text
+as it is typed.
 
 | Command | Who | Answer |
 | --- | --- | --- |
@@ -130,7 +131,9 @@ or `/forceload add` loads them. It is the teleport of an operator across
 dimensions that never lands a player in a wall, in lava or above the void.
 
 `/golem listname <name> [<text>]` queues the name of the player in the player list, which holds
-until the player leaves, or its clearing without a text, and answers
+until the player leaves, or its clearing without a text. One space after the name separates it
+from the text, which the tool takes as it is typed, runs of spaces included, so
+`/golem listname Tester [AFK]   Tester` shows three spaces. It answers
 `The player list names Tester [AFK] Tester.` or `The player list shows the name of Tester again.`
 
 Each tool answers `No player <name> is online.` for a player who is not, names a dimension the
