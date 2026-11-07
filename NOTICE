@@ -63,14 +63,16 @@ LuckPerms
 
 Project: LuckPerms
 URL: https://github.com/LuckPerms/LuckPerms
-Version: 5.5.71, the build that the Mac mini runs
+Version: 5.5.71, commit 8fa4c244927c455de952fb7e74fc240871215c12
 Files: crates/golem-permissions
 License: MIT
 Copyright (c) lucko (Luck) <luck@lucko.me>
 Copyright (c) contributors
 
 The crate golem-permissions is the port of LuckPerms 5.5.71 to Golem and
-keeps its license. The MIT License asks that its notice be kept with the code:
+keeps its license. LuckPerms numbers a build by the commits since its last
+tag, and the commit above is the 71st after the tag v5.5, the build that the
+Mac mini runs. The MIT License asks that its notice be kept with the code:
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the
@@ -133,5 +135,6 @@ License: GPL-3.0-or-later
 Copyright (C) 2011 Essentials Team
 Copyright the EssentialsX contributors
 
-The crate golem-essentials-spawn is the port of EssentialsXSpawn to Golem and
-keeps the license of EssentialsX, under which the module is published.
+The crate golem-essentials-spawn is the port of EssentialsXSpawn 2.22.0 to
+Golem and keeps the license of EssentialsX, under which the module is
+published.
