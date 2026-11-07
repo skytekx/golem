@@ -4,10 +4,12 @@
 # The Python side of the Golem harness, pinned.
 #
 # Every test case of Golem is a notebook under tests/notebooks/, run by
-# papermill, as in Aosabi, so this file is the whole runtime the assertions
-# need. The pins are exact, so that a run on another day or another machine
-# takes the same packages and a notebook result moves only with a change in
-# the repository.
+# papermill, as in Aosabi, so the packages below and the packages they pull
+# in are the whole runtime the assertions need. The packages below are
+# pinned exactly, so a run on another day or another machine takes the same
+# versions of them. The packages they pull in are not pinned, and pip takes
+# the newest versions that fit, so a notebook result can also move with a
+# new release of one of those.
 
 [project]
 name = "golem-tests"

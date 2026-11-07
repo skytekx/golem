@@ -18,7 +18,7 @@ and the executed copy shows every output on the way to the failure.
 | `tests/run.py` | The runner, papermill over the kernel `golem` |
 | `tests/harness/` | What the notebooks share: where the repository is, how a process runs, and a player of Minecraft 1.20.1 in `minecraft.py` |
 | `tests/fetch.py` | The downloads of the notebooks that boot Forge: Temurin 17, the Forge server and Gradle, each checked by its SHA-256. With `--only modpack` it builds the SkyTekx 3 modpack of the live server from a pinned commit of its repository instead: every jar of the index checked by its size and the SHA-512 of the index, the Arclight jar by its SHA-256, and the 31 libraries of the `installer.json` of that jar by their SHA-256 |
-| `tests/pyproject.toml` | The exact pins of the Python packages the harness needs |
+| `tests/pyproject.toml` | The exact pins of the eight Python packages the harness names, but not of the packages they pull in |
 | `tests/notebooks/out/` | The executed notebooks and `report.json` of a run, never committed |
 
 ## 2. Running the notebooks
