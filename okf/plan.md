@@ -5,7 +5,7 @@ type: Plan
 title: Golem, the Rust hybrid server
 description: The plan for Golem as the owner set it on 2026-11-06, with the later rulings of that day: an Aosabi based Rust host that replaces Arclight, runs Forge 47.4.18 with every mod unchanged in an embedded JVM, adds a GraphQL API and ports EssentialsX, EssentialsXSpawn, LuckPerms and the Spigot world settings to Rust plugins.
 tags: [server, golem, arclight, aosabi, rust, graphql, plugins, performance]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Golem, the Rust hybrid server
@@ -355,8 +355,7 @@ A later ruling of 2026-11-06 replaces the scope of this section: the Golem API c
 of the whole Bukkit API, Spigot included, so that every Bukkit or Spigot plugin can be converted to
 a Golem plugin, not only the ones in use. The reference is `spigot-api` 1.20.1 R0.1, the last build
 of 2023-09-21, with 1,247 types, 7,942 public methods, 5,900 fields and constants and 268 events. A
-coverage check maps every part of it to its equivalent in Golem. The text below is the plan before
-that ruling.
+coverage check maps every part of it to its equivalent in Golem.
 
 A further ruling of the same day adds a Bukkit layer on the Golem API, so that Bukkit and Spigot
 plugins also run unchanged, and every plugin must work. The layer is Java in the JVM of Forge and
@@ -371,13 +370,16 @@ reaches the Golem API in process. It covers three levels:
    classes of Forge in the same JVM.
 
 A survey of the plugins that run on Spigot 1.20.1 ranks the internals they reach, so the layer is
-built in the order that makes the most plugins work.
+built in the order that makes the most plugins work, see [Bukkit layer](bukkit-layer.md).
+
+The text below is the plan before those rulings.
 
 The Bukkit plugins in use are ported, so Golem needs no Bukkit layer for this server. A Bukkit layer
 stays an option for later. It has to be Java, because plugins are Java, and it would build Bukkit
 events only for event types that a plugin listens to and create the Bukkit wrapper objects only when
 a plugin asks for them. That is 6 to 12 months of work and only worth it if the owner wants other
-Bukkit plugins.
+Bukkit plugins. The further ruling above replaces this paragraph: the layer is wanted, and every
+plugin must work through it.
 
 Dropping Bukkit is likely to pay off more through the mods it allows than through Arclight's own
 overhead. Arclight does not appear as a source in the worldgen profile of
@@ -556,7 +558,8 @@ native code runs in parallel and ends about 8 to 10 months after the start.
 
 - Whether `skytekx/golem` is private until the switch, which would let security issues be public
   issues there from the start.
-- Whether a Bukkit layer is ever wanted for plugins beyond the ported ones.
+- Whether a Bukkit layer is ever wanted for plugins beyond the ported ones. The further ruling of
+  2026-11-06 answers it, see [Bukkit plugins](#bukkit-plugins).
 - Whether the economy of EssentialsX is in use at all, which the usage audit decides.
 
 Related: [Arclight
