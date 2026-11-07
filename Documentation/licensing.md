@@ -213,10 +213,11 @@ reuse lint
   CI pins its version.
 - [.github/scripts/license_lint.py](../.github/scripts/license_lint.py) checks what REUSE leaves
   open: that the SPDX line stands on the first line, that `LICENSE` is the same bytes as
-  `LICENSES/AGPL-3.0-only.txt`, that every file names Florian Kleber as a holder, that every
-  `Cargo.toml` states a license, that every package under `third_party/` keeps its own license
-  file, that NOTICE exists once a file names a license other than the AGPL, and that every port
-  of `ports.toml` keeps the license and the holders of its upstream. Its rules are written in the
+  `LICENSES/AGPL-3.0-only.txt`, that every file names Florian Kleber as a holder, that
+  `REUSE.toml` gives NOTICE its tags with the precedence `override`, that every `Cargo.toml`
+  states a license, that every package under `third_party/` keeps its own license file, that
+  NOTICE exists once a file names a license other than the AGPL, and that every port of
+  `ports.toml` keeps the license and the holders of its upstream. Its rules are written in the
   docstring of the script.
 
 ## 10. Contributing

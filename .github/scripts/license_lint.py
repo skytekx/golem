@@ -27,14 +27,16 @@ the file. The rules are these.
    license field of a Cargo.toml or a package.json follows rules 2 and 3, and every license-file
    field names a file that exists.
 5. Every package under third_party/ keeps a license file of its own.
-6. Every file outside LICENSE, LICENSES/, NOTICE and third_party/ carries a tag in its place,
-   and REUSE.toml covers NOTICE. A file that cannot carry the tag, such as JSON or an image,
-   takes it from a file beside it whose name adds .license, as REUSE does.
+6. Every file outside LICENSE, LICENSES/, NOTICE and third_party/ carries a tag in its place.
+   A file that cannot carry the tag, such as JSON or an image, takes it from a file beside it
+   whose name adds .license, as REUSE does. NOTICE takes its license and its holders from the
+   annotation of REUSE.toml that names its path, with the precedence override, since the
+   copyright lines that NOTICE quotes would otherwise count as its own.
 7. NOTICE exists at the root when a file outside third_party/ names a license other than the
    AGPL, since such a file carries the work of another project that NOTICE must name.
 8. Every file that rule 6 covers names its copyright holders in SPDX-FileCopyrightText lines
-   among its first lines, or in the .license file beside it, and one of them names Florian
-   Kleber, the holder of Golem.
+   among its first lines, in the .license file beside it, or for NOTICE in its annotation, and
+   one of them names Florian Kleber, the holder of Golem.
 9. A port keeps the license of the plugin it ports. ports.toml at the root names every port
    with its name, its path, its upstream, which is the name of the plugin and its version, its
    source, its license and the holders of the upstream. The path holds files of the tree and the
@@ -113,9 +115,13 @@ NOTICE_FIELD = re.compile(r"^(Project|URL|Version|Files|License): (.*)$")
 #: The names of a license file of a package under third_party/.
 LICENSE_FILE = re.compile(r"^(?:LICEN[CS]E|COPYING|UNLICENSE)(?:[-._].*)?$", re.I)
 
+#: The notices of the work of others, and the file of REUSE that gives NOTICE its tags.
+NOTICE = PurePosixPath("NOTICE")
+REUSE_TOML = PurePosixPath("REUSE.toml")
+
 #: The files rule 6 leaves out. LICENSE is the license itself, and REUSE.toml gives NOTICE its
 #: license and holder, since its text quotes the notices of other projects.
-UNTAGGED = {PurePosixPath("LICENSE"), PurePosixPath("NOTICE")}
+UNTAGGED = {PurePosixPath("LICENSE"), NOTICE}
 
 #: Build output and dependency trees, skipped when the root is no git work tree.
 SKIP_DIRS = {".git", "target", "node_modules", ".venv", "__pycache__", "build", ".gradle"}
@@ -246,6 +252,31 @@ def license_texts(files: list[PurePosixPath], fail) -> dict:
             continue
         known.setdefault(path.stem, path)
     return known
+
+
+def notice_annotation(root: Path, present: set, fail) -> dict | None:
+    """The annotation of REUSE.toml that names the path NOTICE, or None after a failure of rule 6."""
+    if REUSE_TOML not in present:
+        fail(NOTICE, "rule 6: NOTICE carries no tag, and the root holds no REUSE.toml to give it one")
+        return None
+    try:
+        table = tomllib.loads((root / REUSE_TOML).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as broken:
+        fail(REUSE_TOML, "rule 6: REUSE.toml does not parse: %s" % broken)
+        return None
+    for annotation in table.get("annotations") or []:
+        paths = annotation.get("path") if isinstance(annotation, dict) else None
+        if paths == str(NOTICE) or (isinstance(paths, list) and str(NOTICE) in paths):
+            return annotation
+    fail(NOTICE, "rule 6: NOTICE carries no tag, and no annotation of REUSE.toml names its path")
+    return None
+
+
+def strings(value) -> list[str]:
+    """A value of REUSE.toml that is a string or a list of strings, as a list."""
+    if isinstance(value, str):
+        return [value]
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
 
 def load_ports(root: Path, fail) -> list[dict]:
@@ -446,6 +477,20 @@ def main(argv=None) -> int:
             check_copyright(sidecar, find_copyrights(sidecar_lines))
             continue
         fail(path, "rule 6: the file carries no tag on its first line, or on its second under #! or ---, and no %s" % sidecar.name)
+
+    # Rules 6 and 8 for NOTICE, which takes its tags from REUSE.toml.
+    if NOTICE in present:
+        annotation = notice_annotation(root, present, fail)
+        if annotation is not None:
+            if annotation.get("precedence") != "override":
+                fail(NOTICE, "rule 6: the annotation of NOTICE in REUSE.toml takes the precedence %r, not override"
+                     % annotation.get("precedence", "closest"))
+            expressions = strings(annotation.get("SPDX-License-Identifier"))
+            if not expressions:
+                fail(NOTICE, "rule 6: the annotation of NOTICE in REUSE.toml states no SPDX-License-Identifier")
+            for expression in expressions:
+                check_expression(REUSE_TOML, expression, "the license of NOTICE")
+            check_copyright(NOTICE, strings(annotation.get("SPDX-FileCopyrightText")))
 
     # Rule 4.
     for path in files:
