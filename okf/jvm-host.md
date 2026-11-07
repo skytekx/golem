@@ -18,10 +18,10 @@ thread of its own and calls the main class until the server ends. The program `g
 
 The reference for every rule on this page is the launcher of JDK 17, the files `main.c`, `args.c`,
 `java.c` and `wildcard.c` of `src/java.base/share/native/libjli`. The notebook `03_launch_args`
-holds the host to the launcher of Temurin 17.0.21 case by case: 19 argument files, 17 launches,
-13 launches that fail, 34 refused command lines and the real `user_jvm_args.txt` and
-`unix_args.txt` of Forge 47.4.18, each read by `golem-devtool` and run by a probe program under
-java and in the embedded JVM, on 2026-11-06 in the cloud container of the session.
+holds the host to the launcher of Temurin 17.0.21 case by case: 19 argument files, 18 launches, 13
+launches that fail, 35 refused command lines and the real `user_jvm_args.txt` and `unix_args.txt` of
+Forge 47.4.18, each read by `golem-devtool` and run by a probe program under java and in the
+embedded JVM, on 2026-11-07 in the cloud container of the session.
 
 ## golem run
 
@@ -101,10 +101,10 @@ so the expansion goes on behind it.
 
 ### The options
 
-`-client` and `-server` before the main class are dropped, as the launcher does with the names of
-`jvm.cfg`. Then every argument up to the first one that does not start with `-` is an option, that
-first one is the main class, and every argument after it belongs to main. An option that takes a
-value takes the next argument unless that one starts with `-`.
+`-client` and `-server` before the main class are dropped, also as `-J-client` and `-J-server`, as
+the launcher does with the names of `jvm.cfg`. Then every argument up to the first one that does not
+start with `-` is an option, that first one is the main class, and every argument after it belongs
+to main. An option that takes a value takes the next argument unless that one starts with `-`.
 
 | Launcher form | Form of `JNI_CreateJavaVM` |
 | --- | --- |
@@ -140,7 +140,7 @@ Golem refuses with a clear error what only the launcher can do or what Golem doe
 | `-help`, `-h`, `-?`, `--help`, `-X`, `--help-extra` | The launcher prints them |
 | `--list-modules`, `--describe-module`, `-d`, `--validate-modules`, `--show-resolved-modules` | They report on the modules and exit |
 | `-XshowSettings`, `--dry-run`, `-splash:` | The launcher prints them, or a server needs none |
-| `-XXaltjvm=`, `-J-XXaltjvm=`, `-version:`, `-jre-restrict-search` | They choose another JVM or JRE |
+| `-XXaltjvm=`, `-J-XXaltjvm=`, `-version:`, `-jre-restrict-search`, `-jre-no-restrict-search` | They choose another JVM or JRE |
 | No main class | There is nothing to run |
 
 The variables `JDK_JAVA_OPTIONS` and `CLASSPATH` belong to the launcher and do not apply: the launch
