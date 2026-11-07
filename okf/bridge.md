@@ -280,6 +280,18 @@ holds in every context, as the answer of LuckPerms through Arclight did on the l
 asked `hasPermission` with the name of the node alone, and only the default resolver of a node
 that no plugin decides gets the context.
 
+The live server decides these nodes otherwise. Its `arclight.conf` sets `forward-permission=true`,
+so Arclight wraps the handler that Forge takes, `forge:default_handler` of its
+`defaultconfigs/forge-server.toml`, and answers every Boolean node of an online player with
+`hasPermission` of Bukkit. LuckPerms decides every node that a mod asks, a node that it does not
+name false unless a processor of LuckPerms, such as the one for operators, grants it, and the
+default resolver of a node is never asked. The mods of the modpack that ask such nodes are
+Mekanism, Nature's Compass, Ars Magica Legacy, Balm, CC: Tweaked, JEI, spark and Simple Voice
+Chat, which asks `voicechat.speak` for every packet of a microphone. The handler of Golem falls to
+the default resolver when no plugin answers, which often grants a node to every player or to an
+operator level, so the port of LuckPerms must answer these nodes as LuckPerms did, see
+[Permissions](plugins/permissions.md#arclight-forwards-every-permission-of-a-mod-to-luckperms).
+
 ## Actions
 
 `drain()` answers each action as one string, its fields joined by the character U+001F, the unit

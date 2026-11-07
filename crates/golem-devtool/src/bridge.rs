@@ -49,7 +49,9 @@
 //! on the events named `on`, on a permission when `on` is `permission`, and in its `commands`.
 //! `slow` sleeps `sleepMs` on the first `times` events named `on`. `reenter` calls the native
 //! `commandNames` from inside its handler on the events named `on` and broadcasts how many names
-//! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`. `mover`
+//! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`, and with
+//! `operators` answers every other node as the live server answers a node that nothing names,
+//! true for a UUID of `operators` and false for every other player. `mover`
 //! answers its `commands` with the helpers of the context that teleport a player to its place
 //! `to`, to a place that is no number and to one beyond the bounds of the world, and name them in
 //! the player list. `ask` asks the game, as the module game describes.
@@ -208,13 +210,16 @@ enum PluginSpec {
     },
     /// A plugin that calls a native from inside the handler on the events of one name.
     Reenter { name: String, on: String },
-    /// A plugin that grants and denies nodes of the `PermissionAPI` of Forge.
+    /// A plugin that grants and denies nodes of the `PermissionAPI` of Forge, and answers every
+    /// other node when it knows the operators.
     Grant {
         name: String,
         #[serde(default)]
         grants: Vec<String>,
         #[serde(default)]
         denies: Vec<String>,
+        #[serde(default)]
+        operators: Option<Vec<String>>,
     },
     /// A plugin that asks the game on its commands and on the events whose names `on` lists.
     Ask {
@@ -764,10 +769,12 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             name,
             grants,
             denies,
+            operators,
         } => Box::new(Grant {
             name,
             grants,
             denies,
+            operators,
         }),
         PluginSpec::Ask { name, commands, on } => Box::new(Ask { name, commands, on }),
         PluginSpec::Mover { name, commands, to } => Box::new(Mover {
@@ -917,11 +924,13 @@ impl Plugin for Panic {
 }
 
 /// A test plugin that grants the nodes of `grants`, denies those of `denies` and leaves every
-/// other node to the next plugin.
+/// other node to the next plugin, or with `operators` answers it as the live server answers a
+/// node that nothing names: true for an operator and false for every other player.
 struct Grant {
     name: String,
     grants: Vec<String>,
     denies: Vec<String>,
+    operators: Option<Vec<String>>,
 }
 
 impl Plugin for Grant {
@@ -931,7 +940,7 @@ impl Plugin for Grant {
 
     fn on_permission(
         &mut self,
-        _uuid: &str,
+        uuid: &str,
         node: &str,
         _context: &mut Context<'_>,
     ) -> Option<bool> {
@@ -940,7 +949,12 @@ impl Plugin for Grant {
         } else if self.denies.iter().any(|denied| denied == node) {
             Some(false)
         } else {
-            None
+            let operators = self.operators.as_ref()?;
+            Some(
+                operators
+                    .iter()
+                    .any(|operator| operator.eq_ignore_ascii_case(uuid)),
+            )
         }
     }
 }

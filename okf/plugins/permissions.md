@@ -278,4 +278,25 @@ its section on the player before the groups.
 
 Issue: [#3](https://github.com/skytekx/golem/issues/3).
 
+### Arclight forwards every permission of a mod to LuckPerms
+
+The live server sets `forward-permission=true` in `arclight.conf` (line 31 of
+`skytekx3-1201-server`), so Arclight wraps the handler of the Forge PermissionAPI that Forge takes,
+`forge:default_handler` of `defaultconfigs/forge-server.toml` (line 17), and answers every Boolean
+node of an online player with `hasPermission` of Bukkit. LuckPerms therefore decides every node
+that a mod asks, such as `voicechat.speak` of Simple Voice Chat for every packet of a microphone:
+a node that a group names as the group says, and a node that nothing names false, or true for an
+operator. The default resolver of the node, which the mod meant as its default, is never asked.
+Mekanism, Nature's Compass, Ars Magica Legacy, Balm, CC: Tweaked, JEI, spark and Simple Voice Chat
+ask such nodes.
+
+Under Golem the handler `golem:permissions` asks the plugins and falls to the default resolver of
+the node when no plugin answers, as [Bridge](../bridge.md#permissions) says. A default resolver
+often grants a node to every player or to an operator level, so who may speak in voice chat or
+use spark would change without a word. When this crate answers the PermissionAPI through
+`on_permission`, it answers every Boolean node of an online player as LuckPerms did on the live
+server, a node that nothing names included, unless the owner decides and records which nodes go
+back to the defaults of their mods. The notebook `04_plugins` holds a plugin that answers that way
+to its answers, beside one that leaves the node to the default resolver.
+
 Related: [Plan](../plan.md#luckperms-5571), [Bridge](../bridge.md), [Index](../index.md).
