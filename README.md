@@ -2,10 +2,11 @@
 <!-- SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com> -->
 # Golem
 
-Golem is the Rust hybrid server of SkyTekx, built on [Aosabi](https://github.com/netsnek/aosabi).
-It owns the server process, starts the JVM inside itself and boots Minecraft 1.20.1 with Forge
-47.4.18 and every mod of the pack unchanged. Around the game it adds a GraphQL API, a plugin
-runtime in Rust and native code for the hot paths of world generation. It replaces Arclight.
+Golem is the Rust hybrid server of SkyTekx. It owns the server process, starts the JVM inside
+itself and boots Minecraft 1.20.1 with Forge 47.4.18 and every mod of the pack unchanged. It
+replaces Arclight. Around the game it adds a plugin runtime in Rust, and it will add a GraphQL API
+built on [Aosabi](https://github.com/netsnek/aosabi) and native code for the hot paths of world
+generation.
 
 The first milestone is built. `golem run` boots the Forge server of a directory unchanged in its
 embedded JVM and stops it through the server thread on a signal. A Forge mod in `bridge/` reports
