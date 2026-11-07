@@ -16,6 +16,7 @@ package com.skytekx.golem.bridge;
 
 import com.skytekx.golem.host.Game;
 import com.skytekx.golem.host.Host;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -69,12 +70,17 @@ final class GameQueries implements Game {
 			if (server == null) {
 				return null;
 			}
-			List<ServerPlayer> players = server.getPlayerList().getPlayers();
-			String[] answer = new String[players.size()];
-			for (int index = 0; index < answer.length; index++) {
-				answer[index] = describe(server, players.get(index));
+			List<String> answer = new ArrayList<>();
+			for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+				// A listener of a mod that throws for the name of one player hides that one alone.
+				String line = guard.ask("Game.players of one player", () -> {
+					return describe(server, player);
+				}, null);
+				if (line != null) {
+					answer.add(line);
+				}
 			}
-			return answer;
+			return answer.toArray(new String[0]);
 		}, null);
 	}
 

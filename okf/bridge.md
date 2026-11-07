@@ -172,7 +172,7 @@ display name that a mod made, has it replaced by a space.
 
 | Method | Fields of the answer | Null | Empty |
 | --- | --- | --- | --- |
-| `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list | Never on the server thread | The name in the list, while the client shows the name of the profile |
+| `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list, and no answer for a player whose answer throws, such as in a listener of a mod for the display name, which the guard logs | Never on the server thread | The name in the list, while the client shows the name of the profile |
 | `location(uuid)` | The dimension, `x`, `y`, `z` of the feet, `yaw`, `pitch` | The player is not online | Never |
 | `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
 | `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
@@ -442,8 +442,10 @@ library of its class loader holds. A minimal offline client of Minecraft 1.20.1 
 runs a command of the plugins, uses a selector, dies, respawns, is teleported into the Nether and
 named in the player list, and leaves, and the console runs the command as the player and as an
 armor stand. The stand in natives ask the object of `connect` every question of the game on the
-server thread and once from the worker thread of a chat message, where it answers null. The
-notebook records the thread of every call, and the threads of
-[the rules of the server thread](#the-rules-of-the-server-thread) come from it.
+server thread and once from the worker thread of a chat message, where it answers null. While a
+second client is online, the natives take the game mode from the first player for one question of
+the players, so that the answer of that player throws, and `players()` must answer the second
+player alone, with one error of the guard. The notebook records the thread of every call, and the
+threads of [the rules of the server thread](#the-rules-of-the-server-thread) come from it.
 
 Related: [JVM host](jvm-host.md), [Plugins](plugins/index.md), [Index](index.md).
