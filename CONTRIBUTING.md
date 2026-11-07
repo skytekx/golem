@@ -169,4 +169,14 @@ A pull request that adds an outside crate says why it meets the rule. Telemetry 
 ## 9. Nothing private
 
 No credential, token, key, private host name, internal address, player data or mail address of a
-third party enters the repository, in any file, an output cell of a notebook included.
+third party enters the repository, in any file, an output cell of a notebook included. The only
+addresses of others are these two, each where a license or a rule of this file requires it.
+
+- The address in the copyright line of the upstream of a port, which the license of the upstream
+  asks Golem to keep. It stands in NOTICE, in `ports.toml`, in the SPDX lines of every file of the
+  port, as rule 9 of the license lint requires, and in the cases of that lint.
+- The address of an agent in its `Co-Authored-By` line of section 2, in a commit message and in the
+  cases of the commit lint.
+
+An address under a domain that RFC 2606 reserves for examples, such as `example.org`, names nobody
+and may stand in a case of a notebook.
