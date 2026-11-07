@@ -68,6 +68,12 @@ Notebook 09 needs the module `sqlite3` of the Python of the harness with SQLite 
 it writes rows into a copy of a store, whose tables are `STRICT`, and builds the files and logs of
 other applications that the store must refuse.
 
+Notebook 11 needs `rustup` on the PATH and the network. It copies rustup into a home of its own in a
+temporary directory and runs the step of CI that installs the toolchain there, which downloads the
+toolchain of `rust-toolchain.toml` from static.rust-lang.org. The home held 613 MiB, which the
+notebook sums over its files, in its run of 2026-11-07 in the cloud container of the session. The
+parameter `fresh_home = False` leaves the home out.
+
 The pins are the ones in `tests/pyproject.toml`, and CI reads them from there. The runner prints
 one line per entry and a summary, writes `tests/notebooks/out/<id>.ipynb` for every entry and
 `tests/notebooks/out/report.json` with the outcome of each, and exits with 1 when any entry
@@ -123,3 +129,4 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | `08_modpack_boot` | Does `golem run` boot the 289 mods of the SkyTekx 3 modpack of the live server as the java launcher does, with the same mods, errors and warnings of the loader, 20 TPS and a clean stop, and open the world that Arclight wrote, and does `tests/fetch.py --only modpack` hold to its docstring? |
 | `09_store` | Does `golem-store` keep the schema of `okf/store.md`, answer and refuse every call, keep a prefix of its changes after a kill, a failed writer and a panic, refuse every file that is no store without changing it, bound the changes that wait for the writer, and answer the calls of the server thread inside their budget? |
 | `10_docs_lint` | Does the docs lint pass the prose of the wiki, `Documentation/`, CONTRIBUTING.md and the README, the page map of the wiki and the table of notebooks of this page, and refuse every break of its seven rules with its path and line? |
+| `11_toolchain` | Does every job of CI that runs cargo install the toolchain of `rust-toolchain.toml` with its components and its profile before any step that runs cargo, so that a rustup home of its own holds rustfmt and clippy after the step and two cargo at once add nothing? |

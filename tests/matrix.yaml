@@ -58,3 +58,8 @@ entries:
   # The docs lint of Golem, rule by rule, on the tree and on trees that break one rule each.
   - notebook: 10_docs_lint
     cell_timeout: 300
+
+  # The install of the toolchain in CI: every job that runs cargo installs the toolchain of
+  # rust-toolchain.toml with its components first, which a rustup home of the notebook holds.
+  - notebook: 11_toolchain
+    cell_timeout: 1200

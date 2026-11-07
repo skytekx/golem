@@ -136,8 +136,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # The step installs the toolchain with the components and the profile of rust-toolchain.toml
+      # in one process, before anything runs cargo. A proxy of rustup adds a component that the
+      # toolchain lacks on the fly, and two of them that do so at once fail with a conflict on
+      # bin/cargo-fmt.
       - name: Install the toolchain of rust-toolchain.toml
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+        run: |
+          rustup toolchain install
+          cargo fmt --version
+          cargo clippy --version
 
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -174,9 +181,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # cargo deny reads the graph through cargo metadata, so it needs the pinned cargo.
+      # cargo deny reads the graph through cargo metadata, so it needs the pinned cargo. The step
+      # installs the toolchain with the components and the profile of rust-toolchain.toml in one
+      # process, before anything runs cargo. A proxy of rustup adds a component that the toolchain
+      # lacks on the fly, and two of them that do so at once fail with a conflict on bin/cargo-fmt.
       - name: Install the toolchain of rust-toolchain.toml
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+        run: |
+          rustup toolchain install
+          cargo fmt --version
+          cargo clippy --version
 
       - name: Install cargo deny
         env:
@@ -202,8 +215,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # The step installs the toolchain with the components and the profile of rust-toolchain.toml
+      # in one process, before anything runs cargo. A proxy of rustup adds a component that the
+      # toolchain lacks on the fly, and two of them that do so at once fail with a conflict on
+      # bin/cargo-fmt.
       - name: Install the toolchain of rust-toolchain.toml
-        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+        run: |
+          rustup toolchain install
+          cargo fmt --version
+          cargo clippy --version
 
       - name: Cache cargo
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
