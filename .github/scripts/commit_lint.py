@@ -30,18 +30,22 @@ these.
 8. No trailer appears twice with the same value.
 
 A commit of a range is judged by the message that git stored, every line of it. A message file is
-judged as git will store it, without the lines that open with #, which git drops from a message
-that was edited. Merge commits are left out, since git writes their message. A shallow clone cuts
-the parents of the commits at its edge, so there a commit whose message git writes for a merge,
-such as the merge of a pull request that CI checks out, is left out as well. With no range, the
-commits are those of HEAD that origin/main does not hold, or every commit of HEAD while origin/main
-does not exist. Every failure is printed with the short hash and the subject, and the exit status
-is 1 when any rule fails.
+judged as git will store it, as git commit and git merge hand it to the commit-msg hook: cut at the
+cut line of git commit --verbose, which the diff follows, and without the lines that open with the
+comment character of core.commentChar, # unless it is set, which git drops from a message that was
+edited unless commit.cleanup keeps them. Git tells the hook that no editor ran with GIT_EDITOR set
+to :, and then keeps those lines. Merge commits are left out, since git writes their message. A
+shallow clone cuts the parents of the commits at its edge, so there a commit whose message git
+writes for a merge, such as the merge of a pull request that CI checks out, is left out as well.
+With no range, the commits are those of HEAD that origin/main does not hold, or every commit of
+HEAD while origin/main does not exist. Every failure is printed with the short hash and the
+subject, and the exit status is 1 when any rule fails.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -160,6 +164,79 @@ def paragraphs(lines: list[str]) -> list[list[str]]:
     return groups
 
 
+#: The cut line that git commit --verbose writes after the comment character, above the diff. Git
+#: drops it and everything below it, and so does the cleanup mode scissors.
+CUT_LINE = "------------------------ >8 ------------------------"
+#: The comment characters that git tries in this order for core.commentChar auto.
+AUTO_COMMENT = "#;@!$%^&|:"
+
+
+def git_config(root: Path, pattern: str):
+    """The last value of the git configuration of `root` whose key matches `pattern`, or None."""
+    found = subprocess.run(["git", "-C", str(root), "config", "--get-regexp", pattern], capture_output=True,
+                           text=True, check=False)
+    values = found.stdout.splitlines() if found.returncode == 0 else []
+    return values[-1].partition(" ")[2] if values else None
+
+
+def comment_string(root: Path, text: str) -> str:
+    """The string that opens a comment line of `text`, as core.commentChar or core.commentString of
+    `root` sets it, or # when neither does."""
+    value = git_config(root, r"^core\.comment(char|string)$")
+    if not value:
+        return "#"
+    if value.lower() != "auto":
+        return value
+    # With auto git takes the first candidate that no line of the message opens with, and writes its
+    # own lines with it: the cut line, and its hints and the status at the end of the file.
+    cut = re.search(r"^(.) %s$" % re.escape(CUT_LINE), text, re.MULTILINE)
+    if cut and cut.group(1) in AUTO_COMMENT:
+        return cut.group(1)
+    lines = [line for line in text.splitlines() if line.strip()]
+    if lines and lines[-1][0] in AUTO_COMMENT and lines[-1][1:2] in ("", " ", "\t"):
+        return lines[-1][0]
+    if "#" not in text:
+        return "#"
+    taken = {line[:1] for line in text.splitlines()}
+    return next((candidate for candidate in AUTO_COMMENT if candidate not in taken), "#")
+
+
+def stripspace(text: str, comment=None) -> str:
+    """`text` as git stripspace leaves it: without white space at the end of a line, without empty
+    lines at the start, at the end or after an empty line, and without the lines that open with
+    `comment` when it is given."""
+    kept, empty = [], False
+    for line in text.split("\n"):
+        if comment is not None and line.startswith(comment):
+            continue
+        line = line.rstrip(" \t\n\v\f\r")
+        if not line:
+            empty = bool(kept)
+            continue
+        if empty:
+            kept.append("")
+            empty = False
+        kept.append(line)
+    return "".join(line + "\n" for line in kept)
+
+
+def stored(text: str, root: Path, environment) -> str:
+    """The message that git stores from `text`, the file that it hands to the commit-msg hook in
+    `root`, with `environment` the environment of the hook."""
+    comment = comment_string(root, text)
+    cut = "%s %s\n" % (comment, CUT_LINE)
+    if text.startswith(cut):
+        text = ""
+    elif "\n" + cut in text:
+        text = text[:text.index("\n" + cut) + 1]
+    cleanup = (git_config(root, r"^commit\.cleanup$") or "default").lower()
+    if cleanup == "verbatim":
+        return text
+    if cleanup not in ("strip", "whitespace", "scissors"):
+        cleanup = "whitespace" if environment.get("GIT_EDITOR") == ":" else "strip"
+    return stripspace(text, comment if cleanup == "strip" else None)
+
+
 def check_message(message: str, subject_of=None) -> list[str]:
     """The failures of one message as git stores it, each naming its rule. `subject_of` answers the
     subject of the commit that a hash of a Fixes trailer names, when the lint runs in a repository."""
@@ -261,9 +338,7 @@ def main(argv=None) -> int:
     subject_of = resolver(args.root)
     if args.message_file:
         text = args.message_file.read_text(encoding="utf-8")
-        # Git drops the lines of an edited message that open with #, before it stores the message.
-        message = "".join(line for line in text.splitlines(keepends=True) if not line.startswith("#"))
-        failures = check_message(message, subject_of)
+        failures = check_message(stored(text, args.root, os.environ), subject_of)
         for failure in failures:
             print("commit_lint: %s: %s" % (args.message_file, failure))
         return 1 if failures else 0
