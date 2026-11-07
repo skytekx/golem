@@ -114,7 +114,7 @@ pub fn player(words: &[&str], context: &Context<'_>) -> Vec<String> {
         return vec![NO_ANSWER.to_owned()];
     };
     let respawn = match game.respawn(&player.uuid) {
-        Some(Some(block)) => block.to_string(),
+        Some(Some(point)) => point.block.to_string(),
         Some(None) => "none".to_owned(),
         None => "unknown".to_owned(),
     };

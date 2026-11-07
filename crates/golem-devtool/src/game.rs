@@ -15,7 +15,10 @@
 //!   "players": [{"uuid": "...", "name": "Alex", "displayName": "Alex", "listName": null,
 //!                "ping": 12, "gameMode": "survival", "level": 0, "idleMs": 1500,
 //!                "location": {"dimension": "minecraft:overworld", "x": 0.5, "y": 64, "z": 0.5},
-//!                "respawn": {"dimension": "...", "x": 1, "y": 64, "z": 2}, "mainHand": null}],
+//!                "respawn": {"dimension": "...", "x": 1, "y": 64, "z": 2, "angle": 0,
+//!                            "forced": true},
+//!                "respawnPlace": {"dimension": "...", "x": 1.5, "y": 64.1, "z": 2.5, "yaw": 0},
+//!                "mainHand": null}],
 //!   "dimensions": [{"id": "minecraft:overworld", "spawn": {"x": 0, "y": 64, "z": 0, "angle": 0},
 //!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5}}]
 //! }
@@ -24,13 +27,15 @@
 //! The scripted game answers as the natives answer the game of the mod. A player whose game
 //! mode the game does not have is left out of the players, as the natives leave out a line that
 //! does not read, and a UUID matches in any case, as `UUID.fromString` of Java reads it. A
-//! player without `respawn` has none and one without `mainHand` holds nothing, and `"players":
-//! null` makes the game answer none for the players, as a game that cannot answer does. A
-//! dimension with `safe` answers that place to a search whose radius, held to 8 as the natives
-//! hold it, reaches the block of the place from the block of the target, one with `"safe":
-//! "unloaded"` answers that a chunk the search must read is not loaded, and one without answers
-//! that there is none. A target that is no finite number gets no answer, as from the natives. A
-//! script without `game` asks a game that answers nothing.
+//! player without `respawn` has none and one without `mainHand` holds nothing, one without
+//! `respawnPlace` respawns at the world spawn and `"respawnPlace": "unloaded"` answers that a
+//! chunk around the point is not loaded, and `"players": null` makes the game answer none for
+//! the players, as a game that cannot answer does. A dimension with `safe` answers that place
+//! to a search whose radius, held to 8 as the natives hold it, reaches the block of the place
+//! from the block of the target, one with `"safe": "unloaded"` answers that a chunk the search
+//! must read is not loaded, and one without answers that there is none. A target that is no
+//! finite number gets no answer, as from the natives. A script without `game` asks a game that
+//! answers nothing.
 
 use golem_bridge::{
     BlockLocation,
@@ -41,6 +46,8 @@ use golem_bridge::{
     Item,
     Location,
     OnlinePlayer,
+    RespawnPlace,
+    RespawnPoint,
     SafePlace,
     Sender,
     Spawn,
@@ -141,8 +148,40 @@ struct PlayerSpec {
     #[serde(default)]
     idle_ms: u64,
     location: LocationSpec,
-    respawn: Option<BlockSpec>,
+    respawn: Option<RespawnSpec>,
+    respawn_place: Option<PlaceOrWord>,
     main_hand: Option<ItemSpec>,
+}
+
+/// The respawn point of a scripted player.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RespawnSpec {
+    dimension: String,
+    x: i32,
+    y: i32,
+    z: i32,
+    #[serde(default)]
+    angle: f32,
+    #[serde(default)]
+    forced: bool,
+}
+
+/// A place with its dimension and yaw, or the word unloaded.
+#[derive(Clone, Deserialize)]
+#[serde(untagged)]
+enum PlaceOrWord {
+    /// The place.
+    Place {
+        dimension: String,
+        x: f64,
+        y: f64,
+        z: f64,
+        #[serde(default)]
+        yaw: f32,
+    },
+    /// The word unloaded.
+    Word(Unloaded),
 }
 
 /// The players of a script that names none: nobody is online.
@@ -154,16 +193,6 @@ fn no_players() -> Option<Vec<PlayerSpec>> {
 /// The default game mode of a scripted player.
 fn survival() -> String {
     "survival".to_owned()
-}
-
-/// A block of the scripted game.
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct BlockSpec {
-    dimension: String,
-    x: i32,
-    y: i32,
-    z: i32,
 }
 
 /// An item of the scripted game.
@@ -273,13 +302,38 @@ impl Game for ScriptedGame {
         Some(self.of(uuid)?.location.clone().into())
     }
 
-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
-        Some(self.of(uuid)?.respawn.clone().map(|block| BlockLocation {
-            dimension: block.dimension,
-            x: block.x,
-            y: block.y,
-            z: block.z,
+    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
+        Some(self.of(uuid)?.respawn.clone().map(|point| RespawnPoint {
+            block: BlockLocation {
+                dimension: point.dimension,
+                x: point.x,
+                y: point.y,
+                z: point.z,
+            },
+            angle: point.angle,
+            forced: point.forced,
         }))
+    }
+
+    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
+        Some(match self.of(uuid)?.respawn_place.clone() {
+            None => RespawnPlace::Nowhere,
+            Some(PlaceOrWord::Word(Unloaded::Unloaded)) => RespawnPlace::Unloaded,
+            Some(PlaceOrWord::Place {
+                dimension,
+                x,
+                y,
+                z,
+                yaw,
+            }) => RespawnPlace::At(Location {
+                dimension,
+                x,
+                y,
+                z,
+                yaw,
+                pitch: 0.0,
+            }),
+        })
     }
 
     fn spawn(&self, dimension: &str) -> Option<Spawn> {
@@ -357,6 +411,26 @@ fn block_json(block: &BlockLocation) -> Value {
     json!({"dimension": block.dimension, "x": block.x, "y": block.y, "z": block.z})
 }
 
+/// Answers a respawn point as JSON, its block with the angle and whether it is forced.
+fn point_json(point: &RespawnPoint) -> Value {
+    let mut value = block_json(&point.block);
+    value["angle"] = json!(point.angle);
+    value["forced"] = json!(point.forced);
+    value
+}
+
+/// Answers where a player would respawn as JSON: null when the game cannot answer or the answer
+/// does not read, `{"none": true}` for the world spawn, `{"unloaded": true}` when a chunk is not
+/// loaded, and the place otherwise.
+fn place_json(answer: Option<RespawnPlace>) -> Value {
+    match answer {
+        None => Value::Null,
+        Some(RespawnPlace::Nowhere) => json!({"none": true}),
+        Some(RespawnPlace::Unloaded) => json!({"unloaded": true}),
+        Some(RespawnPlace::At(place)) => location_json(&place),
+    }
+}
+
 /// Answers a spawn as JSON.
 fn spawn_json(spawn: &Spawn) -> Value {
     let mut value = block_json(&spawn.block);
@@ -401,9 +475,10 @@ fn maybe<T>(answer: Option<Option<T>>, json: impl Fn(&T) -> Value) -> Value {
 /// A test plugin that asks the game on its commands and on the events whose names `on` lists.
 ///
 /// A command answers one line, the JSON of the answer: `players`, `player <who>`,
-/// `location <uuid>`, `respawn <uuid>`, `spawn <dimension>`, `hand <uuid>`,
-/// `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it
-/// asks for the players and broadcasts how many it got, or that the game did not answer.
+/// `location <uuid>`, `respawn <uuid>`, `respawnplace <uuid>`, `spawn <dimension>`,
+/// `hand <uuid>`, `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an
+/// event of `on` it asks for the players and broadcasts how many it got, or that the game did
+/// not answer.
 pub struct Ask {
     pub name: String,
     pub commands: Vec<String>,
@@ -423,7 +498,8 @@ impl Ask {
                 .location(uuid)
                 .as_ref()
                 .map_or(Value::Null, location_json),
-            ["respawn", uuid] => maybe(game.respawn(uuid), block_json),
+            ["respawn", uuid] => maybe(game.respawn(uuid), point_json),
+            ["respawnplace", uuid] => place_json(game.respawn_place(uuid)),
             ["spawn", dimension] => game
                 .spawn(dimension)
                 .as_ref()
@@ -520,7 +596,8 @@ fn read_wire(entry: WireEntry) -> Result<Value, String> {
         "location" => wire::location(answer)
             .as_ref()
             .map_or(Value::Null, location_json),
-        "respawn" => maybe(wire::respawn(answer), block_json),
+        "respawn" => maybe(wire::respawn(answer), point_json),
+        "respawnPlace" => place_json(wire::respawn_place(answer)),
         "spawn" => {
             let dimension = entry.dimension.as_deref().unwrap_or("minecraft:overworld");
             wire::spawn(dimension, answer)

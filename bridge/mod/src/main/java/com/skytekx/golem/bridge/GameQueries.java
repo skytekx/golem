@@ -38,8 +38,11 @@ final class GameQueries implements Game {
 	/** The unit separator between the fields of an answer. */
 	private static final String SEPARATOR = "\u001F";
 
-	/** The answer of safeLocation when the search met a chunk that is not loaded. */
-	private static final String UNLOADED = "unloaded";
+	/**
+	 * The answer of safeLocation when the search met a chunk that is not loaded, and of
+	 * respawnPlace when a chunk around the point is not loaded.
+	 */
+	static final String UNLOADED = "unloaded";
 
 	/** Whether ServerStoppedEvent fired, after which the levels of the server are closed. */
 	private static volatile boolean stopped;
@@ -120,7 +123,15 @@ final class GameQueries implements Game {
 			}
 			return join(player.getRespawnDimension().location().toString(),
 					Integer.toString(block.getX()), Integer.toString(block.getY()),
-					Integer.toString(block.getZ()));
+					Integer.toString(block.getZ()), Float.toString(player.getRespawnAngle()),
+					Boolean.toString(player.isRespawnForced()));
+		});
+	}
+
+	@Override
+	public String respawnPlace(String uuid) {
+		return ofPlayer("Game.respawnPlace", uuid, player -> {
+			return RespawnPlaces.find(player.server, player);
 		});
 	}
 
@@ -248,7 +259,11 @@ final class GameQueries implements Game {
 		}
 	}
 
-	private static String join(String... fields) {
+	/**
+	 * Answers the fields joined by the unit separator, each with the separator it holds replaced
+	 * by a space.
+	 */
+	static String join(String... fields) {
 		StringBuilder answer = new StringBuilder();
 		for (int index = 0; index < fields.length; index++) {
 			if (index > 0) {

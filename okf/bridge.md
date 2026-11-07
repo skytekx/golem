@@ -209,6 +209,7 @@ public interface Game {
 	String[] players();
 	String location(String uuid);
 	String respawn(String uuid);
+	String respawnPlace(String uuid);
 	String spawn(String dimension);
 	String mainHand(String uuid);
 	String heights(String dimension);
@@ -225,7 +226,8 @@ display name that a mod made, has it replaced by a space.
 | --- | --- | --- | --- |
 | `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list, and no answer for a player whose answer throws, such as in a listener of a mod for the display name, which the guard logs | Never on the server thread | The name in the list, while the client shows the name of the profile |
 | `location(uuid)` | The dimension, `x`, `y`, `z` of the feet, `yaw`, `pitch` | The player is not online | Never |
-| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
+| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, its angle and whether `/spawnpoint` forced it, `true` or `false`, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
+| `respawnPlace(uuid)` | The dimension, `x`, `y`, `z` of the feet and the yaw where the player would respawn now, see below, or the one field `unloaded` when a chunk within 3 blocks of the point is not loaded | The player is not online | The player holds no point, or the point holds no respawn now, so the game would respawn them at the world spawn |
 | `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
 | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
 | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
@@ -250,6 +252,17 @@ resets when the player moves, chats, uses an item or clicks, so a plugin marks a
 away. The shared spawn of the Nether and the End is the one of the Overworld, since Minecraft
 keeps one spawn for the worlds of a server. The registry id of an item comes from the registry of
 Forge, such as `minecraft:diamond`.
+
+`respawnPlace` resolves the respawn point as `PlayerList.respawn` of Minecraft 1.20.1 does, with
+`Player.findRespawnPositionAndUseSpawnBlock` for a player who lives, so a respawn anchor keeps its
+charge: a bed needs room beside it, an anchor a charge, which `/spawnpoint` does not ask, and a
+point that `/spawnpoint` forced needs room for the player, and Forge lets a bed of a mod answer for
+itself. The yaw faces a bed or an anchor as a respawn turns the player, and is the angle of the
+point otherwise, and the place is lifted by whole blocks while the box of a player collides
+there, as the game lifts a player after a respawn. The question reads the blocks within 3 blocks
+of the point alone, and answers `unloaded` when a chunk of them is not loaded, since a question
+never loads a chunk. So the port of EssentialsX tells a bed that is gone from one that stands, as
+`getBedSpawnLocation` of Bukkit does, without a respawn.
 
 `safeLocation` answers the nearest place near the block of the target where a player stands safely,
 with the search that the mod writes itself and copies from no plugin. A place is safe when the block
@@ -632,7 +645,7 @@ jars against this page.
   `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
   public methods of `Host` are the 18 natives of the first Java block above, each with the
   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
-  `available()`, and those of `Game` are the 8 abstract methods of the block of
+  `available()`, and those of `Game` are the 9 abstract methods of the block of
   [The game](#the-game).
 - The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
   no `.license` file. It listens for every event of the table and calls every native but

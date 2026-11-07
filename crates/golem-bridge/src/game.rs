@@ -89,6 +89,31 @@ impl fmt::Display for BlockLocation {
     }
 }
 
+/// The respawn point that a player holds, as Minecraft stores it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RespawnPoint {
+    /// The block of the point: a bed, a respawn anchor or the block that `/spawnpoint` named.
+    pub block: BlockLocation,
+    /// The angle the player faces after a respawn there that no bed or anchor turns, in degrees.
+    pub angle: f32,
+    /// Whether `/spawnpoint` set the point, which then needs no bed or anchor, only room for
+    /// the player.
+    pub forced: bool,
+}
+
+/// Where a player would respawn now, as vanilla resolves the respawn point for a player who
+/// lives, without the charge of an anchor that a respawn after a death uses.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RespawnPlace {
+    /// The place of the feet and the yaw, which faces a bed or an anchor, with the pitch 0.
+    At(Location),
+    /// The player holds no point, or the point holds no respawn now, such as a bed that is gone
+    /// or blocked or an anchor without a charge, so vanilla respawns them at the world spawn.
+    Nowhere,
+    /// A chunk around the point is not loaded, and a question loads no chunk.
+    Unloaded,
+}
+
 /// The shared spawn of a dimension.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spawn {
@@ -202,8 +227,8 @@ pub trait Game {
     /// Answers the respawn point that the player with `uuid` holds, which a bed, a respawn
     /// anchor or `/spawnpoint` set, as Minecraft stores it, or `Some(None)` when they have none.
     /// Minecraft checks the block only when the player respawns, so the point may name a bed
-    /// that is gone.
-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>>;
+    /// that is gone, which [`Game::respawn_place`] tells.
+    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>>;
 
     /// Answers the shared spawn of a dimension.
     fn spawn(&self, dimension: &str) -> Option<Spawn>;
@@ -221,6 +246,13 @@ pub trait Game {
     /// the first place in its order whose chunk is not loaded, before it found a safe one, it
     /// answers [`SafePlace::Unloaded`].
     fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace>;
+
+    /// Answers where the player with `uuid` would respawn now, as vanilla resolves the point,
+    /// without the charge of an anchor. The default answers none, as a game that cannot tell.
+    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
+        let _ = uuid;
+        None
+    }
 
     /// Answers the player online whose name or UUID is `who`, in any case, or `Some(None)` when
     /// nobody online has it.
@@ -245,7 +277,7 @@ impl Game for NoGame {
         None
     }
 
-    fn respawn(&self, _uuid: &str) -> Option<Option<BlockLocation>> {
+    fn respawn(&self, _uuid: &str) -> Option<Option<RespawnPoint>> {
         None
     }
 
@@ -288,12 +320,15 @@ pub mod wire {
         Item,
         Location,
         OnlinePlayer,
+        RespawnPlace,
+        RespawnPoint,
         SEPARATOR,
         SafePlace,
         Spawn, //
     };
 
-    /// The answer of `safeLocation` when the search met a chunk that is not loaded.
+    /// The answer of `safeLocation` when the search met a chunk that is not loaded, and of
+    /// `respawnPlace` when a chunk around the point is not loaded.
     pub const UNLOADED: &str = "unloaded";
 
     /// Whether an operator level outside 0 to 4 was already logged.
@@ -373,19 +408,52 @@ pub mod wire {
         })
     }
 
+    /// Reads a boolean as Java writes it, `true` or `false`.
+    fn boolean(field: &str) -> Option<bool> {
+        match field {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        }
+    }
+
     /// Reads the answer of `respawn`.
-    pub fn respawn(answer: &str) -> Option<Option<BlockLocation>> {
+    pub fn respawn(answer: &str) -> Option<Option<RespawnPoint>> {
         if answer.is_empty() {
             return Some(None);
         }
-        let [dimension, x, y, z] = fields(answer)[..] else {
+        let [dimension, x, y, z, point_angle, forced] = fields(answer)[..] else {
             return None;
         };
-        Some(Some(BlockLocation {
+        Some(Some(RespawnPoint {
+            block: BlockLocation {
+                dimension: dimension.to_owned(),
+                x: x.parse().ok()?,
+                y: y.parse().ok()?,
+                z: z.parse().ok()?,
+            },
+            angle: angle(point_angle)?,
+            forced: boolean(forced)?,
+        }))
+    }
+
+    /// Reads the answer of `respawnPlace`.
+    pub fn respawn_place(answer: &str) -> Option<RespawnPlace> {
+        match answer {
+            "" => return Some(RespawnPlace::Nowhere),
+            UNLOADED => return Some(RespawnPlace::Unloaded),
+            _ => {}
+        }
+        let [dimension, x, y, z, yaw] = fields(answer)[..] else {
+            return None;
+        };
+        Some(RespawnPlace::At(Location {
             dimension: dimension.to_owned(),
-            x: x.parse().ok()?,
-            y: y.parse().ok()?,
-            z: z.parse().ok()?,
+            x: coordinate(x)?,
+            y: coordinate(y)?,
+            z: coordinate(z)?,
+            yaw: angle(yaw)?,
+            pitch: 0.0,
         }))
     }
 

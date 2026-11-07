@@ -66,7 +66,6 @@ use std::{
 use crate::{
     Action,
     Actions,
-    BlockLocation,
     Event,
     Game,
     Handler,
@@ -77,6 +76,8 @@ use crate::{
     NoGame,
     OnlinePlayer,
     Player,
+    RespawnPlace,
+    RespawnPoint,
     SafePlace,
     Sender,
     Spawn,
@@ -248,9 +249,15 @@ impl Game for ServerThread<'_> {
             .flatten()
     }
 
-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
+    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
         Self::allowed("respawn")
             .then(|| self.0.respawn(uuid))
+            .flatten()
+    }
+
+    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
+        Self::allowed("respawnPlace")
+            .then(|| self.0.respawn_place(uuid))
             .flatten()
     }
 

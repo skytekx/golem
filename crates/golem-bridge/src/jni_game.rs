@@ -30,12 +30,13 @@ use jni::{
 };
 
 use crate::{
-    BlockLocation,
     Game,
     Heights,
     Item,
     Location,
     OnlinePlayer,
+    RespawnPlace,
+    RespawnPoint,
     SafePlace,
     Spawn,
     Throttle,
@@ -221,9 +222,14 @@ impl Game for JniGame<'_, '_> {
         wire::location(&answer).or_else(|| unread("location", &answer))
     }
 
-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
+    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
         let answer = self.string("respawn", uuid)?;
         wire::respawn(&answer).or_else(|| unread("respawn", &answer))
+    }
+
+    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
+        let answer = self.string("respawnPlace", uuid)?;
+        wire::respawn_place(&answer).or_else(|| unread("respawnPlace", &answer))
     }
 
     fn spawn(&self, dimension: &str) -> Option<Spawn> {

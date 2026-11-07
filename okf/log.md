@@ -529,3 +529,12 @@ Oldest first. Times are UTC.
   plainly and on one that runs them as the other player, and the console and a command block that
   run a command as the player who clicked. The player of the harness learns to use a block. See
   [Bridge](bridge.md#the-host-class).
+- The game answers the whole respawn point and where a player would respawn. `Game::respawn` answers
+  a `RespawnPoint`, the block with its angle and whether `/spawnpoint` forced it, and the new
+  question `Game::respawn_place` answers where the player would respawn now, as Minecraft resolves
+  the point for a player who lives, so an anchor keeps its charge: the place of the feet with the
+  yaw, that the point holds no respawn now, or that a chunk around the point is not loaded. The
+  answer of `respawn` gains two fields on the wire, so the host jar, the mod and the natives of one
+  build go together. `04_plugins` holds both answers of a scripted game and their wire form,
+  `05_bridge_build` the point of `/spawnpoint` and its place on a stock Forge server, and the game
+  of the fake server of `07_forge_boot` answers the new question. See [Bridge](bridge.md#the-game).

@@ -40,15 +40,27 @@ public interface Game {
 
 	/**
 	 * Answers the respawn point that a player holds, which a bed, a respawn anchor or the command
-	 * spawnpoint set: the dimension and x, y and z of the block, as Minecraft stores it.
-	 * Minecraft checks the block only when the player respawns, so the point may name a bed that
-	 * is gone.
+	 * spawnpoint set: the dimension and x, y and z of the block, the angle and whether the
+	 * command spawnpoint forced it, as Minecraft stores it. Minecraft checks the block only when
+	 * the player respawns, so the point may name a bed that is gone.
 	 *
 	 * @param uuid the UUID of the player in its usual form with dashes
 	 * @return the point, the empty string when the player has none, or null when the player is
 	 *     not online
 	 */
 	String respawn(String uuid);
+
+	/**
+	 * Answers where a player would respawn now, as Minecraft resolves the respawn point for a
+	 * player who lives, without the charge of an anchor: the dimension, x, y and z of the feet
+	 * and the yaw. The question reads loaded chunks alone and loads none.
+	 *
+	 * @param uuid the UUID of the player in its usual form with dashes
+	 * @return the place, the empty string when the player holds no point or the point holds no
+	 *     respawn now, the word unloaded when a chunk around the point is not loaded, or null
+	 *     when the player is not online
+	 */
+	String respawnPlace(String uuid);
 
 	/**
 	 * Answers the shared spawn of a dimension: x, y and z of the block and the angle.
