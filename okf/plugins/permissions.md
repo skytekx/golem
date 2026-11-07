@@ -15,11 +15,12 @@ The crate `golem-permissions` is the one permission system of Golem. It takes th
 license of LuckPerms and names its holders, lucko (Luck) and the LuckPerms contributors, beside the
 holder of Golem, see [Licensing](../../Documentation/licensing.md). The groups and nodes are a
 tracked TOML file, [config/permissions.toml](../../config/permissions.toml), and every decision
-names the rule that made it. A plugin asks it whether a player holds a node, and a port of LuckPerms
-that answers `on_permission` answers the handler of the Forge PermissionAPI through it. The
-[store](../store.md#permissions) holds the same groups and nodes and hands them to the crate as TOML
-of the same format, so it is seeded from the same file. Today the crate reads the TOML, and
-`golem run` loads neither the crate nor the store yet.
+names the rule that made it. Once `golem run` loads it, a plugin asks it whether a player holds a
+node, and a port of LuckPerms that answers `on_permission` answers the handler of the Forge
+PermissionAPI through it. The [store](../store.md#permissions) holds the same groups and nodes and
+hands them to the crate as TOML of the same format, so it is seeded from the same file. Today the
+crate reads the TOML, and `golem run` loads neither the crate nor the store yet, so no plugin asks
+the crate and `config/permissions.toml` grants and denies nothing on a running server.
 
 The notebook `tests/notebooks/06_permissions.ipynb` holds every rule on this page to a case.
 
@@ -268,10 +269,12 @@ wiki records in `okf/modpack/plugins.md` lines 55 to 59 of `skytekx3-1201-server
 and the server does another.
 
 Golem has one permission system and no switch that turns a second one on or off. A command of a
-plugin needs no permission level in Brigadier, and the plugin checks the sender through
-`golem-permissions`, as [Bridge](../bridge.md#commands) says, so the nodes of
-`config/permissions.toml` and of the store seeded from it are the only place that grants a
-command.
+plugin needs no permission level in Brigadier, and the plugin judges the sender itself, as
+[Bridge](../bridge.md#commands) says. Once the runtime hands the plugins the permissions, a plugin
+checks the sender through `golem-permissions`, so the nodes of `config/permissions.toml` and of the
+store seeded from it are the only place that grants a command. That is not built yet. `golem run`
+loads neither the crate nor the store, and the one command of a plugin, `golem`, needs no node, see
+[Open items](../open-items.md#open-in-what-is-built).
 
 Issue: [#1](https://github.com/skytekx/golem/issues/1).
 

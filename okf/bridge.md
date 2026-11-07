@@ -5,7 +5,7 @@ type: Spec
 title: Bridge
 description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the game that Rust may ask, the permission handler of Forge, the wire form of the actions and the rules of the server thread.
 tags: [bridge, jni, forge, contract]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Bridge
@@ -135,8 +135,10 @@ to every player. A silent source still sees no line, since `sendSystemMessage` o
 drops every message to a source whose output is suppressed, such as a function. The answer goes to
 the player of the source when it has one, so a command that runs as a player through `execute as`
 answers that player, and else to the source itself, such as the console or a command block. A
-command of a plugin needs no permission level in Brigadier: the plugin checks the sender itself,
-through `golem-permissions`.
+command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself.
+Until the runtime hands the plugins the permissions, a plugin judges by the level of the source and
+the operator level of the player alone, since `golem run` loads neither `golem-permissions` nor
+`config/permissions.toml`, see [Permissions](plugins/permissions.md).
 
 Forge builds the commands when it loads the data packs: once at the start, before
 `ServerStartingEvent`, and again on every `/reload`. So `commandNames()` answers before

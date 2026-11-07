@@ -136,14 +136,15 @@ says. A null `arguments` reads as the empty string.
 | `Sender::Console` | The console and RCON, with no entity at the level `MAX_LEVEL`, 4 |
 | `Sender::Other { name, level }` | Every other source, such as a command block at level 2, or a command that the console or a command block runs as an armor stand or as a player through `execute as`, named after that entity |
 
-A plugin judges a player by the lower of the level of the source and the rights of the player,
-through `golem-permissions` and their operator level, and every other sender by its level alone,
-with no node of any player, also when it runs as a player through `execute as`. So a source at level
-2 never borrows the rights of a player, as in vanilla, where `execute as` keeps the level of the
-source, and as on the live server, where Arclight handed a Bukkit plugin the source and not the
-player. A source that the mod passes wrong, a UUID without a name,
-neither of them below level 4 or a level outside 0 to 4, is refused with an empty answer instead
-of running as the console, which may do more than any other source.
+A plugin judges a player by the lower of the level of the source and the rights of the player, and
+every other sender by its level alone, with no node of any player, also when it runs as a player
+through `execute as`. The rights of a player are their operator level, since the runtime hands the
+plugins no permissions yet, and will take in the nodes of `golem-permissions` once it does. So a
+source at level 2 never borrows the rights of a player, as in vanilla, where `execute as` keeps the
+level of the source, and as on the live server, where Arclight handed a Bukkit plugin the source and
+not the player. A source that the mod passes wrong, a UUID without a name, neither of them below
+level 4 or a level outside 0 to 4, is refused with an empty answer instead of running as the
+console, which may do more than any other source.
 
 ## Permissions
 
