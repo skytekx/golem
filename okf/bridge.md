@@ -136,10 +136,9 @@ to every player. A silent source still sees no line, since `sendSystemMessage` o
 drops every message to a source whose output is suppressed, such as a function. The answer goes to
 the player of the source when it has one, so a command that runs as a player through `execute as`
 answers that player, and else to the source itself, such as the console or a command block. A
-command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself.
-Until the runtime hands the plugins the permissions, a plugin judges by the level of the source and
-the operator level of the player alone, since `golem run` seeds the store with the permissions and
-gives no plugin a check of a node yet, see [Permissions](plugins/permissions.md).
+command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself,
+a player by the nodes that `golem-permissions` grants them and every other source by its level,
+see [Permissions](plugins/permissions.md#the-check-of-a-sender).
 
 The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
 of the chat, so a player would type the link to the source that `/golem source` offers by hand.

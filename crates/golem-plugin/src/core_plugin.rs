@@ -215,7 +215,7 @@ impl Plugin for CorePlugin {
         let subcommand = words.first().map(|word| word.to_ascii_lowercase());
         let rest = words.get(1..).unwrap_or_default();
         if subcommand.as_deref() == Some("listname") {
-            return operator::refusal("listname", sender, context.game())
+            return operator::refusal("listname", sender, context)
                 .unwrap_or_else(|| operator::list_name(after_first_word(arguments), context));
         }
         let operation: fn(&[&str], &Context<'_>) -> Vec<String> = match subcommand.as_deref() {
@@ -235,7 +235,7 @@ impl Plugin for CorePlugin {
             }
         };
         let name = subcommand.unwrap_or_default();
-        operator::refusal(&name, sender, context.game()).unwrap_or_else(|| operation(rest, context))
+        operator::refusal(&name, sender, context).unwrap_or_else(|| operation(rest, context))
     }
 }
 

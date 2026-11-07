@@ -56,8 +56,8 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
 | [The bridge](#the-bridge) | 1 | 5 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
-| [The plugin runtime](#the-plugin-runtime) | 0 | 1 | 0 | 0 | 1 | 0 | 11 | 0 | 0 | 0 | 13 |
-| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 1 | 3 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
+| [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
+| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 2 | 2 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
 | [The store](#the-store) | 1 | 0 | 2 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
@@ -74,7 +74,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 21 |
-| All | 6 | 9 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 376 |
+| All | 9 | 7 | 12 | 74 | 23 | 25 | 138 | 30 | 6 | 52 | 376 |
 
 ## The JVM host and macOS
 
@@ -130,8 +130,8 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
-| The store and the permissions in the context of every plugin, and the flush on `ServerStopped` | Commits f26d511 and eb21a7e on port/wiring | Handover | 04, 07 |
-| The tools of operators of `/golem` stay with every operator of level 2 outside the group admin, as the pages say | Core plugin, crates/golem-plugin/src/operator.rs 69 to 76 on port/wiring | Open | 04, 07 |
+| The store and the permissions in the context of every plugin, and the flush on `ServerStopped` | Plugins (the context of a call), Permissions (the check of a sender) | Built | 04, 07 |
+| The tools of operators of `/golem` stay with every operator of level 2 outside the group admin, as the pages say | Core plugin (the command golem) | Built | 04, 07 |
 | A plugin declares its default nodes, which the resolver reads below the nodes of a player, the four true nodes of the teleport side among them | Bridge needs 135 to 141, API 11.1, crates/golem-permissions/src/lib.rs 84 to 85 | Open | 04, 06 |
 | A second plugin of one name refused by `Runtime::add`, since the ledger and the quarantine of API 11.3 and 11.4 key by the name | Golem crates/golem-plugin/src/runtime.rs 244 to 266 | Open | 04 |
 | A registry of plugins outside `main.rs` that enables and disables them | Golem crates/golem/src/main.rs | Open | 04 |
@@ -149,7 +149,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
 | The store in `golem run`: opened, seeded with the seed flushed into its file, flushed and closed on every stop path, with exit 1 on a close that fails where the run of the JVM returns, while the exit hook keeps the status of the exit of Java | Store (the place in the program golem), JVM host (the hooks), issues #1, #2 | Built | 03, 04, 07, 08 |
-| Every sender checked for a node: the console holds every node, another source from level 2, a player through `golem-permissions` | Commit eb21a7e on port/wiring, issue #1 | Handover | 04, 07 |
+| Every sender checked for a node: the console holds every node, another source from level 2, a player through `golem-permissions` | Permissions (the check of a sender), issue #1 | Built | 04, 07 |
 | The PermissionAPI of Forge answers every Boolean node of a mod as LuckPerms answered it through Arclight | Commits 2b8ec15 and 9b5749a on port/wiring, issue #105 | Handover | 04, 06, 07 |
 | The commands of LuckPerms 5.5.71: user, group, creategroup, deletegroup, listgroups and 15 subcommands, with `/perm` as an alias | Commits 063b980 and 9b5749a on port/wiring, Plan (LuckPerms 5.5.71) | Handover | 06, 07 |
 | The cases the bundle lacks: setweight, parent set and clear, permission clear, clear, creategroup of a group that exists, an unknown subcommand, a second page, the aliases g, t and i, UUID versions 3 and 2, `/lp` in game, the level map, the PermissionAPI for an operator and a node that nothing names, a refused write with its log line and the bridge under `golem run` | Permissions, the branch port/wiring of the bundle | Open | 04, 06, 07 |

@@ -38,17 +38,21 @@ the log, since it would wait for itself.
 
 ## Wiring
 
-The program golem builds one runtime, gives it the store of the plugins, adds its plugins and
-installs it before the JVM starts, as [Store](../store.md#the-place-in-the-program-golem) says. Its
-budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
-the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the git checkout of
-Golem itself, with `-dirty` behind it when the files that make the binary differ from HEAD, as
-[JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
-alone and names the commit unknown without it.
+The program golem builds one runtime, gives it the store of the plugins and the resolver of the
+permissions of that store, adds its plugins and installs it before the JVM starts, as
+[Store](../store.md#the-place-in-the-program-golem) says. A set of the store that
+`golem-permissions` refuses stops the start with `golem: the permissions of the store <path> do not
+load: <reason>`. Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and
+its source names the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the
+git checkout of Golem itself, with `-dirty` behind it when the files that make the binary differ
+from HEAD, as [JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads
+`GOLEM_COMMIT` alone and names the commit unknown without it.
 
 ```rust
+let resolver = Resolver::from_store(&store)?;
 let mut runtime = Runtime::new(budget);
 runtime.set_store(store.clone());
+runtime.set_permissions(resolver);
 runtime.add(Box::new(CorePlugin::new(Source {
     version: VERSION.to_owned(),
     repository: REPOSITORY.to_owned(),
@@ -146,15 +150,14 @@ says. A null `arguments` reads as the empty string.
 | `Sender::Console` | The console and RCON, with no entity at the level `MAX_LEVEL`, 4 |
 | `Sender::Other { name, level }` | Every other source, such as a command block at level 2, or a command that the console or a command block runs as an armor stand or as a player through `execute as`, named after that entity |
 
-A plugin judges a player by the lower of the level of the source and the rights of the player, and
-every other sender by its level alone, with no node of any player, also when it runs as a player
-through `execute as`. The rights of a player are their operator level, since the runtime hands the
-plugins no permissions yet, and will take in the nodes of `golem-permissions` once it does. So a
-source at level 2 never borrows the rights of a player, as in vanilla, where `execute as` keeps the
-level of the source, and as on the live server, where Arclight handed a Bukkit plugin the source and
-not the player. A source that the mod passes wrong, a UUID without a name, neither of them below
-level 4 or a level outside 0 to 4, is refused with an empty answer instead of running as the
-console, which may do more than any other source.
+A plugin judges a sender with `Context::check_permission` and `Context::has_permission`, see [the
+check of a sender](permissions.md#the-check-of-a-sender): a player by their nodes in
+`golem-permissions`, and every other sender by its level alone, with no node of any player, also
+when it runs as a player through `execute as`. So a source at level 2 never borrows the rights of a
+player, as in vanilla, where `execute as` keeps the level of the source, and as on the live server,
+where Arclight handed a Bukkit plugin the source and not the player. A source that the mod passes
+wrong, a UUID without a name, neither of them below level 4 or a level outside 0 to 4, is refused
+with an empty answer instead of running as the console, which may do more than any other source.
 
 ## Permissions
 
@@ -187,7 +190,10 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `actions()` | The queue itself, for what the helpers do not cover |
 | `game()` | The game, which answers on the server thread and answers none on any other thread |
 | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
-| `store()` | The store of the plugins that a program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
+| `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
+| `check_permission(sender, node)` | Whether the sender holds the node, as `PermissionAnswer` with `granted`, `set`, which says whether a rule decided, and the `reason`, by the rules of [the check of a sender](permissions.md#the-check-of-a-sender) |
+| `has_permission(sender, node)` | The same answer without the reason, for a player one call of `Permissions::value`, which allocates nothing, for the server thread |
+| `permissions()` | The `Resolver` of the permissions that the program gave the runtime with `Runtime::set_permissions`, or none |
 
 Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
 plugin, so every change of the plugins is in the file before the JVM ends, also when nothing closes

@@ -75,11 +75,10 @@ Golem API.
 - The repository of the server does not ignore `golem-store.db`, `golem-store.db-wal` and
   `golem-store.db-shm` yet, which `golem run` writes beside `world/` and which hold player data, see
   [Store](store.md#the-place-in-the-program-golem). Its `.gitignore` names them before the switch.
-- `golem run` hands the plugins no permissions. It seeds the store with them, but the context of a
-  plugin offers no check of a node, so a plugin judges a sender by the level of the source and the
-  operator level of the player alone, and a change of the permissions of the store changes nothing
-  on a running server, see [Permissions](plugins/permissions.md). Wiring them in loads the set of
-  the store and gives the context a check of `golem-permissions`.
+- No command changes the permissions of the store on a running server yet, and nothing wakes the
+  reload of the resolver there, so `golem run` checks with the set of its start, see
+  [Permissions](plugins/permissions.md#the-check-of-a-sender). The port of the commands of LuckPerms
+  changes that.
 - `golem-permissions` answers no `on_permission` yet. A port of LuckPerms answers every Boolean
   node of an online player as LuckPerms did through Arclight, see the open decision above, and
   the importer of a LuckPerms export, the members of the group admin and a comparison of the seed

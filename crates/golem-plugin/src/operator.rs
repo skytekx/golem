@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The subcommands of /golem that ask the game: whoami for everyone, and player, world, teleport
- * and listname for the console and the operators of level 2 and more.
+ * and listname for the console, the operators of level 2 and more and a player who holds the
+ * node golem.<subcommand>, such as golem.player.
  *
  * They are the tools of an operator who wants to see what Golem sees: who runs a command and at
  * which level, where a player is and how they play, the spawn and the heights of a dimension, a
@@ -21,8 +22,9 @@ use golem_bridge::{
 
 use crate::Context;
 
-/// The level from which a player or another source may run the subcommands of operators, the
-/// level of a game master in Minecraft.
+/// The level of a game master in Minecraft. From it a source that is no player, such as a command
+/// block or a function, holds every node, and a player whose node no rule names may run the
+/// subcommands of operators.
 pub const OPERATOR_LEVEL: u8 = 2;
 
 /// How far from its target a teleport of /golem teleport looks for a safe place, in blocks.
@@ -57,23 +59,33 @@ pub fn whoami(sender: &Sender, game: &dyn Game) -> Vec<String> {
     vec![line]
 }
 
-/// Answers the refusal of the subcommand `name` for a sender below the operator level, or
-/// `None` when the sender may run it. A player counts at the lower of the level of the source
-/// and their operator level, and a player whom the game does not answer reads that the game
-/// gives no answer, since that says nothing about their level.
-pub fn refusal(name: &str, sender: &Sender, game: &dyn Game) -> Option<Vec<String>> {
+/// Answers the refusal of the subcommand `name` for a sender who may not run it, or `None` when
+/// the sender may.
+///
+/// The console may, and another source may from the level 2, since both hold every node. A
+/// player may when a rule of `golem-permissions` grants them the node `golem.<name>`, such as
+/// through the group `admin` of the seed, and may not when a rule denies it. Where no rule names
+/// the node, an operator of level 2 and more keeps the tool, at the lower of their operator level
+/// and the level of the source, so no operator of the game loses a tool to the permissions and a
+/// source below the level never borrows the level of the player it runs as. A player whom the
+/// game does not answer then reads that the game gives no answer, since that says nothing about
+/// their level.
+pub fn refusal(name: &str, sender: &Sender, context: &Context<'_>) -> Option<Vec<String>> {
+    let node = format!("golem.{name}");
+    let answer = context.check_permission(sender, &node);
     let allowed = match sender {
-        Sender::Console => true,
-        Sender::Other { level, .. } => *level >= OPERATOR_LEVEL,
-        Sender::Player { player, level } => match game.player(&player.uuid) {
-            Some(Some(online)) => online.level.min(*level) >= OPERATOR_LEVEL,
-            Some(None) => false,
-            None => return Some(vec![NO_ANSWER.to_owned()]),
-        },
+        // No rule names the node of the player, so their operator level decides.
+        Sender::Player { player, level } if !answer.set => {
+            let Some(found) = context.game().player(&player.uuid) else {
+                return Some(vec![NO_ANSWER.to_owned()]);
+            };
+            found.is_some_and(|online| online.level.min(*level) >= OPERATOR_LEVEL)
+        }
+        _ => answer.granted,
     };
     (!allowed).then(|| {
         vec![format!(
-            "Only the console and operators of level {OPERATOR_LEVEL} and more may run /golem {name}."
+            "Only the console, operators of level {OPERATOR_LEVEL} and more and a player who holds {node} may run /golem {name}."
         )]
     })
 }

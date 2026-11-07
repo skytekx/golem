@@ -5,7 +5,7 @@ type: Spec
 title: Core plugin
 description: The core plugin of Golem and its command golem, which names the license and the source of the running build as section 13 of the AGPL asks, the TPS and MSPT of the server, the budget of every plugin, who runs a command, and the tools of operators that read the game, teleport a player to a safe place and name them in the player list.
 tags: [plugins, core, command, agpl, source, status, operators, game]
-timestamp: 2026-11-07
+timestamp: 2026-11-15
 ---
 
 # Core plugin
@@ -18,8 +18,13 @@ command `golem` and logs once that the bridge is connected. The program golem ad
 
 The subcommands `source`, `status`, `whoami` and `help` need no permission, since section 13 of
 the AGPL gives every player the right to the source, and they name nothing that a player could
-misuse. The tools of operators read the game and change it, so only the console, a player of
-operator level 2 and more and another source of level 2 and more may run them, `OPERATOR_LEVEL`.
+misuse. The tools of operators read the game and change it, so each takes the node `golem.<name>`
+of its subcommand, such as `golem.player`, which the console holds, another source holds from the
+level 2, `OPERATOR_LEVEL`, and a player holds when `golem-permissions` grants it to them, such as
+through `golem.*` of the group `admin` of the seed, see
+[Permissions](permissions.md#the-check-of-a-sender). Where no rule of the permissions names the
+node for a player, an operator of level 2 and more keeps the tool, so no operator of the game loses
+a tool to the permissions.
 The first word of the arguments picks the subcommand, in any case, and the words after it are its
 arguments, which `source`, `status`, `whoami` and `help` ignore, while `listname` takes its text
 as it is typed.
@@ -31,17 +36,25 @@ as it is typed.
 | `/golem source` | Everyone | The license, the version, the repository, the commit and the link to its source |
 | `/golem status` | Everyone | The TPS, the MSPT and the ticks, and the budget of every plugin |
 | `/golem whoami` | Everyone | Who Golem sees run the command, and at which level |
-| `/golem player <name>` | Operators | Where a player is and how they play |
-| `/golem world [<dimension>]` | Operators | The spawn and the heights of a dimension, by default the Overworld |
-| `/golem teleport <name> <dimension> <x> <y> <z>` | Operators | A teleport to the nearest safe place |
-| `/golem listname <name> [<text>]` | Operators | The name of a player in the player list, cleared without a text |
+| `/golem player <name>` | `golem.player` or an operator | Where a player is and how they play |
+| `/golem world [<dimension>]` | `golem.world` or an operator | The spawn and the heights of a dimension, by default the Overworld |
+| `/golem teleport <name> <dimension> <x> <y> <z>` | `golem.teleport` or an operator | A teleport to the nearest safe place |
+| `/golem listname <name> [<text>]` | `golem.listname` or an operator | The name of a player in the player list, cleared without a text |
 | `/golem <other>` | Everyone | `The subcommand <other> of /golem is unknown.` and the help |
 
-The console runs the same command, without the slash, and sees the same lines. A source below the
-level reads `Only the console and operators of level 2 and more may run /golem <name>.`. A player
-is judged by the lower of their operator level as the game answers it and the level of the source,
-and a command that another source runs as a player through `execute as` is judged by the level of
-that source alone, as [Plugins](index.md#commands) says.
+The console runs the same command, without the slash, and sees the same lines. A sender who may
+not run a tool reads `Only the console, operators of level 2 and more and a player who holds
+golem.<name> may run /golem <name>.`. A rule of the permissions decides first: a player whom a rule
+grants the node runs the tool whatever their operator level and the level of the source, and a
+player whom a rule denies it is refused, also as an operator. Where no rule names the node, a
+player is judged by the lower of their operator level as the game answers it and the level of the
+source, so an operator of level 2 and more keeps every tool without a node, and a player whom the
+game does not answer reads that the game gives no answer. A command that another source runs as a
+player through `execute as` is judged by the level of that source alone, as
+[Plugins](index.md#commands) says, so no source borrows the nodes or the level of a player. The
+seed grants `golem.*` to the group `admin`, which has no members yet. The level is the rule for a
+source that is no player, since such a source has no nodes, and the level 2 is the level of the
+game masters of Minecraft, at which a command block and a function run.
 
 ## Source
 
@@ -151,8 +164,8 @@ from the text, which the tool takes as it is typed, runs of spaces included, so
 Each tool answers `No player <name> is online.` for a player who is not, names a dimension the
 server does not have, and answers its usage for words it cannot read. The tools ask the game on
 the server thread alone, so a tool answers `The game gives no answer now, so try again.` when the
-game cannot answer, also to a player whose operator level the game does not answer, in place of
-the refusal.
+game cannot answer, also to a player whose node no rule names and whose operator level the game
+does not answer, in place of the refusal.
 
 ## Help
 
@@ -187,8 +200,9 @@ The notebook `tests/notebooks/04_plugins.ipynb` checks every answer above in its
 core plugin: the five lines of the source with a known, an unknown and a dirty commit and of the
 build, the help of `/golem` and `/golem help`, the error of an unknown subcommand, the first line
 of the status against the statistics of the bridge, and the single line of the log. Its section on
-the tools of operators checks `whoami` for every sender, the refusal below level 2 and every
-answer and action of `player`, `world`, `teleport` and `listname` against a scripted game. The
+the tools of operators checks `whoami` for every sender, the node that a rule grants or denies, the
+operator level where no rule names it, the refusal below both and every answer and action of
+`player`, `world`, `teleport` and `listname` against a scripted game. The
 notebook `tests/notebooks/07_forge_boot.ipynb` runs them under `golem run` against the real game:
 `whoami` for the console, the player, an armor stand and a command block, `player` and `world`
 against what the console set, a teleport onto a block of magma in the Nether that lands on the

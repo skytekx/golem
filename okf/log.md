@@ -345,3 +345,15 @@ Oldest first. Times are UTC.
   wildcard decides, and `09_store` compares a decision of the
   store by its node, its value and its reason. See
   [Permissions](plugins/permissions.md#the-api).
+- The runtime of the plugins resolves the permissions of the store. `golem run` builds a `Resolver`
+  from the store after the seed and refuses to start on a set that `golem-permissions` refuses. A
+  plugin asks through `Context::check_permission` and `Context::has_permission` whether a sender
+  holds a node: the console holds every node, another source every node from the level 2, and a
+  player what the rules grant them. The resolver loads a changed set on the thread
+  `golem-permissions`, so a check never waits for a reload. The tools of operators of `/golem` take
+  the nodes `golem.<name>`, and where no rule names the node an operator of level 2 and more keeps
+  the tool, so no operator loses one to the permissions. `03_launch_args` holds the refused start,
+  `04_plugins` the check for every sender, the reload and the tools by a rule and by the operator
+  level, and `07_forge_boot` the tools for a player with the node, for an operator without it and
+  for a player with neither. See [Permissions](plugins/permissions.md#the-check-of-a-sender) and
+  [Core plugin](plugins/core.md#the-command-golem).

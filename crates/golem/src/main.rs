@@ -47,6 +47,7 @@ use golem_jvm::{
 use golem_plugin::{
     CorePlugin,
     DEFAULT_BUDGET,
+    Resolver,
     Runtime,
     Source, //
 };
@@ -221,13 +222,17 @@ fn source() -> Source {
     }
 }
 
-/// Installs the plugin runtime with the store and the core plugin as the handler of the bridge,
-/// and answers the queue of actions the mod drains on the server thread.
-fn install_plugins(budget: Duration, store: &Store) -> Actions {
+/// Installs the plugin runtime with the store, the permissions of the store and the core plugin as
+/// the handler of the bridge, and answers the queue of actions the mod drains on the server
+/// thread. A set of the store that `golem-permissions` refuses stops the start, since every check
+/// would then deny every player.
+fn install_plugins(budget: Duration, store: &Store) -> Result<Actions, String> {
+    let resolver = Resolver::from_store(store)?;
     let mut runtime = Runtime::new(budget);
     runtime.set_store(store.clone());
+    runtime.set_permissions(resolver);
     runtime.add(Box::new(CorePlugin::new(source())));
-    golem_bridge::install(Box::new(runtime))
+    Ok(golem_bridge::install(Box::new(runtime)))
 }
 
 /// The JVM once it exists, for the stop of a server that the bridge does not reach.
@@ -677,7 +682,10 @@ fn run(arguments: &[OsString]) -> Result<ExitCode, String> {
     let seeded = store::seed(&store, &server).inspect_err(|_| {
         let _ = store.close();
     })?;
-    let actions = install_plugins(options.budget, &store);
+    // Nor does a set of the store that the permissions refuse.
+    let actions = install_plugins(options.budget, &store).inspect_err(|_| {
+        let _ = store.close();
+    })?;
     let _ = STORE.set(store.clone());
     // A JVM that ends through System.exit never returns from golem_jvm::run, so its exit hook
     // closes the store instead.

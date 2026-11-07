@@ -15,13 +15,13 @@ The crate `golem-permissions` is the one permission system of Golem. It takes th
 license of LuckPerms and names its holders, lucko (Luck) and the LuckPerms contributors, beside the
 holder of Golem, see [Licensing](../../Documentation/licensing.md). The groups and nodes are a
 tracked TOML file, [config/permissions.toml](../../config/permissions.toml), and every decision
-names the rule that made it. Once the runtime of the plugins loads it, a plugin asks it whether a
-player holds a node, and a port of LuckPerms that answers `on_permission` answers the handler of
-the Forge PermissionAPI through it. The [store](../store.md#permissions) holds the same groups and
-nodes and hands them to the crate as TOML of the same format, and `golem run` seeds it from that
-file, or from the seed that the binary holds, as [Store](../store.md#the-place-in-the-program-golem)
-says. Today no plugin asks the crate yet, so the permissions grant and deny nothing on a running
-server.
+names the rule that made it. The [store](../store.md#permissions) holds the same groups and nodes
+and hands them to the crate as TOML of the same format, and `golem run` seeds it from
+`config/permissions.toml` of the server, or from the seed of the Golem repository, as
+[Store](../store.md#the-place-in-the-program-golem) says. The runtime of the plugins resolves every
+check with the crate over the set of the store, and a plugin asks it whether a sender holds a
+node, as [the check of a sender](#the-check-of-a-sender) says. No port answers the PermissionAPI
+of Forge through `on_permission` yet.
 
 The notebook `tests/notebooks/06_permissions.ipynb` holds every rule on this page to a case.
 
@@ -172,6 +172,47 @@ answer of `has_permission` for a player and for an operator, and
 with their weight, depth, rank and nodes. A broken configuration goes to standard error with the
 exit status 1.
 
+## The check of a sender
+
+The runtime of the plugins holds a `Resolver`, the permissions of the store loaded into this crate,
+and every plugin asks it through its context whether the sender of a command holds a node, with
+`Context::check_permission`, which answers whether the sender holds it, whether a rule decided and
+the reason, and `Context::has_permission`, which answers the first alone, for a player with one
+call of `value`. The senders are those of [Plugins](index.md#commands).
+
+| Sender | Holds | Reason |
+| --- | --- | --- |
+| The console and RCON | Every node | `The console holds every node` |
+| Another source at the level 2 and more, such as a command block or a function | Every node | `The source @ runs at the level 2, and a source that is no player holds every node from the level 2` |
+| Another source below the level 2 | No node | `The source Server runs at the level 1, and a source that is no player holds no node below the level 2` |
+| A player | What the rules of resolution grant them, a node that no rule names not | The reason of the decision, such as `Group admin grants golem.*` |
+
+- A player is judged by their nodes and groups alone. Their operator level and the level of the
+  source play no part, so an operator of the game holds no node that the permissions do not grant
+  them, and the group `admin` of the seed stands for the operators, as above. A plugin may add a
+  rule of its own where no rule names a node, as the core plugin leaves its tools of operators
+  with the operators of the game, see [Core plugin](core.md#the-command-golem).
+- A source that runs a command as a player through `execute as` is another source at its own
+  level, so it never holds a node of that player, and a source at the level 2 holds every node
+  whoever it runs as. The level 2 is the level of the game masters of Minecraft, at which command
+  blocks and functions run.
+- A node that no rule names is not held, and `set` is false then, as `isPermissionSet` of Bukkit
+  answers. A port whose upstream declares a node with the default true, such as
+  `essentials.back.onteleport` of EssentialsX, grants it when no rule decided.
+- A runtime without permissions, such as a test of a plugin, grants a player no node.
+
+The program `golem` builds the resolver from the store after the seed, so a set of the store that
+this crate refuses stops the start with `golem: the permissions of the store <path> do not load:
+<reason>`, before the JVM exists. A change of the store moves its generation. `Resolver::refresh`
+looks at the generation, which costs one lock of the store, and wakes the thread
+`golem-permissions`, which reads the set and its generation under one lock of the store, loads it
+and swaps it in. A check never waits for that reload and answers with the set the resolver holds
+until then. A set that this crate refuses, such as one whose inheritance is a cycle, is logged once
+with its generation, `the permissions of the store <path> at the generation 3 do not load, so the
+checks keep the permissions they hold: <reason>`, and the checks keep the set they hold. Nothing in
+`golem run` changes the permissions of the store or calls `refresh` yet, so a running server keeps
+the set of its start.
+
 ## The cost of a check
 
 Loading builds one table per source, with the exact nodes, the prefixes of the wildcards and `*`
@@ -275,11 +316,11 @@ and the server does another.
 
 Golem has one permission system and no switch that turns a second one on or off. A command of a
 plugin needs no permission level in Brigadier, and the plugin judges the sender itself, as
-[Bridge](../bridge.md#commands) says. Once the runtime hands the plugins the permissions, a plugin
-checks the sender through `golem-permissions`, so the nodes of `config/permissions.toml` and of the
-store seeded from it are the only place that grants a command. That is not built yet. `golem run`
-seeds the store and hands the plugins no check of a node, and the one command of a plugin, `golem`,
-needs no node, see [Open items](../open-items.md#open-in-what-is-built).
+[Bridge](../bridge.md#commands) says. A plugin checks the sender through `golem-permissions`, as
+[the check of a sender](#the-check-of-a-sender) says, so the nodes of the store seeded from
+`config/permissions.toml` are the only place that grants a command of a port to a player. The tools
+of operators of `/golem` take the nodes `golem.<name>` that way and stay with the operators of the
+game where no rule names the node, see [Core plugin](core.md#the-command-golem).
 
 Issue: [#1](https://github.com/skytekx/golem/issues/1).
 

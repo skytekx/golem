@@ -22,6 +22,7 @@
 //!   "source": {"version": "0.1.0", "repository": "...", "commit": "..."},   or "build"
 //!   "plugins": [{"kind": "core"}, {"kind": "echo", "name": "echo-a", "commands": ["a"]}],
 //!   "game": {"players": [], "dimensions": []},   the scripted game of the module game
+//!   "permissions": "[groups.default]...",   the TOML of the permissions of the runtime
 //!   "store": "golem-store.db",       the file of a store of the plugins, by default none
 //!   "steps": [{"op": "chat", "uuid": "...", "name": "Alex", "message": "hello"}]
 //! }
@@ -29,7 +30,14 @@
 //!
 //! With `store` the devtool opens the store of that file, hands it to the runtime as `golem run`
 //! does, and closes it after the last step. The answer names the outcome of that close as
-//! `storeClosed`, which is null for a script without a store.
+//! `storeClosed`, which is null for a script without a store. With `permissions` alone the
+//! runtime checks with those permissions. With both, the devtool seeds a store that holds no
+//! group with the permissions, as `golem run` seeds one, and a store that holds a group gives the
+//! runtime the resolver over its set. The steps `stored`, which answers the TOML of the set of the
+//! store, `generation`, which answers the generation the resolver holds and that of the store,
+//! `refresh`, which wakes the reload of the resolver with `Resolver::refresh` and waits up to a
+//! second for it, and `behind`, which puts a group into the store behind the resolver, as another
+//! writer of the store would, reach them.
 //!
 //! Every native step hands the natives the scripted game, or a game that answers nothing when
 //! the script names none, and the natives hand it to the plugins behind the guard of the server
@@ -56,7 +64,8 @@
 //! `commandNames` from inside its handler on the events named `on` and broadcasts how many names
 //! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`, and with
 //! `operators` answers every other node as the live server answers a node that nothing names,
-//! true for a UUID of `operators` and false for every other player. `mover`
+//! true for a UUID of `operators` and false for every other player. `checker` answers each node
+//! of the arguments of its `commands` with the check of the context for the sender. `mover`
 //! answers its `commands` with the helpers of the context that teleport a player to its place
 //! `to`, to a place that is no number and to one beyond the bounds of the world, and name them in
 //! the player list. `ask` asks the game, as the module game describes. `keeper` reaches the store
@@ -93,10 +102,15 @@ use golem_plugin::{
     CorePlugin,
     DEFAULT_BUDGET,
     Plugin,
+    Resolver,
     Runtime,
     Source, //
 };
-use golem_store::Store;
+use golem_store::{
+    PermissionGroup,
+    PermissionSet,
+    Store, //
+};
 use serde::{
     Deserialize,
     Serialize, //
@@ -151,6 +165,7 @@ struct Script {
     #[serde(default)]
     plugins: Vec<PluginSpec>,
     game: Option<GameSpec>,
+    permissions: Option<String>,
     store: Option<String>,
     steps: Vec<Step>,
 }
@@ -247,6 +262,9 @@ enum PluginSpec {
     },
     /// A plugin that reads and changes the store through the context on its commands.
     Keeper { name: String, commands: Vec<String> },
+    /// A plugin that answers its commands with the check of each node of the arguments for the
+    /// sender, through the context.
+    Checker { name: String, commands: Vec<String> },
 }
 
 /// The default of a count of the script.
@@ -346,6 +364,18 @@ enum Step {
         #[serde(default)]
         stagger_ms: u64,
         steps: Vec<Step>,
+    },
+    Stored,
+    Generation,
+    Refresh,
+    Behind {
+        group: String,
+        #[serde(default)]
+        weight: i32,
+        #[serde(default)]
+        inherits: Vec<String>,
+        #[serde(default)]
+        nodes: Vec<String>,
     },
 }
 
@@ -462,12 +492,7 @@ fn run_script(script: Script) -> Result<Value, String> {
             commit,
         },
     };
-    let store = script
-        .store
-        .as_deref()
-        .map(Store::open)
-        .transpose()
-        .map_err(|error| error.to_string())?;
+    let (store, resolver) = permissions_of(script.store.as_deref(), script.permissions.as_deref())?;
     let mut run = Run {
         kind: script.handler,
         budget,
@@ -477,6 +502,7 @@ fn run_script(script: Script) -> Result<Value, String> {
         actions: host::actions(),
         game: script.game.map(ScriptedGame::new),
         store,
+        resolver,
     };
     run.install();
     let answers: Vec<Value> = script
@@ -502,6 +528,39 @@ fn run_script(script: Script) -> Result<Value, String> {
     }))
 }
 
+/// The store and the resolver of a script, from the file of its store and its TOML of the
+/// permissions. A store that holds no group is seeded with the permissions, as `golem run` seeds
+/// one, and the resolver stands over the set of a store that holds a group, or over the
+/// permissions alone in a script without a store.
+fn permissions_of(
+    store: Option<&str>,
+    permissions: Option<&str>,
+) -> Result<(Option<Store>, Option<Resolver>), String> {
+    let Some(path) = store else {
+        let Some(text) = permissions else {
+            return Ok((None, None));
+        };
+        let permissions =
+            golem_permissions::Permissions::from_toml(text).map_err(|error| error.to_string())?;
+        return Ok((None, Some(Resolver::from_permissions(permissions))));
+    };
+    let store = Store::open(path).map_err(|error| error.to_string())?;
+    if let Some(text) = permissions
+        && store.permissions().groups.is_empty()
+    {
+        golem_permissions::Permissions::from_toml(text).map_err(|error| error.to_string())?;
+        let set = PermissionSet::from_toml(text)?;
+        store
+            .replace_permissions(set)
+            .map_err(|error| error.to_string())?;
+    }
+    if store.permissions().groups.is_empty() {
+        return Ok((Some(store), None));
+    }
+    let resolver = Resolver::from_store(&store)?;
+    Ok((Some(store), Some(resolver)))
+}
+
 /// The state of a script between its steps.
 struct Run {
     kind: HandlerKind,
@@ -514,6 +573,8 @@ struct Run {
     game: Option<ScriptedGame>,
     /// The store of the script, which the runtime hands its plugins.
     store: Option<Store>,
+    /// The resolver of the permissions of the script.
+    resolver: Option<Resolver>,
 }
 
 impl Run {
@@ -541,6 +602,9 @@ impl Run {
                 let mut runtime = Runtime::new(self.budget);
                 if let Some(store) = &self.store {
                     runtime.set_store(store.clone());
+                }
+                if let Some(resolver) = &self.resolver {
+                    runtime.set_permissions(resolver.clone());
                 }
                 for spec in &self.plugins {
                     runtime.add(build_plugin(spec, &self.source));
@@ -571,6 +635,54 @@ impl Run {
                 json!({"op": "install", "answer": null, "queued": self.actions.len()})
             }
             Step::Together { stagger_ms, steps } => together(stagger_ms, &steps, self.game()),
+            Step::Stored => answer(
+                "stored",
+                self.store
+                    .as_ref()
+                    .map(|store| store.permissions().to_toml()),
+            ),
+            Step::Generation => answer(
+                "generation",
+                json!({
+                    "resolver": self.resolver.as_ref().map(Resolver::generation),
+                    "store": self.store.as_ref().map(Store::permissions_generation),
+                }),
+            ),
+            Step::Refresh => {
+                let Some(resolver) = &self.resolver else {
+                    return answer("refresh", Value::Null);
+                };
+                resolver.refresh();
+                let target = self.store.as_ref().map(Store::permissions_generation);
+                let deadline = Instant::now() + Duration::from_secs(1);
+                while target.is_some_and(|target| resolver.generation() != target)
+                    && Instant::now() < deadline
+                {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                answer("refresh", json!(resolver.generation()))
+            }
+            Step::Behind {
+                group,
+                weight,
+                inherits,
+                nodes,
+            } => {
+                let Some(store) = &self.store else {
+                    return answer("behind", Value::Null);
+                };
+                let changed = store.put_permission_group(PermissionGroup {
+                    name: group,
+                    weight,
+                    parents: inherits,
+                    nodes,
+                });
+                answer(
+                    "behind",
+                    changed
+                        .map_or_else(|error| json!(error.to_string()), |replaced| json!(replaced)),
+                )
+            }
             _ => unreachable!("native() answers every other step"),
         }
     }
@@ -644,14 +756,9 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
             yaw,
             pitch,
         } => done("death", || {
-            let location = dimension.clone().map(|dimension| Location {
-                dimension,
-                x: *x,
-                y: *y,
-                z: *z,
-                yaw: *yaw,
-                pitch: *pitch,
-            });
+            let location = dimension
+                .clone()
+                .map(|dimension| place(dimension, [*x, *y, *z], [*yaw, *pitch]));
             host::death(
                 uuid.as_deref(),
                 name.as_deref(),
@@ -699,8 +806,27 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
         Step::Drain => drain(),
         Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
         Step::Sleep { ms } => done("sleep", || thread::sleep(Duration::from_millis(*ms))),
-        Step::Budgets | Step::Push { .. } | Step::Install | Step::Together { .. } => return None,
+        Step::Budgets
+        | Step::Push { .. }
+        | Step::Install
+        | Step::Together { .. }
+        | Step::Stored
+        | Step::Generation
+        | Step::Refresh
+        | Step::Behind { .. } => return None,
     })
+}
+
+/// The place of a death step: its dimension, its coordinates and its rotation.
+fn place(dimension: String, [x, y, z]: [f64; 3], [yaw, pitch]: [f32; 2]) -> Location {
+    Location {
+        dimension,
+        x,
+        y,
+        z,
+        yaw,
+        pitch,
+    }
 }
 
 /// Runs `steps` each on a thread of its own, the next one `stagger_ms` after the one before,
@@ -826,6 +952,7 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             commands,
             stopped: None,
         }),
+        PluginSpec::Checker { name, commands } => Box::new(Checker { name, commands }),
     }
 }
 
@@ -1198,6 +1325,46 @@ impl Plugin for Keeper {
             other => format!("{} knows no {other}", self.name),
         };
         vec![answer]
+    }
+}
+
+/// A test plugin that answers each node of the arguments of its commands with the check of the
+/// context for the sender, as `<node>: granted <bool>, set <bool>, has <bool>, <reason>`, where
+/// `has` is the answer of the check without the reason.
+struct Checker {
+    name: String,
+    commands: Vec<String>,
+}
+
+impl Plugin for Checker {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn commands(&self) -> Vec<CommandSpec> {
+        specs(&self.name, &self.commands)
+    }
+
+    fn on_command(
+        &mut self,
+        _name: &str,
+        sender: &Sender,
+        arguments: &str,
+        context: &mut Context<'_>,
+    ) -> Vec<String> {
+        arguments
+            .split_whitespace()
+            .map(|node| {
+                let answer = context.check_permission(sender, node);
+                format!(
+                    "{node}: granted {}, set {}, has {}, {}",
+                    answer.granted,
+                    answer.set,
+                    context.has_permission(sender, node),
+                    answer.reason
+                )
+            })
+            .collect()
     }
 }
 

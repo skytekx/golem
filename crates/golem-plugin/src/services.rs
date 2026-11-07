@@ -3,8 +3,9 @@
 /*
  * What the runtime of golem-plugin hands every plugin beside the game: the store of the plugins,
  * which the program golem opens before the JVM starts and gives the runtime before it installs
- * it. A plugin reaches it through the context of its call, so no plugin holds a handle of its own
- * that could outlive the close of the program.
+ * it, and the resolver of the permissions over the set of that store. A plugin reaches both
+ * through the context of its call, so no plugin holds a handle of its own that could outlive the
+ * close of the program.
  *
  * The runtime flushes the store once every plugin saw ServerStopped, the last event of the server
  * thread, where a wait for the disk costs no tick, so every change of the plugins is in the file
@@ -20,6 +21,7 @@ use golem_store::Store;
 
 use crate::{
     Context,
+    Resolver,
     Runtime, //
 };
 
@@ -28,6 +30,8 @@ use crate::{
 pub(crate) struct Services {
     /// The store of the plugins, once the program gave one.
     pub store: Option<Store>,
+    /// The resolver of the permissions, once the program gave one.
+    pub permissions: Option<Resolver>,
 }
 
 impl Services {
@@ -53,6 +57,13 @@ impl Runtime {
     pub fn set_store(&mut self, store: Store) {
         self.services.store = Some(store);
     }
+
+    /// Gives the plugins the resolver of the permissions, which every later call reaches
+    /// through [`Context::has_permission`], [`Context::check_permission`] and
+    /// [`Context::permissions`]. A second call replaces the resolver.
+    pub fn set_permissions(&mut self, resolver: Resolver) {
+        self.services.permissions = Some(resolver);
+    }
 }
 
 impl Context<'_> {
@@ -65,5 +76,10 @@ impl Context<'_> {
     /// another thread or on `ServerStopped`.
     pub fn store(&self) -> Option<&Store> {
         self.services.and_then(|services| services.store.as_ref())
+    }
+
+    /// What the runtime holds for its plugins, or `None` outside a runtime.
+    pub(crate) fn services(&self) -> Option<&Services> {
+        self.services
     }
 }
