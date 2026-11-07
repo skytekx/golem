@@ -29,12 +29,14 @@ these.
    there a hash it does not hold passes.
 8. No trailer appears twice with the same value.
 
-Merge commits are left out, since git writes their message. A shallow clone cuts the parents of the
-commits at its edge, so there a commit whose message git writes for a merge, such as the merge of a
-pull request that CI checks out, is left out as well. With no range, the commits are those
-of HEAD that origin/main does not hold, or every commit of HEAD while origin/main does not exist.
-Every failure is printed with the short hash and the subject, and the exit status is 1 when any
-rule fails.
+A commit of a range is judged by the message that git stored, every line of it. A message file is
+judged as git will store it, without the lines that open with #, which git drops from a message
+that was edited. Merge commits are left out, since git writes their message. A shallow clone cuts
+the parents of the commits at its edge, so there a commit whose message git writes for a merge,
+such as the merge of a pull request that CI checks out, is left out as well. With no range, the
+commits are those of HEAD that origin/main does not hold, or every commit of HEAD while origin/main
+does not exist. Every failure is printed with the short hash and the subject, and the exit status
+is 1 when any rule fails.
 """
 
 from __future__ import annotations
@@ -159,11 +161,10 @@ def paragraphs(lines: list[str]) -> list[list[str]]:
 
 
 def check_message(message: str, subject_of=None) -> list[str]:
-    """The failures of one message, each naming its rule. `subject_of` answers the subject of the
-    commit that a hash of a Fixes trailer names, when the lint runs in a repository."""
+    """The failures of one message as git stores it, each naming its rule. `subject_of` answers the
+    subject of the commit that a hash of a Fixes trailer names, when the lint runs in a repository."""
     failures = []
-    # Git drops the lines of a commit message that open with #, so the lint reads it the same way.
-    lines = [line.rstrip() for line in message.splitlines() if not line.startswith("#")]
+    lines = [line.rstrip() for line in message.splitlines()]
     while lines and not lines[-1]:
         lines.pop()
     if not lines:
@@ -259,7 +260,10 @@ def main(argv=None) -> int:
 
     subject_of = resolver(args.root)
     if args.message_file:
-        failures = check_message(args.message_file.read_text(encoding="utf-8"), subject_of)
+        text = args.message_file.read_text(encoding="utf-8")
+        # Git drops the lines of an edited message that open with #, before it stores the message.
+        message = "".join(line for line in text.splitlines(keepends=True) if not line.startswith("#"))
+        failures = check_message(message, subject_of)
         for failure in failures:
             print("commit_lint: %s: %s" % (args.message_file, failure))
         return 1 if failures else 0
