@@ -216,12 +216,13 @@ enum PluginSpec {
         #[serde(default)]
         denies: Vec<String>,
     },
-    /// A plugin that asks the game on its commands and on the events named `on`.
+    /// A plugin that asks the game on its commands and on the events whose names `on` lists.
     Ask {
         name: String,
         #[serde(default)]
         commands: Vec<String>,
-        on: Option<String>,
+        #[serde(default)]
+        on: Vec<String>,
     },
     /// A plugin that teleports players and names them in the player list on its commands.
     Mover {

@@ -398,16 +398,16 @@ fn maybe<T>(answer: Option<Option<T>>, json: impl Fn(&T) -> Value) -> Value {
     }
 }
 
-/// A test plugin that asks the game on its commands and on the events named `on`.
+/// A test plugin that asks the game on its commands and on the events whose names `on` lists.
 ///
 /// A command answers one line, the JSON of the answer: `players`, `player <who>`,
 /// `location <uuid>`, `respawn <uuid>`, `spawn <dimension>`, `hand <uuid>`,
-/// `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an event named `on` it
+/// `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it
 /// asks for the players and broadcasts how many it got, or that the game did not answer.
 pub struct Ask {
     pub name: String,
     pub commands: Vec<String>,
-    pub on: Option<String>,
+    pub on: Vec<String>,
 }
 
 impl Ask {
@@ -467,7 +467,7 @@ impl Plugin for Ask {
     }
 
     fn on_event(&mut self, event: &Event, context: &mut Context<'_>) -> Verdict {
-        if self.on.as_deref() == Some(event.name()) {
+        if self.on.iter().any(|name| name == event.name()) {
             let line = match context.game().players() {
                 Some(players) => format!("{} saw {} players", self.name, players.len()),
                 None => format!("{} got no answer", self.name),
