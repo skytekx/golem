@@ -68,6 +68,21 @@ pub(crate) fn resolve<'a>(permissions: &Permissions, uuid: &str, node: &'a str) 
     if let Err(flaw) = node::check_node(node) {
         return Outcome::BadNode(flaw);
     }
+    resolve_text(permissions, id, node)
+}
+
+/// Resolves whether the player with `uuid` holds the text `node`, whatever characters it holds, as
+/// `LuckPerms` looks a node up: the text as it stands, then the wildcard above each of its dots
+/// from the last one on, then `*`. So a wildcard also decides a text that no check may name.
+pub(crate) fn resolve_any<'a>(permissions: &Permissions, uuid: &str, node: &'a str) -> Outcome<'a> {
+    match node::parse_uuid(uuid) {
+        Some(id) => resolve_text(permissions, id, node),
+        None => Outcome::BadPlayer,
+    }
+}
+
+/// Searches the nodes of the player `id` and then their groups for `node`.
+fn resolve_text<'a>(permissions: &Permissions, id: u128, node: &'a str) -> Outcome<'a> {
     let (own, chain) = match permissions.players.get(&id) {
         Some(player) => (Some(&player.table), &*player.chain),
         None => (None, &*permissions.everyone),

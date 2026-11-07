@@ -142,9 +142,10 @@ export without a node `weight.<n>`.
 On Bukkit, LuckPerms also answers a node that nothing names with the default of the plugin and,
 for an operator, with true (lines 80 to 85 of the same file). The default of the plugin comes
 first, so an operator gets false for a node that the `plugin.yml` of its plugin marks
-`default: false`, such as `essentials.keepinv`. Golem knows no operator in its permissions and no
-default of a plugin. An undefined node is undefined, and the group `admin` of the seed stands for
-the operators, so it denies such nodes by name.
+`default: false`, such as `essentials.keepinv`. The rules of Golem know no operator and no default
+of a plugin. An undefined node is undefined, and the group `admin` of the seed stands for the
+operators, so it denies such nodes by name. `Permissions::has_permission` alone takes whether the
+player is an operator, for the answer that LuckPerms gave on Bukkit, see [The API](#the-api).
 
 The format has no contexts such as a world or a server, no expiry and no meta such as a prefix.
 The importer of a LuckPerms export, which the data migration of the
@@ -158,15 +159,18 @@ it cannot place.
 | `Permissions::from_toml(text)` | The permissions of a configuration, or the `ConfigError` that names where it breaks a rule |
 | `Permissions::check(uuid, node)` | A `Decision` with `value`, true, false or none, and the `reason` |
 | `Permissions::value(uuid, node)` | The value alone, without building the reason, for the server thread |
+| `Permissions::has_permission(uuid, node, operator)` | What LuckPerms 5.5.71 answered `Player.hasPermission` on Bukkit for a node that no plugin declares. The node is lowercased by the rules of Unicode and looked up as LuckPerms looks it up, the text as it stands and then the wildcards above each of its dots, whatever characters it holds, so a wildcard also decides a node that the format refuses, such as one with a slash. A node that no rule names is true for an operator and false for every other player |
 | `Permissions::groups_of(uuid)` | The groups of a player in the search order, each with weight, depth and rank |
 | `Permissions::group_nodes(name)` | The nodes of a group as the file writes them, a deny with its `-` |
 | `Permissions::group_names()` | The names of the groups, sorted |
 | `DEFAULT_GROUP` | The name `default` |
 
 `golem-devtool permissions --config <file> --player <uuid> --node <node>...` prints
-`{"decisions": [{"node", "value", "reason"}]}`, and `golem-devtool permissions-groups --config
-<file> --player <uuid>` prints the groups of a player with their weight, depth, rank and nodes. A
-broken configuration goes to standard error with the exit status 1.
+`{"decisions": [{"node", "value", "reason", "hasPermission"}]}`, where `hasPermission` holds the
+answer of `has_permission` for a player and for an operator, and
+`golem-devtool permissions-groups --config <file> --player <uuid>` prints the groups of a player
+with their weight, depth, rank and nodes. A broken configuration goes to standard error with the
+exit status 1.
 
 ## The cost of a check
 

@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The subcommands of golem-permissions: permissions prints the decisions of a configuration for
- * a player and nodes, and permissions-groups prints the groups of a player in the order a check
- * searches them, each with its nodes.
+ * a player and nodes, with what LuckPerms answered for them on Bukkit, and permissions-groups
+ * prints the groups of a player in the order a check searches them, each with its nodes.
  */
 
 use std::{
@@ -36,9 +36,10 @@ struct Options {
     repeat: Option<u32>,
 }
 
-/// Prints `{"decisions": [{"node", "value", "reason"}]}`, one decision per `--node` in the order
-/// given. With `--repeat`, it also runs every check that many times through the form without a
-/// reason and prints the mean time of one check.
+/// Prints `{"decisions": [{"node", "value", "reason", "hasPermission"}]}`, one decision per
+/// `--node` in the order given, where `hasPermission` holds what `LuckPerms` answered on Bukkit for
+/// a player and for an operator. With `--repeat`, it also runs every check that many times through
+/// the form without a reason and prints the mean time of one check.
 fn check(arguments: &[String]) -> i32 {
     let name = CHECK.0;
     let (options, permissions) = match prepare(name, arguments, true) {
@@ -54,7 +55,15 @@ fn check(arguments: &[String]) -> i32 {
         .iter()
         .map(|node| {
             let decision = permissions.check(player, node);
-            json!({"node": node, "value": decision.value, "reason": decision.reason})
+            json!({
+                "node": node,
+                "value": decision.value,
+                "reason": decision.reason,
+                "hasPermission": {
+                    "player": permissions.has_permission(player, node, false),
+                    "operator": permissions.has_permission(player, node, true),
+                },
+            })
         })
         .collect();
     let mut output = json!({ "decisions": decisions });

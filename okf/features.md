@@ -58,7 +58,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The bridge](#the-bridge) | 1 | 5 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 0 | 1 | 0 | 0 | 1 | 0 | 11 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 1 | 3 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
-| [The store](#the-store) | 0 | 1 | 2 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 8 |
+| [The store](#the-store) | 1 | 0 | 2 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
 | [Social, info and status](#social-info-and-status) | 0 | 0 | 0 | 19 | 0 | 0 | 0 | 7 | 2 | 0 | 28 |
@@ -74,7 +74,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 21 |
-| All | 5 | 10 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 376 |
+| All | 6 | 9 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 376 |
 
 ## The JVM host and macOS
 
@@ -169,7 +169,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
-| Notebook 09 repaired for the field `hasPermission` and run | Commit 8e3e405 on port/wiring | Handover | 09 |
+| Notebook 09 compares a decision of the permissions of the store by its node, its value and its reason, and leaves the field `hasPermission` to notebook 06 | Permissions (the API), Store (permissions) | Built | 06, 09 |
 | Schema 2 with its migration from version 1: the toggles, the last teleport time, mail expiry and the legacy flag, the last owner of a warp, past names and settings per player | Store (versions), Bridge needs (storage), Social (storage) | Open | 09 |
 | Mail in the store: the shown mails marked read, a stable id per mail, and expired mails dropped before the numbering | Issues #73, #74 | Open | 09 |
 | A change never holds the server thread: at `MAX_PENDING` it is deferred or dropped with a warning, where a burst waits up to 274 ms in debug and 151 ms in release today | Store lines 634 to 644, API 19 | Open | 09 |

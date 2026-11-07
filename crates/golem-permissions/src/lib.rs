@@ -202,6 +202,29 @@ impl Permissions {
         resolve::resolve(self, uuid, node).value()
     }
 
+    /// Whether the player with `uuid` holds `node` as `LuckPerms` 5.5.71 answers
+    /// `Player.hasPermission` on Bukkit for a node that no plugin declares, which is how Arclight
+    /// asked it every Boolean node of the `PermissionAPI` of Forge for an online player.
+    ///
+    /// `LuckPerms` lowercases the node before it looks at it, by the rules of Unicode, so this does
+    /// too. It then looks the node up as it stands and asks the wildcards above each of its dots,
+    /// whatever characters the node holds, so this asks the rules for every text, also for one
+    /// that [`Permissions::check`] refuses, such as a node with a slash. A node that a rule names
+    /// decides as the rule says, and a node that no rule names is granted to an operator and
+    /// denied to every other player, as the processor of `LuckPerms` for operators answers it.
+    pub fn has_permission(&self, uuid: &str, node: &str, operator: bool) -> bool {
+        // A node in lower case of ASCII is looked up as it was given.
+        let lower = node
+            .bytes()
+            .all(|byte| byte.is_ascii() && !byte.is_ascii_uppercase());
+        let value = if lower {
+            resolve::resolve_any(self, uuid, node).value()
+        } else {
+            resolve::resolve_any(self, uuid, &node.to_lowercase()).value()
+        };
+        value.unwrap_or(operator)
+    }
+
     /// The groups of the player with `uuid` in the order a check searches them, or `None` when
     /// `uuid` is no UUID. A player that the configuration does not name is in the default group
     /// and what it inherits.

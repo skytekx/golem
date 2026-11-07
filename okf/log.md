@@ -336,3 +336,12 @@ Oldest first. Times are UTC.
   store beside the world, the lines of the seed and of each close, the seed in the file after both
   stops, a signal during the start and a close that fails, and `08_modpack_boot` the lines of a
   clean boot of the pack. See [Store](store.md#the-place-in-the-program-golem).
+- `golem-permissions` answers a node as LuckPerms 5.5.71 answered `hasPermission` on Bukkit.
+  `Permissions::has_permission` lowercases the node, answers a node that a rule names by that rule
+  and a node that nothing names true for an operator and false for every other player, which is
+  the answer that the PermissionAPI of Forge got on the live server, see issue
+  [#105](https://github.com/skytekx/golem/issues/105). `golem-devtool permissions` prints it beside
+  each decision, `06_permissions` holds 24 answers, among them nodes outside the format that a
+  wildcard decides, and `09_store` compares a decision of the
+  store by its node, its value and its reason. See
+  [Permissions](plugins/permissions.md#the-api).
