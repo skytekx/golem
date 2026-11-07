@@ -153,7 +153,8 @@ Golem API.
   no level, so a panic of a plugin or a call over its budget reads in `logs/latest.log` as the lines
   of a clean boot do.
 - Text that a plugin echoes from a player passes formatting codes into the line that the mod builds
-  with `ForgeHooks.newChatWithLinks`, so the ports strip them.
+  with `ForgeHooks.newChatWithLinks`, so the ports strip them. A styled text keeps such text literal
+  as `Text::player`, see [Bridge](bridge.md#styled-text).
 - `GOLEM_COMMIT` in the release build, so that a binary built outside a checkout still names its
   commit. A build outside the checkout of Golem names the commit unknown, and a build whose files
   differ from HEAD names `<hash>-dirty`, and `/golem source` gives the repository alone as the link

@@ -226,6 +226,8 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | --- | --- |
 | `send_message(uuid, text)` | `message`, a system message to one player if they are online |
 | `broadcast(text)` | `broadcast`, a system message to every player and the console |
+| `send_text(uuid, text)` | `styledMessage`, the `Text` of [Bridge](../bridge.md#styled-text) as a system message to one player if they are online, refused with a line on the log above `MAX_JSON` or `MAX_DEPTH`, and answers whether it queued it |
+| `broadcast_text(text, hidden)` | `styledBroadcast`, the `Text` to every player but the UUIDs of `hidden` and to the console, refused as `send_text` refuses |
 | `run_command(command)` | `command`, run as the console, with a leading slash dropped, whose answer reaches the log of the server and no operator in the game |
 | `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number, the block lies outside the bounds of the world that `tp` takes, or the server stops, from `serverStopping`, or from `serverStopped` when the game did not announce the stop, to the next `serverStarting`, which is logged and refused, and answers whether it queued one |
 | `queue_teleport(uuid, location, safe_radius)` | `teleport` with the next id of the process and the radius of the search for a safe place, held to 8, or `None` for the place as it is, refused as `teleport` refuses, and answers the id that the events `Teleported` and `TeleportFailed` carry, each id once, unless the JVM is halted or killed before, see [Bridge](../bridge.md#the-end-of-a-teleport) |

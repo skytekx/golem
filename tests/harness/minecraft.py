@@ -13,17 +13,19 @@
 The client speaks protocol 763 in offline mode: the handshake, the login with the plugin
 requests of Forge answered as a vanilla client would, the keep alive, chat and commands without
 signatures, the respawn and the close. A thread reads its packets as they come and records every
-system chat message as raw text in `messages`, the text of every chat message of a player in
-`chats`, every place the server puts the player in
-`positions`, the dimension of every respawn or change of dimension in `dimensions` and the name
-of every player in the player list in `list_names`. It confirms every teleport, as a vanilla
-client does. It is no game client: it sends no movement and loads no chunk, which a server in
-offline mode on localhost accepts.
+system chat message as raw text in `messages` and as its component, read from JSON, in
+`components`, which `plain` turns into the text a player reads and `parts` into its texts with
+their styles, the text of every chat message of a player in `chats`, every place the server puts
+the player in `positions`, the dimension of every respawn or change of dimension in `dimensions`
+and the name of every player in the player list in `list_names`. It confirms every teleport, as a
+vanilla client does. It is no game client: it sends no movement and loads no chunk, which a server
+in offline mode on localhost accepts.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
 import socket
 import struct
 import threading
@@ -109,6 +111,39 @@ def parse_player_info(payload: bytes) -> list:
     return named
 
 
+def plain(component) -> str:
+    """The text that a component shows, with the key of a translation and its arguments in
+    brackets, as the language of a client is not known here."""
+    if isinstance(component, str):
+        return component
+    if isinstance(component, list):
+        return "".join(plain(part) for part in component)
+    if "translate" in component:
+        text = component["translate"]
+        if component.get("with"):
+            text += "[" + ", ".join(plain(argument) for argument in component["with"]) + "]"
+    else:
+        text = component.get("text", "")
+    return text + "".join(plain(part) for part in component.get("extra", []))
+
+
+def parts(component, style=None) -> list:
+    """The texts of a component in their order, each as a dictionary of its text and the style it
+    shows with, which it takes from the texts it sits in where it sets none of its own, without
+    the texts of its hover."""
+    style = dict(style or {})
+    if isinstance(component, str):
+        return [dict(style, text=component)]
+    if isinstance(component, list):
+        return [part for item in component for part in parts(item, style)]
+    style.update({key: value for key, value in component.items()
+                  if key not in ("text", "translate", "with", "extra")})
+    found = [dict(style, text=component.get("text", component.get("translate", "")))]
+    for part in component.get("extra", []):
+        found += parts(part, style)
+    return found
+
+
 class Client:
     """A player in offline mode, whose packets a thread reads as they come."""
 
@@ -118,6 +153,7 @@ class Client:
         self.stream = self.socket.makefile("rb")
         self.threshold, self.uuid = -1, None
         self.lock, self.messages, self.play = threading.Lock(), [], threading.Event()
+        self.components = []
         self.chats, self.positions, self.dimensions, self.list_names = [], [], [], {}
         self.closed = threading.Event()
 
@@ -174,6 +210,10 @@ class Client:
                     self.play.set()
                 elif packet == 0x64:
                     self.messages.append(payload.decode("utf-8", "replace"))
+                    try:
+                        self.components.append(json.loads(parse_string(payload)[0]))
+                    except ValueError:
+                        self.components.append(None)
                 elif packet == 0x35:
                     _, offset = parse_varint(payload, 16)
                     signed, offset = payload[offset], offset + 1

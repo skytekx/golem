@@ -489,3 +489,12 @@ Oldest first. Times are UTC.
   natives of one build go together. `04_plugins` holds the wire form, the ids, the reports and the
   stop, and `05_bridge_build` five of the reasons on a stock Forge server. See
   [Bridge](bridge.md#the-end-of-a-teleport) and [Open items](open-items.md#open-in-what-is-built).
+- A plugin sends styled text. It builds a `golem_bridge::Text` in Rust, with its own words, what a
+  player wrote or named, a translation, colours, decorations, a click, a hover and an insertion, and
+  `Context::send_text` and `Context::broadcast_text` queue it as the actions `styledMessage` and
+  `styledBroadcast`, which carry the JSON that the game reads as a component. What a player wrote or
+  named stays literal and loses every formatting code, control character and direction control of
+  Unicode, and a styled broadcast leaves out the players it hides. `golem-devtool text-json` prints
+  the JSON of described texts, `04_plugins` holds the JSON, what a text of a player loses and the
+  limits, and `05_bridge_build` the colour, the click and the hover that reach a player. See
+  [Bridge](bridge.md#styled-text).

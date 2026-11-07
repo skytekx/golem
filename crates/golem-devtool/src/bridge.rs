@@ -90,12 +90,15 @@ use std::{
 use golem_bridge::{
     Action,
     Actions,
+    Click,
+    Color,
     Event,
     Game,
     Handler,
     Location,
     NoGame,
     Sender,
+    Text,
     TickStats,
     TickWindow,
     Verdict,
@@ -447,6 +450,15 @@ enum ActionSpec {
     Broadcast {
         text: String,
     },
+    StyledMessage {
+        uuid: String,
+        json: String,
+    },
+    StyledBroadcast {
+        #[serde(default)]
+        hidden: Vec<String>,
+        json: String,
+    },
     Teleport {
         #[serde(default)]
         id: u64,
@@ -468,6 +480,8 @@ impl From<ActionSpec> for Action {
             ActionSpec::Command { command } => Self::Command(command),
             ActionSpec::Message { uuid, text } => Self::Message { uuid, text },
             ActionSpec::Broadcast { text } => Self::Broadcast(text),
+            ActionSpec::StyledMessage { uuid, json } => Self::StyledMessage { uuid, json },
+            ActionSpec::StyledBroadcast { hidden, json } => Self::StyledBroadcast { hidden, json },
             ActionSpec::Teleport {
                 id,
                 uuid,
@@ -490,6 +504,12 @@ fn action_json(action: &Action) -> Value {
         Action::Command(command) => json!({"kind": "command", "command": command}),
         Action::Message { uuid, text } => json!({"kind": "message", "uuid": uuid, "text": text}),
         Action::Broadcast(text) => json!({"kind": "broadcast", "text": text}),
+        Action::StyledMessage { uuid, json } => {
+            json!({"kind": "styledMessage", "uuid": uuid, "json": json})
+        }
+        Action::StyledBroadcast { hidden, json } => {
+            json!({"kind": "styledBroadcast", "hidden": hidden, "json": json})
+        }
         Action::Teleport {
             id,
             uuid,
@@ -1288,7 +1308,10 @@ impl Plugin for Reenter {
 
 /// A test plugin that answers its commands with the helpers of the context for the actions on
 /// players: `teleport <uuid>` to its place, `safe <uuid> <radius>` to the nearest safe place
-/// within the radius of it, which answers the id, `nowhere <uuid>` to a place that is no number,
+/// within the radius of it, which answers the id, `text <uuid> <name>` and `shout <uuid> <name>`
+/// with the styled greeting of [`greeting`] to the player and to every player but them,
+/// `deep <uuid>` and `long <uuid>` with texts that the runtime refuses, as too deep and too
+/// long, `nowhere <uuid>` to a place that is no number,
 /// `far <uuid>` to x 30000001, beyond the bounds of the world, `name <uuid> <text>` and
 /// `clear <uuid>`.
 struct Mover {
@@ -1345,6 +1368,22 @@ impl Plugin for Mover {
             "name" => {
                 context.set_list_name(uuid, rest);
                 "named".to_owned()
+            }
+            "text" => format!("sent {}", context.send_text(uuid, &greeting(rest))),
+            "shout" => format!(
+                "sent {}",
+                context.broadcast_text(&greeting(rest), &[uuid.to_owned()])
+            ),
+            "deep" => {
+                let mut deep = Text::plain("deep");
+                for _ in 0..golem_bridge::MAX_DEPTH {
+                    deep = Text::plain("deeper").hover(deep);
+                }
+                format!("sent {}", context.send_text(uuid, &deep))
+            }
+            "long" => {
+                let long = Text::plain("x".repeat(golem_bridge::MAX_JSON));
+                format!("sent {}", context.send_text(uuid, &long))
             }
             "clear" => {
                 context.clear_list_name(uuid);
@@ -1521,6 +1560,22 @@ impl Plugin for Checker {
             })
             .collect()
     }
+}
+
+/// Answers the styled text of the plugin mover for what a player named, `name`: a greeting in
+/// gold whose name in red keeps the text of the player literal, opens a page on a click and
+/// shows a line on a hover.
+fn greeting(name: &str) -> Text {
+    Text::plain("Hello ")
+        .color(Color::Gold)
+        .append(
+            Text::player(name)
+                .color(Color::Rgb(0xff, 0x55, 0x55))
+                .bold(true)
+                .click(Click::OpenUrl("https://example.org/golem".to_owned()))
+                .hover(Text::plain("a player").italic(true)),
+        )
+        .append(Text::plain("!"))
 }
 
 /// A handler that panics in every method, in place of the runtime, so a script can show that

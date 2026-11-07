@@ -76,6 +76,8 @@ final class Actions {
 		case "command" -> command(server, fields);
 		case "message" -> message(server, fields);
 		case "broadcast" -> broadcast(server, fields);
+		case "styledMessage" -> styledMessage(server, fields);
+		case "styledBroadcast" -> styledBroadcast(server, fields);
 		case "teleport" -> teleport(server, fields);
 		case "listName" -> listName(server, fields);
 		default -> skip(fields, "of a kind the bridge does not know");
@@ -143,6 +145,67 @@ final class Actions {
 			Component text = Links.text(fields[1]);
 			server.getPlayerList().broadcastSystemMessage(text, false);
 		}
+	}
+
+	/**
+	 * Sends a styled text to one player as a system message, if they are online. The text is the
+	 * JSON of a component that Golem wrote, which the game reads into a Component as it reads
+	 * the text of tellraw, and no link is added to it: a styled text links where its plugin set
+	 * a click.
+	 */
+	private void styledMessage(MinecraftServer server, String[] fields) {
+		if (!fits(fields, 3)) {
+			return;
+		}
+		ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(fields[1]));
+		Component text = styled(fields[0], fields[2]);
+		if (player != null && text != null) {
+			player.sendSystemMessage(text);
+		}
+	}
+
+	/**
+	 * Sends a styled text to the console and to every player online but the hidden ones, whose
+	 * UUIDs the action joins by commas, as PlayerList.broadcastSystemMessage of the game sends a
+	 * system message to all. A part that is no UUID names nobody.
+	 */
+	private void styledBroadcast(MinecraftServer server, String[] fields) {
+		if (!fits(fields, 3)) {
+			return;
+		}
+		Component text = styled(fields[0], fields[2]);
+		if (text == null) {
+			return;
+		}
+		Set<UUID> hidden = new HashSet<>();
+		for (String part : fields[1].split(",")) {
+			try {
+				hidden.add(UUID.fromString(part));
+			} catch (IllegalArgumentException notUuid) {
+				// A part that is no UUID names nobody online.
+			}
+		}
+		server.sendSystemMessage(text);
+		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+			if (!hidden.contains(player.getUUID())) {
+				player.sendSystemMessage(text);
+			}
+		}
+	}
+
+	/** Answers the component of the JSON of a styled text, or null after one warning. */
+	private Component styled(String kind, String json) {
+		Component text;
+		try {
+			text = Component.Serializer.fromJson(json);
+		} catch (RuntimeException notJson) {
+			text = null;
+		}
+		if (text == null) {
+			skip(kind + "/json", "Golem queued an action " + kind + " whose text does not read,"
+					+ " which the bridge skips");
+		}
+		return text;
 	}
 
 	/**

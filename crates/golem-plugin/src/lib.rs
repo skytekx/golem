@@ -42,9 +42,12 @@ use golem_bridge::{
     Event,
     Game,
     Location,
+    MAX_DEPTH,
+    MAX_JSON,
     MAX_SAFE_RADIUS,
     NoGame,
     Sender,
+    Text,
     Verdict,
     log, //
 };
@@ -158,6 +161,35 @@ impl<'a> Context<'a> {
         self.actions.push(Action::Broadcast(text.to_owned()));
     }
 
+    /// Queues a styled text to the player with `uuid` as a system message, which the mod sends if
+    /// they are online, and answers whether it queued it.
+    ///
+    /// A text whose JSON is longer than the game sends a client, [`MAX_JSON`], or whose texts sit
+    /// deeper inside each other than [`MAX_DEPTH`], is refused with a line on the log.
+    pub fn send_text(&self, uuid: &str, text: &Text) -> bool {
+        let Some(json) = text_json(text) else {
+            return false;
+        };
+        self.actions.push(Action::StyledMessage {
+            uuid: uuid.to_owned(),
+            json,
+        });
+        true
+    }
+
+    /// Queues a styled text to every player but those whose UUIDs `hidden` names, and to the
+    /// console, and answers whether it queued it, refused as [`Context::send_text`] refuses.
+    pub fn broadcast_text(&self, text: &Text, hidden: &[String]) -> bool {
+        let Some(json) = text_json(text) else {
+            return false;
+        };
+        self.actions.push(Action::StyledBroadcast {
+            hidden: hidden.to_vec(),
+            json,
+        });
+        true
+    }
+
     /// Queues a command that the mod runs as the console. A leading slash is dropped, since the
     /// console reads a command without it.
     pub fn run_command(&self, command: &str) {
@@ -239,6 +271,26 @@ impl<'a> Context<'a> {
             name: None,
         });
     }
+}
+
+/// Answers the JSON of a styled text for an action, or logs why the runtime refuses it.
+fn text_json(text: &Text) -> Option<String> {
+    let depth = text.depth();
+    if depth > MAX_DEPTH {
+        log(format_args!(
+            "a plugin asked to send a text {depth} deep, deeper than {MAX_DEPTH}, so the runtime refuses it"
+        ));
+        return None;
+    }
+    let json = text.to_json();
+    let length = json.encode_utf16().count();
+    if length > MAX_JSON {
+        log(format_args!(
+            "a plugin asked to send a text whose JSON holds {length} UTF-16 units, more than the {MAX_JSON} that the game sends a client, so the runtime refuses it"
+        ));
+        return None;
+    }
+    Some(json)
 }
 
 /// A Golem plugin.

@@ -345,6 +345,8 @@ separator, which no field may hold. The first field is the kind.
 | `command` | The command without its slash | Runs it as the console, with the level and the name of the console, whose answer reaches the console and the log of the server but no operator in the game, see below |
 | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
 | `broadcast` | The text | Sends the text as a system message to every player and the console |
+| `styledMessage` | The UUID of a player, the JSON of a styled text | Sends the text as a system message to that player, if they are online, see [Styled text](#styled-text) |
+| `styledBroadcast` | The UUIDs of the players who do not get it, joined by commas, the JSON of a styled text | Sends the text as a system message to every other player and to the console |
 | `teleport` | The id, the UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` and the radius of the search for a safe place, empty for none | Teleports the player there, or to the nearest safe place within the radius once the chunks of the search are loaded, also into another dimension, and reports how it ended, see [The end of a teleport](#the-end-of-a-teleport) |
 | `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
 
@@ -380,6 +382,63 @@ cancelled. Each action runs on its own, so an action that throws, such as a mess
 does not parse, is logged and the next action runs. The host stops the server with the actions
 `command save-all flush` and `command stop`, so the stop path is the same as an operator's at the
 console.
+
+### Styled text
+
+The plain `message` and `broadcast` carry text as it is, which the mod turns into a component with
+`ForgeHooks.newChatWithLinks`, so a colour needs a formatting code with `§` in the text. A styled
+text carries the JSON of a text component of Minecraft 1.20.1, the form that
+`Component.Serializer` reads, which [Plugin API](api.md#916-chat-components-and-messages) names
+the form of a text component of the API. A plugin builds it in Rust with `golem_bridge::Text`, and
+the mod reads it with `Component.Serializer.fromJson`, as the game reads the text of `tellraw`.
+
+| Part of a text | In Rust | In the JSON |
+| --- | --- | --- |
+| The words of a plugin, newlines included | `Text::plain(text)` | `text` |
+| What a player wrote or named, kept literal | `Text::player(text)` | `text`, without formatting codes, control characters and direction controls |
+| A key of the language of the client with its arguments | `Text::translate(key, with)` | `translate` and `with` |
+| One of the 16 colours of the game or any colour | `color(Color::Gold)`, `color(Color::Rgb(0xff, 0xaa, 0x00))` | `color` as `gold` or `#ffaa00` |
+| The decorations | `bold`, `italic`, `underlined`, `strikethrough`, `obfuscated` | The keys of the same names |
+| A click | `click(Click::OpenUrl(...))`, `RunCommand`, `SuggestCommand`, `CopyToClipboard` | `clickEvent` with `open_url`, `run_command`, `suggest_command` or `copy_to_clipboard` |
+| A hover | `hover(text)` | `hoverEvent` with `show_text` and `contents` |
+| Text for a click with shift | `insertion(text)` | `insertion` |
+| The texts after it, which take its style where they set none | `append(text)` | `extra` |
+
+What a player wrote or named, such as a name, a chat line or the name of a home, enters a text
+through `Text::player` as a text of its own, so it can neither close the style around it nor open
+one. `strip_codes` takes out of it every `§` with the character after it, as the client of Minecraft
+hides both when it draws a text, every control character that the game refuses in a chat line, below
+U+0020 and U+007F, a newline among them, so no player starts a line of their own, and every
+direction control of Unicode, U+202A to U+202E and U+2066 to U+2069. The game itself refuses a `§`
+and a control character in what a player types, so a chat line or an argument of a command passes
+unchanged but for a direction control, and a display name that a mod coloured reads as the client
+draws it without its colour. The JSON escapes the quote, the backslash, every control character and
+U+2028 and U+2029, so it holds no U+001F of the wire form and is as long as the JSON that the game
+writes for the same text. The mod adds no link to a styled text, so a styled text links where its
+plugin set a click, and a player cannot make one.
+
+The context of a plugin refuses with a line on the log a text whose JSON holds more than
+262144 UTF-16 units, `MAX_JSON`, the bound of the packet of a system message, which the game would
+otherwise drop on its way to the client, and a text whose texts sit more than 32 deep inside each
+other, `MAX_DEPTH`, through `extra`, `with` and the hover, so no text costs a client a deep
+recursion. The mod logs once and skips a styled action whose JSON does not read, and reads a part
+of the hidden players that is no UUID as nobody. The client of Minecraft 1.20.1 opens an address of
+`http` and `https` alone, and while its prompt for links is on, as it is by default, only after the
+player confirms it, and runs a command of a click only when it starts with a slash and takes no
+signed argument, such as the message of `msg`.
+
+The texts of EssentialsX 2.22.0 are MiniMessage in `messages.properties`, with the colours
+`<primary>` and `<secondary>` of `message-colors`, `#ffaa00` and `#ff5555` live, the 16 colours of
+the game, `<reset>`, the decorations `<b>`, `<i>` and `<st>`, the click `<click:open_url:"{0}">`
+and newlines, and the arguments `{0}` to `{n}` of `MessageFormat`. The port parses each template
+once into a tree of `Text`: a run of words becomes `Text::plain` with the style of the tags open
+around it, a tag of a colour or a decoration sets the style of the runs inside it and `<reset>`
+closes every tag, `<click:...>` becomes a `Click` and `<hover:show_text:...>` a hover, and an
+argument becomes a text of its own, `Text::player` for what a player wrote or named and a text
+that the port built for the rest, such as a link, so no argument is ever parsed as MiniMessage, as
+EssentialsX escapes its arguments. The value of a click that holds an argument takes the argument
+as plain text, which the JSON escapes. The parser belongs to the port, not to the bridge, see
+[EssentialsX bridge needs](plugins/essentials/bridge-needs.md).
 
 ### The end of a teleport
 

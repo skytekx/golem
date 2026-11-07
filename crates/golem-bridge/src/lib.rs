@@ -30,6 +30,7 @@
 //! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
 //! | `game` | [`Game`] and [`NoGame`], the places the game answers, and [`wire`], their wire form |
 //! | `jni_game` | The game through the JNI, with the object the mod connected |
+//! | `text` | [`Text`], the styled text of the actions `styledMessage` and `styledBroadcast` |
 //! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
 //! | [`host`] | The global state and one plain function per native method |
 //! | `natives` | The functions the JVM calls, thin wrappers over [`host`], and their registration |
@@ -42,6 +43,7 @@ mod game;
 pub mod host;
 mod jni_game;
 mod natives;
+mod text;
 mod ticks;
 
 pub use crate::{
@@ -63,6 +65,14 @@ pub use crate::{
         SafePlace,
         Spawn,
         wire, //
+    },
+    text::{
+        Click,
+        Color,
+        MAX_DEPTH,
+        MAX_JSON,
+        Text,
+        strip_codes, //
     },
     ticks::{
         MAX_TPS,

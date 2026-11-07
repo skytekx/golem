@@ -18,6 +18,7 @@ mod jvm;
 mod mapping;
 mod permissions;
 mod store;
+mod text;
 
 /// A subcommand: its name, a line of help and the function that runs it on the arguments after
 /// its name.
@@ -38,6 +39,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
     game::GAME_WIRE,
     api::CONTRACT,
     api::API,
+    text::TEXT_JSON,
     store::SCRIPT,
     store::DESCRIBE,
     store::BENCH,

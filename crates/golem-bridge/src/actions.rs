@@ -43,6 +43,20 @@ pub enum Action {
     },
     /// Send a system message to every player and the console.
     Broadcast(String),
+    /// Send a styled text to one player as a system message.
+    StyledMessage {
+        /// The UUID of the player.
+        uuid: String,
+        /// The JSON of a [`Text`](crate::Text), which `Component.Serializer` of the game reads.
+        json: String,
+    },
+    /// Send a styled text to every player but the hidden ones, and to the console.
+    StyledBroadcast {
+        /// The UUIDs of the players who do not get it, which never hold a comma.
+        hidden: Vec<String>,
+        /// The JSON of a [`Text`](crate::Text), which `Component.Serializer` of the game reads.
+        json: String,
+    },
     /// Teleport a player to a location, also into another dimension, and report how it ended
     /// with the events teleported and teleportFailed, which carry the id.
     Teleport {
@@ -89,6 +103,8 @@ impl Action {
             Self::Command(_) => "command",
             Self::Message { .. } => "message",
             Self::Broadcast(_) => "broadcast",
+            Self::StyledMessage { .. } => "styledMessage",
+            Self::StyledBroadcast { .. } => "styledBroadcast",
             Self::Teleport { .. } => "teleport",
             Self::ListName { .. } => "listName",
         }
@@ -100,6 +116,8 @@ impl Action {
             Self::Command(command) => vec![command.clone()],
             Self::Message { uuid, text } => vec![uuid.clone(), text.clone()],
             Self::Broadcast(text) => vec![text.clone()],
+            Self::StyledMessage { uuid, json } => vec![uuid.clone(), json.clone()],
+            Self::StyledBroadcast { hidden, json } => vec![hidden.join(","), json.clone()],
             Self::Teleport {
                 id,
                 uuid,
@@ -127,7 +145,8 @@ impl Action {
     /// hold the separator, so a field that holds it has it replaced by a space, and the first
     /// such replacement of the process is logged. A list name of `None` and an empty one are
     /// both the empty field, which clears the name. The radius of a safe teleport is held to
-    /// [`MAX_SAFE_RADIUS`], and a teleport without a search has the empty field.
+    /// [`MAX_SAFE_RADIUS`], and a teleport without a search has the empty field. The hidden
+    /// players of a styled broadcast are one field, their UUIDs joined by commas.
     pub fn encode(&self) -> String {
         let mut wire = String::from(self.kind());
         for field in self.fields() {
@@ -155,6 +174,18 @@ impl Action {
                 text: (*text).to_owned(),
             }),
             ["broadcast", text] => Some(Self::Broadcast((*text).to_owned())),
+            ["styledMessage", uuid, json] => Some(Self::StyledMessage {
+                uuid: (*uuid).to_owned(),
+                json: (*json).to_owned(),
+            }),
+            ["styledBroadcast", hidden, json] => Some(Self::StyledBroadcast {
+                hidden: hidden
+                    .split(',')
+                    .filter(|uuid| !uuid.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+                json: (*json).to_owned(),
+            }),
             ["teleport", id, uuid, dimension, x, y, z, yaw, pitch, safe] => Some(Self::Teleport {
                 id: id.parse().ok()?,
                 uuid: (*uuid).to_owned(),
