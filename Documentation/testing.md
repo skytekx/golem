@@ -120,7 +120,7 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | Notebook | Question |
 | --- | --- |
 | `01_license_lint` | Does the license lint pass this tree, refuse every break of its nine rules, and agree with `reuse lint`? |
-| `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, and agree with Commitizen? |
+| `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, judge a message as git stores it in a range and in the commit-msg hook, and agree with Commitizen, and do the hooks, `cz commit`, `cz bump` and the job of CI that checks the commits do what CONTRIBUTING.md says? |
 | `03_launch_args` | Does the JVM host read the launch of a Forge server as the java launcher of Temurin 17 reads it, and does a program run in its embedded JVM as it runs under java? |
 | `04_plugins` | Do the 16 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin with the tools of operators, the chain of plugins that decide a permission, a port that answers a permission as LuckPerms did through Arclight, the questions of the plugins to a scripted game, the queue, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
 | `05_bridge_build` | Does the Gradle build of `bridge/` give the host jar and the reobfuscated mod of `okf/bridge.md`, does the mod stay off with one warning on a stock Forge without the host jar or its natives, and with stand in natives does it call every native, answer every question of the game on the server thread and none from `serverStopped` on, and run every action, and does a fourth boot on a world whose `forge-server.toml` names `forge:default_handler` log one warning? |
