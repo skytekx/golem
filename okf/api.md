@@ -5,7 +5,7 @@ type: Spec
 title: Plugin API
 description: The plugin API of Golem, one GraphQL schema on Aosabi that covers an equivalent of the whole Bukkit API of spigot-api 1.20.1, with native Rust plugins compiled into golem that reach it through the executor of Aosabi on the thread of the caller, the mapping that generates the schema, the contract and the client, the threads, the synchronous answer of cancellable events, remote clients, the coverage check and the work breakdown.
 tags: [api, graphql, aosabi, plugins, bukkit, events, coverage]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Plugin API
@@ -95,7 +95,7 @@ format of the mapping files.
 | --- | --- | --- |
 | The natives of `Host` in `golem-bridge` | Events as strings, a handler behind one lock, a native called from inside the handler answers its pass value | The natives stay as the entry, with `serverAboutToStart`, `event`, `complete`, `runHops`, `apiSlot`, `call` and the callback of a closure during a call added. The global lock goes, since Bukkit events are re-entrant, and dispatch nests on the server thread |
 | Actions joined by U+001F, drained at the end of the tick | The only way Rust changes the game | A bounded queue for unit mutations from other threads. A mutation on the server thread runs at once, as in Bukkit |
-| `Game.java` and `golem_bridge::Game`, the first game interface | Seven queries answered as strings joined by U+001F through `Host.connect(Game)`, the actions `teleport` and `listName`, the PermissionAPI handler and the level of a command sender | The seed of the mapping. Its calls move onto generated calls with primitive arguments, and `Context::game()` answers through the client until the ports leave it, see [section 16](#16-the-essentialsx-port-and-the-first-game-interface) |
+| `Game.java` and `golem_bridge::Game`, the first game interface | Seven queries answered as strings joined by U+001F through `Host.connect(Game)`, the actions `teleport` and `listName`, the PermissionAPI handler and the level of a command sender | The seed of the mapping. Its calls move onto generated calls with primitive arguments, and `Context::game()` answers through the client until the ports leave it. `respawn` answers the point as Minecraft stores it, which `Player.bedSpawnLocation` checks first, see [section 16](#16-the-essentialsx-port-and-the-first-game-interface) |
 | `golem-plugin::Plugin` | `on_event`, `on_command`, `on_permission`, 10 events, budgets | A plugin gets `load`, `enable` and `disable` and registers subscriptions, commands, tasks, permissions, services and documents in `enable`. Budgets stay, with a count per coordinate |
 | `golem-permissions` | Groups, nodes, the seed | The resolver of `Permissible`, with attachments and defaults, the handler of the Forge PermissionAPI and the nodes of the API coordinates |
 | `golem-store` | The SQLite store of the plugins | Also holds the hashes of the API tokens and the audit log |
@@ -1921,7 +1921,7 @@ thrown away.
 | --- | --- |
 | `players()` | `Server.onlinePlayers`, the record `playerRecord` and the [tick snapshot](#77-the-tick-snapshot) |
 | `location(uuid)` | `Entity.location` |
-| `respawn(uuid)` | `Player.bedSpawnLocation`, with `loads_chunk = true` |
+| `respawn(uuid)` | `Player.bedSpawnLocation`, with `loads_chunk = true`. `respawn` answers the respawn point as Minecraft stores it, which may be a point of `/spawnpoint` or a bed or an anchor that is gone, while Bukkit's `getBedSpawnLocation` checks the block of the point as a respawn does and answers null for a bed or an anchor that is gone or blocked, so the mapping loads the chunk and checks the block before it answers |
 | `spawn(dimension)` | `World.spawnLocation` |
 | `mainHand(uuid)` | `PlayerInventory.itemInMainHand` |
 | `heights(dimension)` | `WorldInfo.minHeight` and `maxHeight` |
