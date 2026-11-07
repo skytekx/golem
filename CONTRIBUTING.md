@@ -62,7 +62,10 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 - The subject is `type(scope): summary`, imperative, starting in lower case, with no full stop at
   its end and at most 72 characters long. A breaking change writes `type(scope)!: summary`.
 - The type is one of `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and
-  `revert`.
+  `revert`. The subjects that git writes itself, `fixup!`, `squash!` and `amend!` of
+  `git commit --fixup` and `Revert "..."` of `git revert`, are none of them and are refused. A
+  correction of an earlier commit is a commit with a subject of its own until the branch is
+  cleaned, and a revert is a `revert(scope): summary`.
 - The scope is the crate without its `golem-` prefix, such as `jvm` or `permissions`, the bridge
   mod as `bridge`, or a top level folder or topic, such as `tests`, `github`, `okf` or `license`.
 - An empty line follows, then a body wrapped at 72 columns that explains the problem first, then

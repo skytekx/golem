@@ -13,7 +13,8 @@ these.
 
 1. The subject is type(scope): summary, or type(scope)!: summary for a breaking change. The type
    is one of feat, fix, docs, refactor, perf, test, build, ci, chore and revert. The summary
-   starts with a lower case letter or a digit and ends without a full stop.
+   starts with a lower case letter or a digit and ends without a full stop. The subjects that git
+   writes itself, such as fixup! and Revert, are none of these.
 2. The subject is at most 72 characters long.
 3. An empty line follows the subject, then a body of prose, so a commit says why it exists.
 4. Every line of the body is at most 72 columns wide, but a line that holds a URL alone, a

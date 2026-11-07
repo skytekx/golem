@@ -13,6 +13,10 @@
 [tool.commitizen]
 name = "cz_customize"
 message_length_limit = 72
+# The subjects that cz check passes unread: the merges that git and GitHub write, which the commit
+# lint leaves out. Commitizen would pass fixup!, squash!, amend!, Revert and Pull request as well,
+# which the lint refuses, as CONTRIBUTING.md says.
+allowed_prefixes = ["Merge"]
 
 [tool.commitizen.customize]
 message_template = "{{change_type}}({{scope}}): {{summary}}\n\n{{body}}{% if trailers %}\n\n{{trailers}}{% endif %}"
