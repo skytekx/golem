@@ -70,7 +70,8 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
   mod as `bridge`, or a top level folder or topic, such as `tests`, `github`, `okf` or `license`.
 - An empty line follows, then a body wrapped at 72 columns that explains the problem first, then
   why this change solves it, then how. The diff already shows what changed, so the body is no list
-  of files. A line that holds a URL alone or an indented log line may be wider.
+  of files. A line that holds a URL alone, a trailer of the last paragraph or an indented log line
+  may be wider.
 - The trailers close the message in the kernel's form, one `Token: value` per line, all of them in
   the last paragraph, and the last of them is `Signed-off-by`. A fix of an earlier commit carries
   `Fixes: <12 characters of the hash> ("<subject>")` with the hash and the subject of a commit of

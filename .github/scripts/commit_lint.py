@@ -18,7 +18,7 @@ these.
 2. The subject is at most 72 characters long.
 3. An empty line follows the subject, then a body of prose, so a commit says why it exists.
 4. Every line of the body is at most 72 columns wide, but a line that holds a URL alone, a
-   trailer, or an indented quote such as a log line.
+   trailer of the last paragraph, or an indented quote such as a log line.
 5. The last paragraph is the block of trailers, each a line Token: value with a token of the
    kernel or of this repository, and no other line. No earlier paragraph is made of trailers,
    since git and the kernel read the last paragraph alone as the block.
@@ -287,8 +287,11 @@ def check_message(message: str, subject_of=None) -> list[str]:
     if not body:
         failures.append("rule 3: the message holds no body of prose")
 
+    # The block of trailers is the last paragraph, so its lines are the last lines of the message.
+    first_trailer = len(lines) - len(trailer_block) + 1
     for number, line in enumerate(lines[1:], start=2):
-        if len(line) <= BODY_LIMIT or URL.match(line.strip()) or TRAILER.match(line) or line.startswith((" ", "\t")):
+        exempt = URL.match(line.strip()) or number >= first_trailer or line.startswith((" ", "\t"))
+        if len(line) <= BODY_LIMIT or exempt:
             continue
         failures.append("rule 4: line %d is %d columns wide, more than %d" % (number, len(line), BODY_LIMIT))
 
