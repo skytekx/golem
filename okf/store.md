@@ -380,9 +380,11 @@ as `i64`.
 | `set_spawn(group, location)` | Sets the spawn of a group, `DEFAULT_GROUP` for the one spawn |
 | `remove_spawn(group)`, `spawn(group)`, `spawns()` | As for homes |
 
-A name of a home, a warp or a setting is compared byte for byte. A port that wants names without
-case folds them before it calls the store. The spawn of the group `default` is the one spawn of
-the server, which holds for every player whose groups have none, as in EssentialsXSpawn.
+A name of a home, a warp or a setting and the group of a spawn are compared byte for byte, and the
+store takes any name of 1 to 64 characters without a control character. A port folds a name as its
+plugin does before it calls the store, see [Names](#names). The spawn of the group `default` is the
+one spawn of the server, which holds for every player whose groups have none, as in
+EssentialsXSpawn.
 
 ### Mail and ignore lists
 
@@ -508,6 +510,23 @@ before and after. A balance below zero has no place in the store, so the tool re
 refuses every entry it cannot place, and names the player and the debt, which an operator settles in
 EssentialsX, such as with `eco set`, before the migration runs again. The port of the economy takes
 every amount in whole cents, as the store does, so a payment below one cent is refused there.
+
+### Names
+
+EssentialsX folds the names of homes, warps and spawn groups, while the store compares them byte for
+byte, so each port folds a name as its plugin does before it calls the store, and the migration tool
+carries the folded names of EssentialsX over as they are. A lookup through a port then finds what
+EssentialsX found.
+
+| Name | EssentialsX | The port |
+| --- | --- | --- |
+| A home | `StringUtil.safeString`: lower case, every character but `a` to `z` and `0` to `9` becomes `_`, on a set, a removal and a rename | The same, so `My Home`, `my home` and `my_home` are the one home `my_home` |
+| A warp | Kept as it was set, stored under its file name, looked up in any case | Keeps the name as it was set and finds a warp among `warps()` in any case, for `/warp` and before `set_warp`, so two warps never differ in case alone |
+| The group of a spawn | Lower case with the rules of English, and `default` for a group without a spawn | The same, so `/spawn` of a player of the group `Admin` finds the spawn set for `admin` |
+
+The folding of a port is also what keeps white space, a zero width character or a character that
+turns the direction of text out of the name of a home, as in EssentialsX, since the store refuses
+only control characters.
 
 ## The place in the program golem
 
