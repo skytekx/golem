@@ -449,10 +449,10 @@ pub fn command_names() -> Vec<String> {
 
 /// Runs a command and answers the lines its sender sees.
 ///
-/// A sender with a UUID and a name is a player at the level of the source, one with neither at
-/// the level 4 is the console, and one with a name alone is another source at its level. Every other sender is a fault of
-/// the mod, and the command is refused rather than run as the console, which may do more than
-/// any other source.
+/// A sender with a UUID and a name is a player at the level of the source, one with neither at the
+/// level 4 is the console, and one with a name alone is another source at its level. Every other
+/// sender is a fault of the mod, and the command is refused rather than run as the console, which
+/// may do more than any other source.
 pub fn command(
     name: Option<&str>,
     sender_uuid: Option<&str>,

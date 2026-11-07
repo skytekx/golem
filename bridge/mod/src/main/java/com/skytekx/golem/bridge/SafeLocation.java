@@ -3,16 +3,16 @@
 /*
  * The search for a place near a target where a player stands safely, for a teleport of Golem.
  *
- * A place is safe when the block below the feet carries a player on its top face and hurts no
- * one standing on it, the blocks of the feet and the head let a player through and hold no
- * fluid, no portal, which would carry the player away, no cobweb, which would hold them, and
- * nothing that hurts, the ground lies above the void and the head below the top of the world,
- * and the place lies inside the world border. A target below the logical height of its
- * dimension keeps the head below that height as well, as EssentialsX does, so a search from
- * under the roof of the Nether never lands on top of it. A block of a mod hurts when its type of path for
- * the mobs of Forge names a danger, as the mobs of the game avoid it. The search looks at the blocks within a
- * sphere around the block of the target, the nearest first, and at the same distance the higher
- * first, then the lower x, then the lower z, so the same world always gives the same answer.
+ * A place is safe when the block below the feet carries a player on its top face and hurts no one
+ * standing on it, the blocks of the feet and the head let a player through and hold no fluid, no
+ * portal, which would carry the player away, no cobweb, which would hold them, and nothing that
+ * hurts, the ground lies above the void and the head below the top of the world, and the place lies
+ * inside the world border. A target below the logical height of its dimension keeps the head below
+ * that height as well, as EssentialsX does, so a search from under the roof of the Nether never
+ * lands on top of it. A block of a mod hurts when its type of path for the mobs of Forge names a
+ * danger, as the mobs of the game avoid it. The search looks at the blocks within a sphere around
+ * the block of the target, the nearest first, and at the same distance the higher first, then the
+ * lower x, then the lower z, so the same world always gives the same answer.
  *
  * The search reads the blocks of loaded chunks alone. Loading a chunk on the server thread waits
  * for the workers of the server, which may wait for the handler of Golem that asks, so a question

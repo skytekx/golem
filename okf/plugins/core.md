@@ -126,14 +126,14 @@ minecraft:the_nether: spawn 4 70 4 at the angle 0.0, blocks from y 0 below y 256
 blocks of the target, `SAFE_RADIUS`, with the search of [Bridge](../bridge.md#the-game), and queues
 the teleport there with the rotation the player has, also into another dimension. It answers
 `Queued a teleport of Tester to minecraft:the_nether -0.50 100.00 0.50, yaw 0.0, pitch 0.0.`, since
-the mod runs the teleport at the end of the tick, where the player may have left or a mod may
-cancel it, or `No safe place within 3 blocks of <target>, so Tester stays.` when there is none. It
-refuses a coordinate that is no number, and a target outside the bounds of the world that `tp`
-takes, x and z from -30000000 to below 30000000 and y from -20000000 to below 20000000. The search loads no chunk, so a target
-whose chunks are not loaded answers `The chunks near <target> are not loaded, so Tester stays,
-since the search for a safe place loads no chunk.`, and the teleport works once a player nearby
-or `/forceload add` loads them. It is the teleport of an operator across
-dimensions that never lands a player in a wall, in lava or above the void.
+the mod runs the teleport at the end of the tick, where the player may have left or a mod may cancel
+it, or `No safe place within 3 blocks of <target>, so Tester stays.` when there is none. It refuses
+a coordinate that is no number, and a target outside the bounds of the world that `tp` takes, x and
+z from -30000000 to below 30000000 and y from -20000000 to below 20000000. The search loads no
+chunk, so a target whose chunks are not loaded answers `The chunks near <target> are not loaded,
+so Tester stays, since the search for a safe place loads no chunk.`, and the teleport works once a
+player nearby or `/forceload add` loads them. It is the teleport of an operator across dimensions
+that never lands a player in a wall, in lava or above the void.
 
 `/golem listname <name> [<text>]` queues the name of the player in the player list, which holds
 until the player leaves, or its clearing without a text. One space after the name separates it
