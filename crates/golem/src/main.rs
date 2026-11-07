@@ -175,7 +175,13 @@ fn java_home(given: Option<PathBuf>) -> Result<JavaHome, String> {
 /// the one in the server directory.
 fn host_jar(given: Option<PathBuf>, server: &Path) -> Result<PathBuf, String> {
     let jar = if let Some(jar) = given.or_else(|| variable("GOLEM_HOST_JAR")) {
-        resolve(&jar, "the host jar")?
+        let jar = resolve(&jar, "the host jar")?;
+        // The JVM would read a directory on the module path as a directory of modules, so the
+        // error would come late from inside the JVM, or never.
+        if !jar.is_file() {
+            return Err(format!("the host jar {} is not a file", jar.display()));
+        }
+        jar
     } else {
         let beside = std::env::current_exe()
             .ok()

@@ -303,13 +303,15 @@ missing Java home, and logs `[golem] the JVM did not run: <error>` for a `JvmErr
 
 `golem run` takes the first of these that is given or exists.
 
-1. `--host-jar <file>`, which must exist.
+1. `--host-jar <file>`, which must name a file that exists.
 2. The variable `GOLEM_HOST_JAR`, which must name a file that exists.
 3. `golem-host.jar` in the directory of the `golem` program.
 4. `golem-host.jar` in the server directory.
 
 Without any of them `golem run` fails with the error `no golem-host.jar`, which names the four
-ways. The path must be UTF-8, since the module path is an option string of the JVM.
+ways. A directory given in place of the jar fails with `the host jar <path> is not a file` before
+the JVM starts, since the JVM would read a directory on the module path as a directory of modules.
+The path must be UTF-8, since the module path is an option string of the JVM.
 
 ## Where Golem differs from the launcher
 
