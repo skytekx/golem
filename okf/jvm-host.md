@@ -18,7 +18,7 @@ thread of its own and calls the main class until the server ends. The program `g
 
 The reference for every rule on this page is the launcher of JDK 17, the files `main.c`, `args.c`,
 `java.c` and `wildcard.c` of `src/java.base/share/native/libjli`. The notebook `03_launch_args`
-holds the host to the launcher of Temurin 17.0.21 case by case: 19 argument files, 18 launches, 13
+holds the host to the launcher of Temurin 17.0.21 case by case: 19 argument files, 18 launches, 15
 launches that fail, 35 refused command lines and the real `user_jvm_args.txt` and `unix_args.txt` of
 Forge 47.4.18, each read by `golem-devtool` and run by a probe program under java and in the
 embedded JVM, on 2026-11-07 in the cloud container of the session. The verdict of the notebook
@@ -204,7 +204,7 @@ A process holds one JVM, so `run` runs once.
 | Hook | When HotSpot calls it | What the host does |
 | --- | --- | --- |
 | `exit` | `System.exit` or `Runtime.halt`, with the status | Logs `[golem] the JVM exits with status N` on standard error, then HotSpot ends the process with that status |
-| `abort` | A fatal error, before HotSpot aborts the process | Logs `[golem] the JVM aborts on a fatal error` |
+| `abort` | A fatal error, or an error of the options that HotSpot finds while `JNI_CreateJavaVM` runs, before HotSpot aborts the process | Logs `[golem] the JVM aborts on a fatal error`, or `[golem] the JVM could not start, see its message above` while `JNI_CreateJavaVM` runs |
 
 Both hooks catch every panic, so none unwinds into the JVM. `run` does not return after a hook,
 since the process ends.
@@ -290,15 +290,19 @@ error before.
 
 | Code | Meaning |
 | --- | --- |
-| `JNI_ERR` | The JVM could not start, for example with a stack that `-Xss` makes too small |
+| `JNI_ERR` | The JVM could not start, for example with a stack that `-Xss` makes too small or an option it does not know, such as `Unrecognized option: -Xt` |
 | `JNI_EDETACHED` | The thread is not attached |
 | `JNI_EVERSION` | The JVM does not support JNI 1.8 |
 | `JNI_ENOMEM` | The JVM ran out of memory while it started |
 | `JNI_EEXIST` | A JVM already runs in the process |
-| `JNI_EINVAL` | The JVM refused an option, such as `Unrecognized option: -Xt` |
+| `JNI_EINVAL` | The JVM refused a flag of `-XX:`, such as `Unrecognized VM option 'NoSuchFlag'` |
 
 `golem run` prints `golem: <error>` and exits with 1 for an error before the JVM starts, such as a
-missing Java home, and logs `[golem] the JVM did not run: <error>` for a `JvmError`.
+missing Java home, and logs `[golem] the JVM did not run: <error>` for a `JvmError`. HotSpot ends
+the process itself inside `JNI_CreateJavaVM` on some errors of the options, such as an initial heap
+above the maximum or an `-Xmx` that it cannot reserve, after its message and with the status 1, as
+under java. No `JvmError` follows then, and the abort hook logs
+`[golem] the JVM could not start, see its message above`, so the line does not read as a crash.
 
 ## The host jar
 

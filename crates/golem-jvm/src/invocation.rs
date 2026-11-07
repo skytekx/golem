@@ -28,6 +28,10 @@ use std::{
         PathBuf, //
     },
     ptr,
+    sync::atomic::{
+        AtomicBool,
+        Ordering, //
+    },
 };
 
 use jni::{
@@ -85,9 +89,25 @@ extern "system" fn exit_hook(status: sys::jint) {
     let _ = std::panic::catch_unwind(|| log(format_args!("the JVM exits with status {status}")));
 }
 
-/// The abort hook of the JVM, which `HotSpot` calls on a fatal error before it aborts the process.
+/// True once `JNI_CreateJavaVM` has created the JVM.
+static CREATED: AtomicBool = AtomicBool::new(false);
+
+/// The abort hook of the JVM, which `HotSpot` calls before it aborts the process.
+///
+/// `HotSpot` aborts on a fatal error of a running JVM, and also on many errors of its options
+/// that it finds while `JNI_CreateJavaVM` runs, such as an initial heap above the maximum, after
+/// it printed the error. The process ends inside that call then, so this line is the only one
+/// of the host, and it must not read as a crash.
 extern "system" fn abort_hook() {
-    let _ = std::panic::catch_unwind(|| log(format_args!("the JVM aborts on a fatal error")));
+    let _ = std::panic::catch_unwind(|| {
+        if CREATED.load(Ordering::Acquire) {
+            log(format_args!("the JVM aborts on a fatal error"));
+        } else {
+            log(format_args!(
+                "the JVM could not start, see its message above"
+            ));
+        }
+    });
 }
 
 /// The size an -Xss value names, `parse_size` of java.c: digits and at most one unit.
@@ -267,6 +287,7 @@ fn create_vm(
     if code != sys::JNI_OK {
         return Err(JvmError::new(create_error(code)));
     }
+    CREATED.store(true, Ordering::Release);
     Ok((vm, env.cast()))
 }
 
