@@ -194,10 +194,13 @@ Golem never carries these:
 
 ## 7. Dependencies
 
-A dependency that the build fetches, such as the Aosabi crates or a crate of crates.io, is not
-carried in this tree, so it adds no text to `LICENSES/`. Once the first crate lands, CI runs
-`cargo deny check licenses` with an allow list of the licenses that may be combined with the AGPL
-3, so that no dependency brings an incompatible one.
+A dependency that the build fetches, such as a crate of crates.io, is not carried in this tree, so
+it adds no text to `LICENSES/`. The job `dependencies` of CI runs `cargo deny --locked check`
+against [deny.toml](../deny.toml) on every push and every pull request. Its allow list holds only
+licenses that may be combined with the AGPL 3, so that no dependency brings an incompatible one,
+and it names the two ports under the GPL 3 or later as the only crates that may carry that
+license. The same run checks every crate against the advisories of RustSec, the bans and the
+allowed sources.
 
 ## 8. Making the source available
 
