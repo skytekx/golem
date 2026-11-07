@@ -15,6 +15,7 @@ package com.skytekx.golem.bridge;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
@@ -74,11 +75,46 @@ final class Actions {
 		}
 	}
 
-	/** Runs a command as the console, so the stop path is the one of an operator. */
+	/**
+	 * Runs a command as the console, so the stop path is the one of an operator. What the command
+	 * answers reaches the console and the log of the server but no operator in the game, so a
+	 * plugin that acts through commands does not show what it does for every player to every
+	 * operator, as a command typed at the console does under broadcast-console-to-ops.
+	 */
 	private void command(MinecraftServer server, String[] fields) {
 		if (fits(fields, 2)) {
-			CommandSourceStack console = server.createCommandSourceStack();
+			CommandSourceStack console = server.createCommandSourceStack()
+					.withSource(new QuietConsole(server));
 			server.getCommands().performPrefixedCommand(console, fields[1]);
+		}
+	}
+
+	/** The console as the source of a command, which tells no operator in the game. */
+	private static final class QuietConsole implements CommandSource {
+		private final MinecraftServer server;
+
+		QuietConsole(MinecraftServer server) {
+			this.server = server;
+		}
+
+		@Override
+		public void sendSystemMessage(Component message) {
+			server.sendSystemMessage(message);
+		}
+
+		@Override
+		public boolean acceptsSuccess() {
+			return true;
+		}
+
+		@Override
+		public boolean acceptsFailure() {
+			return true;
+		}
+
+		@Override
+		public boolean shouldInformAdmins() {
+			return false;
 		}
 	}
 

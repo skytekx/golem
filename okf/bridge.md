@@ -326,11 +326,18 @@ separator, which no field may hold. The first field is the kind.
 
 | Kind | Fields after the kind | What the mod does on the server thread |
 | --- | --- | --- |
-| `command` | The command without its slash | Runs it as the console, through the command source stack of the server |
+| `command` | The command without its slash | Runs it as the console, with the level and the name of the console, whose answer reaches the console and the log of the server but no operator in the game, see below |
 | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
 | `broadcast` | The text | Sends the text as a system message to every player and the console |
 | `teleport` | The UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` | Teleports the player there, if they are online, also into another dimension |
 | `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
+
+A command of Golem runs with a source of its own in place of the console of the server, so the
+feedback of `sendSuccess` goes to the console and the log of the server, while no operator in the
+game reads it. A command typed at the console tells every operator online what it did, under
+`broadcast-console-to-ops` of `server.properties`, so a plugin that acts through commands, such as
+a port of `/home`, would show every teleport of every player to every operator. The stop path of
+Golem, `save-all flush` and `stop`, stays on the console and in the log as before.
 
 A number travels as the shortest decimal that reads back as the same number, which `Display` of Rust
 writes and `Double.parseDouble` and `Float.parseFloat` of Java read, and an infinity as Java spells
