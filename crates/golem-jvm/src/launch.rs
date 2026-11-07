@@ -513,12 +513,38 @@ fn forge_args_file(server: &Path) -> Result<String, ArgError> {
     match found.len() {
         0 => Err(none()),
         1 => Ok(found.remove(0)),
-        _ => Err(ArgError::new(format!(
-            "{} holds several Forge servers, so it is not clear which to run: {}",
-            server.display(),
-            found.join(", ")
-        ))),
+        _ => {
+            // The installer of Forge puts a new version beside the old one and writes a run.sh
+            // that names the new one, so run.sh decides as it does for java.
+            let named = run_sh_args_files(server);
+            let chosen: Vec<&String> = found.iter().filter(|file| named.contains(file)).collect();
+            match chosen.as_slice() {
+                [one] => Ok((*one).clone()),
+                _ => Err(ArgError::new(format!(
+                    "{} holds several Forge servers, and run.sh does not name one of them alone, so it is not clear which to run: {}",
+                    server.display(),
+                    found.join(", ")
+                ))),
+            }
+        }
     }
+}
+
+/// The argument files that the lines of run.sh in `server` name with `@`, without the `@`, or
+/// none when it has no run.sh. A line that starts with `#` is a comment, and a quote around a
+/// word is dropped.
+fn run_sh_args_files(server: &Path) -> Vec<String> {
+    let Ok(script) = std::fs::read_to_string(server.join("run.sh")) else {
+        return Vec::new();
+    };
+    script
+        .lines()
+        .filter(|line| !line.trim_start().starts_with('#'))
+        .flat_map(str::split_whitespace)
+        .map(|word| word.trim_matches(|c| c == '"' || c == '\''))
+        .filter_map(|word| word.strip_prefix('@'))
+        .map(str::to_owned)
+        .collect()
 }
 
 /// The launch of the Forge server in `server`, as run.sh starts it.

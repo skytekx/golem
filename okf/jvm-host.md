@@ -60,11 +60,14 @@ A Forge server starts with its `run.sh`:
 java @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.4.18/unix_args.txt "$@"
 ```
 
-`LaunchSpec::forge_server` builds the same command line. It finds exactly one
-`libraries/net/minecraftforge/forge/*/unix_args.txt` in the server directory, refuses a directory
-with none or with several, takes `@user_jvm_args.txt` in front when that file exists, and reads
-both relative to the server directory with `LaunchSpec::from_launcher_args`. The launch is the
-options, the main class `cpw.mods.bootstraplauncher.BootstrapLauncher` and the arguments of main.
+`LaunchSpec::forge_server` builds the same command line. It finds the
+`libraries/net/minecraftforge/forge/*/unix_args.txt` of the server directory and refuses a directory
+with none. The installer of Forge puts a new version beside the old one and writes a `run.sh` that
+names the new one, so of several it takes the one that a word `@<path>` of `run.sh` names, outside a
+comment, and refuses a directory whose `run.sh` names none of them or several, or that has no
+`run.sh`. It takes `@user_jvm_args.txt` in front when that file exists, and reads both relative to
+the server directory with `LaunchSpec::from_launcher_args`. The launch is the options, the main
+class `cpw.mods.bootstraplauncher.BootstrapLauncher` and the arguments of main.
 
 ### Argument files
 
@@ -284,7 +287,7 @@ An `ArgError` names the file and the argument where there is one.
 | An option without its value | The message of the launcher, such as `-p requires module path specification` |
 | A refused option | `<option> is not supported by Golem: <reason>` |
 | No main class | `the arguments name no main class, so there is nothing to run` |
-| No Forge server, or several | `<dir> holds no Forge server: ...`, `<dir> holds several Forge servers ...` |
+| No Forge server, or several of which `run.sh` names none or several | `<dir> holds no Forge server: ...`, `<dir> holds several Forge servers, and run.sh does not name one of them alone ...` |
 
 A `JvmError` says why the JVM did not run: `libjvm` does not load or holds no `JNI_CreateJavaVM`, an
 option holds a NUL byte, registering the native methods failed or panicked, the thread could not

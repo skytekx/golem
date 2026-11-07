@@ -131,12 +131,13 @@ impl LaunchSpec {
     /// The launch of the Forge server installed in `server`, as its run.sh starts it.
     ///
     /// The launch is `@user_jvm_args.txt`, when that file exists, and then the one
-    /// `libraries/net/minecraftforge/forge/*/unix_args.txt`, relative to `server`.
+    /// `libraries/net/minecraftforge/forge/*/unix_args.txt`, relative to `server`. Of several,
+    /// which the installer of Forge leaves after an upgrade, it is the one that run.sh names.
     ///
     /// # Errors
     ///
-    /// Returns an [`ArgError`] when `server` holds no Forge server or several, and every error
-    /// of [`LaunchSpec::from_launcher_args`].
+    /// Returns an [`ArgError`] when `server` holds no Forge server, or several of which run.sh
+    /// does not name one alone, and every error of [`LaunchSpec::from_launcher_args`].
     pub fn forge_server(server: &Path) -> Result<Self, ArgError> {
         launch::forge_server(server)
     }
