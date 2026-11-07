@@ -5,7 +5,7 @@ type: Spec
 title: Permissions
 description: The permissions of Golem in place of LuckPerms 5.5.71, with the format of the tracked configuration, the rules of resolution in their order, the seed of SkyTekx and how it maps from LuckPerms, and the quirks of the live server that the one source of truth fixes.
 tags: [plugins, permissions, luckperms, essentials, config, quirks]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Permissions
@@ -15,9 +15,11 @@ The crate `golem-permissions` is the one permission system of Golem. It takes th
 license of LuckPerms and names its holders, lucko (Luck) and the LuckPerms contributors, beside the
 holder of Golem, see [Licensing](../../Documentation/licensing.md). The groups and nodes are a
 tracked TOML file, [config/permissions.toml](../../config/permissions.toml), and every decision
-names the rule that made it. A plugin asks it whether a player holds a node, and so will the handler
-of the Forge PermissionAPI. The store in SQLite comes later and is seeded from the same file. Today
-the crate reads the TOML.
+names the rule that made it. A plugin asks it whether a player holds a node, and a port of LuckPerms
+that answers `on_permission` answers the handler of the Forge PermissionAPI through it. The
+[store](../store.md#permissions) holds the same groups and nodes and hands them to the crate as TOML
+of the same format, so it is seeded from the same file. Today the crate reads the TOML, and
+`golem run` loads neither the crate nor the store yet.
 
 The notebook `tests/notebooks/06_permissions.ipynb` holds every rule on this page to a case.
 
