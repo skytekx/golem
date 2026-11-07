@@ -59,9 +59,9 @@ These rules stand in `okf/decisions.md` and `CONTRIBUTING.md`. The ones an agent
    case, at most 72 columns, no full stop. A body wrapped at 72 columns that says the problem first,
    then why the change solves it, then how. A fix of a pushed commit ends with the trailer
    `Fixes: <12 hex> ("<subject>")` as `git log -1 --abbrev=12 --format='%h ("%s")'` prints it, and
-   the commit lint looks the hash up. Every commit is authored and committed as
-   `Florian Kleber <26285351+kleberbaum@users.noreply.github.com>` and ends with the trailers
-   `Co-Authored-By` of the model, `Claude-Session` of your session and
+   the commit lint looks the hash up. Every commit is authored and committed as the owner, with the
+   name and the address that `git log -1 --format='%an <%ae>' 5fe5a38` prints, and ends with the
+   trailers `Co-Authored-By` of the model, `Claude-Session` of your session and
    `Signed-off-by: Florian Kleber <opensource@skytekx.com>`, in one last paragraph. One logical
    change per commit, and every commit builds on its own. Push right after a verified change, only
    to the branch `claude/aosabi-license-setup-9185l4`. Pushed history is not rewritten.
@@ -90,16 +90,18 @@ These rules stand in `okf/decisions.md` and `CONTRIBUTING.md`. The ones an agent
 
 The last workflow wired the store and the permissions into `golem run` and closed the gaps of the
 bridge for the port of EssentialsX. It was stopped for this hand over before its notebooks ran and
-before the check of Fable. Its commits are kept as two series of patches on `5fe5a38`.
+before the check of Fable. Its commits are kept in the git bundle `handover/port.bundle`, two
+branches on `5fe5a38`.
 
-| Series | Commits | State |
+| Branch in the bundle | Commits | State |
 | --- | --- | --- |
-| `handover/port-wiring/` | 9 | The exit hook callback of `golem-jvm`, the store in the context of the plugins, `golem run` opening, seeding, flushing and closing the store, the permissions of the store resolved for every plugin with the answer that LuckPerms gave on Bukkit, the PermissionAPI handler, the commands of LuckPerms 5.5.71 in `golem-permissions`, and the pages. The cases of notebooks 04, 06 and 07 for it are not written yet, and patch 9 is an untested change of notebook 09 |
-| `handover/port-bridge/` | 4 | The block of notebook 05 set where the chunk is loaded, an id and an end event for every teleport, styled text built in Rust and sent as a component, and an unfinished patch 4 for the small queries and the quit position, which may not build |
+| `port/wiring` | 9 | The exit hook callback of `golem-jvm`, the store in the context of the plugins, `golem run` opening, seeding, flushing and closing the store, the permissions of the store resolved for every plugin with the answer that LuckPerms gave on Bukkit, the PermissionAPI handler, the commands of LuckPerms 5.5.71 in `golem-permissions`, and the pages. The cases of notebooks 04, 06 and 07 for it are not written yet, and its ninth commit is an untested change of notebook 09 |
+| `port/bridge` | 4 | The block of notebook 05 set where the chunk is loaded, an id and an end event for every teleport, styled text built in Rust and sent as a component, and an unfinished fourth commit for the small queries and the quit position, which may not build |
 
-Apply each series on its own branch from `5fe5a38` with `git am`. Each applies cleanly there. The
-two conflict with each other in `Documentation/testing.md` and `crates/golem-devtool/src/bridge.rs`,
-so merge the second after the first. What is left of the bridge series is items 4, 5 and 6 of
+Take them with `git fetch handover/port.bundle port/wiring:port/wiring port/bridge:port/bridge`.
+Both branches start at `5fe5a38`. They conflict with each other in `Documentation/testing.md` and
+`crates/golem-devtool/src/bridge.rs`, so merge the second after the first. What is left of the
+bridge branch is items 4, 5 and 6 of
 `okf/plugins/essentials/bridge-needs.md` section What the comparison shows: the small queries, the
 quit position, chat to a subset of players and kill with a damage type, then the core plugin tools,
 notebook 07 and the pages. Then check both parts with Fable, settle with Opus, run all notebooks,

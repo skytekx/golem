@@ -252,6 +252,6 @@ Oldest first. Times are UTC.
   away, failed run 69. A panic still fails the boot at once.
 - The work moves to another agent. `HANDOVER.md` names the rules of the owner, the state, the
   unfinished wiring of the store and the permissions and the unfinished gaps of the bridge, kept
-  as series of patches in `handover/`, the items of Aosabi that Golem needs, the branch of Aosabi
-  that adds an embedding entry, the feature list the owner asks for, the next steps and the
-  decisions still open with their defaults.
+  as two branches in the git bundle `handover/port.bundle`, the items of Aosabi that Golem needs,
+  the branch of Aosabi that adds an embedding entry, the feature list the owner asks for, the next
+  steps and the decisions still open with their defaults.
