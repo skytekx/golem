@@ -22,7 +22,14 @@ for attempt in 1 2 3 4 5; do
 		exit 0
 	fi
 	case $said in
-	*"[rejected]"* | *"[remote rejected]"*)
+	*"[remote rejected]"*)
+		printf '%s\n' "$said" >&2
+		echo "post-commit: a rule of origin, such as a protected branch or a hook, refused $branch for" \
+			"the reason in parentheses above. A pull does not mend that, so push it by hand once the" \
+			"rule lets it through." >&2
+		exit 1
+		;;
+	*"[rejected]"*)
 		printf '%s\n' "$said" >&2
 		echo "post-commit: origin refused $branch, since one of the two holds commits that the other" \
 			"lacks. A branch behind origin is brought up to date with git pull --rebase, and a branch" \
