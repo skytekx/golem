@@ -312,3 +312,8 @@ Oldest first. Times are UTC.
   with `SIGHUP` ignored. Notebook 08 still holds the lines behind the banner to its list, so a run
   of it under `nohup` waits for the notebook to take that line. See
   [JVM host](jvm-host.md#golem-run) and [Open items](open-items.md#open-in-what-is-built).
+- The exit hook of `golem-jvm` runs a callback of the host. `golem_jvm::on_exit` sets it once, and
+  the hook runs it behind its line when the JVM ends through `System.exit`, with a panic of the
+  callback caught and logged, so a host has a place to close what it opened when
+  `golem_jvm::run` never returns. `golem-devtool jvm-on-exit` sets such callbacks before a
+  launch, and `03_launch_args` holds the hook to them. See [JVM host](jvm-host.md#the-hooks).

@@ -180,7 +180,8 @@ pub struct Outcome {
 ///
 /// The JVM runs on a thread of its own. `register` runs on that thread after the JVM exists and
 /// before the main class, to register native methods. A call to `System.exit` in the JVM ends the
-/// process after the exit hook of the host has logged it, so this function does not return then.
+/// process after the exit hook of the host has logged it and run the callback of [`on_exit`], so
+/// this function does not return then.
 ///
 /// The thread is named golem-jvm and has a stack of 8 MiB, or the size of `-Xss` when that is
 /// larger. The options of `spec` reach `JNI_CreateJavaVM` in their order, followed by
@@ -199,6 +200,22 @@ where
     F: FnOnce(&mut jni::JNIEnv<'_>) -> jni::errors::Result<()> + Send + 'static,
 {
     invocation::run(java_home, spec, register)
+}
+
+/// Sets what the exit hook of the JVM runs after it logged the status, and answers false when a
+/// callback was set already, which stays.
+///
+/// `HotSpot` calls the exit hook on `System.exit` and `Runtime.halt` and ends the process when the
+/// hook returns. `System.exit` runs the shutdown hooks of Java first, so a server that ends that
+/// way has stopped and saved by then. `Runtime.halt` runs none of them, so after a halt nothing of
+/// Java has stopped. [`run`] never returns then, so the host closes what it must close in this
+/// callback, such as the store of the plugins. The callback runs on the thread of `HotSpot` that
+/// ends the JVM. The threads that run Java wait at a safepoint by then, while a thread of Java
+/// inside native code runs on until it returns to Java. So the callback calls nothing of the JVM,
+/// waits for no thread of Java and for no lock that such a thread may hold, and returns quickly.
+/// A panic of the callback is caught and logged.
+pub fn on_exit(callback: Box<dyn Fn(i32) + Send + Sync>) -> bool {
+    invocation::on_exit(callback)
 }
 
 /// Answers whether the signal of number `signal` was ignored when the process started, as

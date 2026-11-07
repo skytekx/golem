@@ -26,6 +26,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
     jvm::ARGFILE,
     jvm::LAUNCH_SPEC,
     jvm::JVM_RUN,
+    jvm::JVM_ON_EXIT,
     permissions::CHECK,
     permissions::GROUPS,
     bridge::PLUGINS,

@@ -28,9 +28,12 @@ use std::{
         PathBuf, //
     },
     ptr,
-    sync::atomic::{
-        AtomicBool,
-        Ordering, //
+    sync::{
+        OnceLock,
+        atomic::{
+            AtomicBool,
+            Ordering, //
+        },
     },
 };
 
@@ -83,10 +86,33 @@ fn log(line: std::fmt::Arguments<'_>) {
     let _ = writeln!(std::io::stderr(), "[golem] {line}");
 }
 
+/// What the exit hook runs after its line, which [`crate::on_exit`] sets once.
+static ON_EXIT: OnceLock<Box<dyn Fn(i32) + Send + Sync>> = OnceLock::new();
+
+/// Sets what the exit hook runs, and answers false when it was set already.
+pub(crate) fn on_exit(callback: Box<dyn Fn(i32) + Send + Sync>) -> bool {
+    ON_EXIT.set(callback).is_ok()
+}
+
 /// The exit hook of the JVM, which `HotSpot` calls with the status of `System.exit` or `Runtime.halt`
 /// before it ends the process itself.
+///
+/// After `System.exit` the shutdown hooks of Java have run by then, so the server has stopped and
+/// saved. After `Runtime.halt` none of them ran. The callback of the host runs last in both cases,
+/// such as the close of the store. A panic of the callback is caught and logged, since the process
+/// ends either way.
 extern "system" fn exit_hook(status: sys::jint) {
     let _ = std::panic::catch_unwind(|| log(format_args!("the JVM exits with status {status}")));
+    if let Some(callback) = ON_EXIT.get() {
+        let called = std::panic::catch_unwind(AssertUnwindSafe(|| callback(status)));
+        if called.is_err() {
+            let _ = std::panic::catch_unwind(|| {
+                log(format_args!(
+                    "the callback of the exit hook panicked, so the process ends without it"
+                ));
+            });
+        }
+    }
 }
 
 /// True once `JNI_CreateJavaVM` has created the JVM.

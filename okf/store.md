@@ -5,7 +5,7 @@ type: Spec
 title: Store
 description: The store of Golem in the crate golem-store, one SQLite file beside the world with the players, homes, warps, spawns, mail, ignore lists, accounts, permissions and settings of the plugins, its schema, its threads, its durability, its API and its cost on the server thread.
 tags: [store, sqlite, plugins, essentials, permissions, economy, durability]
-timestamp: 2026-11-06
+timestamp: 2026-11-15
 ---
 
 # Store
@@ -555,8 +555,9 @@ The store is not wired into `golem run` yet. The ports wire it in this way.
    where a wait costs no tick, so every change of the ports is in the file before the JVM ends.
 5. It calls `close` after `golem_jvm::run` returns, before `report`. A JVM that ends through
    `System.exit`, as the stop of a server without the bridge does on a signal, never returns from
-   `golem_jvm::run`, so `golem-jvm` needs a callback in its exit hook that runs `close` there. The
-   hook logs alone today, see [JVM host](jvm-host.md#the-hooks).
+   `golem_jvm::run`, so `close` runs there in the callback that the host sets with
+   `golem_jvm::on_exit` and that the exit hook of `golem-jvm` runs, see
+   [JVM host](jvm-host.md#the-hooks).
 
 The file holds player data, so the repository of the server ignores `golem-store.db`, its log
 `golem-store.db-wal` and the index of the log `golem-store.db-shm`, which the open leaves beside the

@@ -220,11 +220,21 @@ A process holds one JVM, so `run` runs once.
 
 | Hook | When HotSpot calls it | What the host does |
 | --- | --- | --- |
-| `exit` | `System.exit` or `Runtime.halt`, with the status | Logs `[golem] the JVM exits with status N` on standard error, then HotSpot ends the process with that status |
+| `exit` | `System.exit`, after the shutdown hooks of Java, or `Runtime.halt`, which runs none of them, each with the status | Logs `[golem] the JVM exits with status N` on standard error and runs the callback that the host set with `golem_jvm::on_exit`, then HotSpot ends the process with that status |
 | `abort` | A fatal error, or an error of the options that HotSpot finds while `JNI_CreateJavaVM` runs, before HotSpot aborts the process | Logs `[golem] the JVM aborts on a fatal error`, or `[golem] the JVM could not start, see its message above` while `JNI_CreateJavaVM` runs |
 
-Both hooks catch every panic, so none unwinds into the JVM. `run` does not return after a hook,
-since the process ends.
+Both hooks catch every panic, so none unwinds into the JVM, and a callback of the exit hook that
+panics is logged as `[golem] the callback of the exit hook panicked, so the process ends without
+it`. `run` does not return after a hook, since the process ends, so a host closes what it opened in
+the callback of the exit hook. `golem_jvm::on_exit` sets that callback once and answers false for a
+second one, which it drops. After `System.exit` the shutdown hooks of Java have run before the exit
+hook, so a server that ends that way has stopped and saved, while after `Runtime.halt` none of them
+ran. HotSpot calls the exit hook on its own thread while the threads that run Java wait at a
+safepoint, and a thread of Java inside native code runs on until it returns to Java. So the callback
+calls nothing of the JVM and waits for no thread of Java and for no lock that such a thread may
+hold. A JVM that ends because main returned calls no hook, and `run` returns. `golem-devtool
+jvm-on-exit` sets callbacks that print or panic before a launch, and `03_launch_args` holds the hook
+to these rules with them.
 
 Before it creates the JVM, the host puts `SIGSEGV` and `SIGBUS` back to their default action. The
 standard library of Rust holds both with its handler for stack overflows, and HotSpot keeps a

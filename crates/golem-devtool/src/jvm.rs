@@ -2,8 +2,9 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The subcommands of golem-jvm: argfile prints the tokens of argument files, launch-spec the
- * launch that the arguments of the java launcher or a Forge server describe, and jvm-run runs
- * such a launch in the JVM of a Java home and prints how it ended.
+ * launch that the arguments of the java launcher or a Forge server describe, jvm-run runs such
+ * a launch in the JVM of a Java home and prints how it ended, and jvm-on-exit sets callbacks of
+ * the exit hook before it runs such a launch.
  */
 
 use std::path::{
@@ -29,6 +30,11 @@ pub const JVM_RUN: Subcommand = (
     "jvm-run",
     "--java-home <dir> --server <dir> | --base <dir> -- <argument>... how a launch ends",
     jvm_run,
+);
+pub const JVM_ON_EXIT: Subcommand = (
+    "jvm-on-exit",
+    "print|panic... -- <arguments of jvm-run> the callbacks of the exit hook, then the launch",
+    jvm_on_exit,
 );
 
 /// What launch-spec and jvm-run are asked for.
@@ -191,4 +197,36 @@ fn jvm_run(arguments: &[String]) -> i32 {
             1
         }
     }
+}
+
+/// Sets a callback of the exit hook for every word before `--`, in their order, prints which of
+/// them the hook took as `{"set": [...]}`, and runs the launch of the arguments after `--` as
+/// jvm-run does.
+///
+/// The callback `print` logs its place among the words and the status on standard error, and
+/// `panic` panics with both. The exit hook keeps the first callback alone, so the lines of a run
+/// show which callback it ran.
+fn jvm_on_exit(arguments: &[String]) -> i32 {
+    let Some(split) = arguments.iter().position(|argument| argument == "--") else {
+        eprintln!("golem-devtool: jvm-on-exit needs -- before the arguments of jvm-run");
+        return 1;
+    };
+    let mut set = Vec::new();
+    for (place, kind) in arguments[..split].iter().enumerate() {
+        let callback: Box<dyn Fn(i32) + Send + Sync> = match kind.as_str() {
+            "print" => Box::new(move |status: i32| {
+                eprintln!("[devtool] the callback {place} ran with the status {status}");
+            }),
+            "panic" => Box::new(move |status: i32| {
+                panic!("the callback {place} panics on the status {status}");
+            }),
+            _ => {
+                eprintln!("golem-devtool: jvm-on-exit: no callback {kind}, only print and panic");
+                return 1;
+            }
+        };
+        set.push(golem_jvm::on_exit(callback));
+    }
+    println!("{}", json!({ "set": set }));
+    jvm_run(&arguments[split + 1..])
 }
