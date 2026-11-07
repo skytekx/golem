@@ -82,7 +82,7 @@ does not run, instead of failing on every event.
 | `serverStarted()` | On `ServerStartedEvent` | None |
 | `serverStopping()` | On `ServerStoppingEvent` | None |
 | `serverStopped()` | On `ServerStoppedEvent` | None |
-| `tick(nanos)` | At the end of every server tick, with the nanoseconds since its start | None |
+| `tick(nanos)` | At the end of every server tick, with the nanoseconds since its start and the time the bridge took after the report of the tick before, see [Plugins](plugins/index.md#tick-statistics) | None |
 | `playerJoined(uuid, name)` | On `PlayerLoggedInEvent` | None |
 | `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
 | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |

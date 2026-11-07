@@ -30,6 +30,13 @@ public final class ServerEvents {
 	/** When the running tick started, in the nanoseconds of System.nanoTime. */
 	private long tickStart;
 
+	/**
+	 * How long the bridge took at the end of the last tick, in the natives tick and drain and in
+	 * the actions, in nanoseconds. That work follows the report of its tick, so the next tick
+	 * carries it.
+	 */
+	private long golemNanos;
+
 	ServerEvents(Guard guard, Actions actions) {
 		this.guard = guard;
 		this.actions = actions;
@@ -96,6 +103,10 @@ public final class ServerEvents {
 	/**
 	 * Reports the end of a tick, after every other listener, and runs the queued actions.
 	 *
+	 * <p>The duration it reports holds the time of the bridge at the end of the tick before, the
+	 * handlers of the plugins for the tick and the actions, which delays the server as much as any
+	 * listener does. So the MSPT that Golem reports covers its own work, one tick late.
+	 *
 	 * @param event the event of Forge, of either phase
 	 */
 	@SubscribeEvent(priority = EventPriority.LOWEST)
@@ -103,9 +114,11 @@ public final class ServerEvents {
 		if (event.phase != TickEvent.Phase.END) {
 			return;
 		}
-		long nanos = System.nanoTime() - tickStart;
+		long end = System.nanoTime();
+		long nanos = end - tickStart + golemNanos;
 		guard.run("Host.tick", () -> Host.tick(nanos));
 		String[] queued = guard.ask("Host.drain", Host::drain, NONE);
 		actions.run(event.getServer(), queued);
+		golemNanos = System.nanoTime() - end;
 	}
 }

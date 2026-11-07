@@ -234,9 +234,13 @@ The duration runs from the listener of the bridge of the highest priority on `Se
 the start of a tick to its listener of the lowest priority at the end, so it covers what most mods
 do at both ends of the tick. Forge runs the listeners of one priority in the order they registered
 in, so another listener of the highest or the lowest priority may fall outside it, such as the
-listener of the lowest priority of Citadel in the modpack. Minecraft stops its own clock of a tick,
-which `forge tps` reads, before the listeners at the end run, so the MSPT of Golem reads higher. In
-the idle of the modpack the two read 1.96 and 1.60 ms, see [Modpack](../modpack.md).
+listener of the lowest priority of Citadel in the modpack. The bridge does its own work after it
+reports a tick: the native `tick`, in which the plugins see the tick, `drain` and the actions. That
+work delays the next tick as a listener does, so the bridge adds its time to the duration of the
+next tick, and a plugin that is slow on a tick shows in the MSPT one tick later. Minecraft stops its
+own clock of a tick, which `forge tps` reads, before the listeners at the end run, so the MSPT of
+Golem reads higher. In the idle of the modpack the two read 1.96 and 1.60 ms, see
+[Modpack](../modpack.md).
 
 ## The log
 
