@@ -33,11 +33,15 @@ these.
 8. No trailer appears twice with the same value.
 
 A commit of a range is judged by the message that git stored, every line of it. A message file is
-judged as git will store it, as git commit and git merge hand it to the commit-msg hook: cut at the
-cut line of git commit --verbose, which the diff follows, and without the lines that open with the
-comment character of core.commentChar, # unless it is set, which git drops from a message that was
-edited unless commit.cleanup keeps them. Git tells the hook that no editor ran with GIT_EDITOR set
-to :, and then keeps those lines.
+judged as git will store it, as git commit and git merge hand it to the commit-msg hook: without the
+lines that open with the comment character of core.commentChar, # unless it is set, which git drops
+from a message that was edited unless commit.cleanup keeps them, and cut at the first cut line where
+git cuts it. Git cuts there with --verbose or commit.verbose, which write the cut line above the
+diff, and in the cleanup mode scissors of an edited message, and keeps a cut line that a message
+holds otherwise. Git tells the hook that no editor ran with GIT_EDITOR set to :, and then keeps the
+comment lines and the cut line. The hook sees the configuration of git and the file, not the options
+of git commit, so --verbose and --cleanup scissors count by the cut line that git writes into the
+file with its hint below it in comment lines.
 
 Merge commits are left out, since git writes their message: a range holds no merge, and the hook
 judges no message while git makes a merge, in git merge or in a git commit that concludes one. A
@@ -213,8 +217,9 @@ def paragraphs(lines: list[str]) -> list[list[str]]:
     return groups
 
 
-#: The cut line that git commit --verbose writes after the comment character, above the diff. Git
-#: drops it and everything below it, and so does the cleanup mode scissors.
+#: The cut line that git commit --verbose writes after the comment character, above the diff, with
+#: a hint in comment lines below it. Git drops it and everything below it with --verbose and in the
+#: cleanup mode scissors.
 CUT_LINE = "------------------------ >8 ------------------------"
 #: The comment characters that git tries in this order for core.commentChar auto.
 AUTO_COMMENT = "#;@!$%^&|:"
@@ -237,9 +242,9 @@ def comment_string(root: Path, text: str) -> str:
     if value.lower() != "auto":
         return value
     # With auto git takes the first candidate that no line of the message opens with, and writes its
-    # own lines with it: the cut line, and its hints and the status at the end of the file.
-    cut = re.search(r"^(.) %s$" % re.escape(CUT_LINE), text, re.MULTILINE)
-    if cut and cut.group(1) in AUTO_COMMENT:
+    # own lines with it: the cut line with its hint, and the status at the end of the file.
+    cut = re.search(r"^([%s]) %s\n\1" % (re.escape(AUTO_COMMENT), re.escape(CUT_LINE)), text, re.MULTILINE)
+    if cut:
         return cut.group(1)
     lines = [line for line in text.splitlines() if line.strip()]
     if lines and lines[-1][0] in AUTO_COMMENT and lines[-1][1:2] in ("", " ", "\t"):
@@ -269,20 +274,34 @@ def stripspace(text: str, comment=None) -> str:
     return "".join(line + "\n" for line in kept)
 
 
+def verbose(root: Path) -> bool:
+    """Whether commit.verbose of the git configuration of `root` turns on git commit --verbose."""
+    found = subprocess.run(["git", "-C", str(root), "config", "--type=bool-or-int", "--get", "commit.verbose"],
+                           capture_output=True, text=True, check=False)
+    return found.returncode == 0 and found.stdout.strip() not in ("false", "0")
+
+
 def stored(text: str, root: Path, environment) -> str:
     """The message that git stores from `text`, the file that it hands to the commit-msg hook in
     `root`, with `environment` the environment of the hook."""
     comment = comment_string(root, text)
-    cut = "%s %s\n" % (comment, CUT_LINE)
-    if text.startswith(cut):
-        text = ""
-    elif "\n" + cut in text:
-        text = text[:text.index("\n" + cut) + 1]
+    edited = environment.get("GIT_EDITOR") != ":"
     cleanup = (git_config(root, r"^commit\.cleanup$") or "default").lower()
+    if cleanup not in ("verbatim", "whitespace", "strip", "scissors"):
+        cleanup = "strip" if edited else "whitespace"
+    elif cleanup == "scissors" and not edited:
+        cleanup = "whitespace"
+    # Git cuts at the first cut line with --verbose and in the mode scissors, and in both it writes
+    # its own cut line with the hint below it, which a cut line written by hand lacks.
+    cut = "%s %s\n" % (comment, CUT_LINE)
+    written = re.search(r"(?:^|\n)%s%s" % (re.escape(cut), re.escape(comment)), text)
+    if cleanup == "scissors" or verbose(root) or written:
+        if text.startswith(cut):
+            text = ""
+        elif "\n" + cut in text:
+            text = text[:text.index("\n" + cut) + 1]
     if cleanup == "verbatim":
         return text
-    if cleanup not in ("strip", "whitespace", "scissors"):
-        cleanup = "whitespace" if environment.get("GIT_EDITOR") == ":" else "strip"
     return stripspace(text, comment if cleanup == "strip" else None)
 
 
