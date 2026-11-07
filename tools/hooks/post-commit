@@ -3,21 +3,53 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 #
 # The post-commit hook of Golem. It pushes the branch after every commit, since a dev environment
-# can end without warning and a commit that is only local is lost with it. A push that fails is
-# retried with growing pauses, and a push that still fails is reported, so it is the first thing
-# to fix. Install it with:
+# can end without warning and a commit that is only local is lost with it. A push that fails on
+# the network is retried with growing pauses, and a push that still fails is reported, so it is the
+# first thing to fix. A push that origin refuses, a push that origin does not let through and a
+# repository without the remote origin are reported at once, since no retry mends them. Install
+# it with:
 #
 #     git config core.hooksPath tools/hooks
 
 branch=$(git symbolic-ref --quiet --short HEAD) || exit 0
+if ! git remote get-url origin > /dev/null 2>&1; then
+	echo "post-commit: the repository has no remote origin, so $branch is not pushed" >&2
+	exit 1
+fi
 pause=2
 for attempt in 1 2 3 4 5; do
-	if git push --quiet -u origin "$branch"; then
+	if said=$(git push --quiet -u origin "$branch" 2>&1); then
 		exit 0
 	fi
+	case $said in
+	*"[rejected]"* | *"[remote rejected]"*)
+		printf '%s\n' "$said" >&2
+		echo "post-commit: origin refused $branch, since one of the two holds commits that the other" \
+			"lacks. A branch behind origin is brought up to date with git pull --rebase, and a branch" \
+			"rewritten while it is cleaned is pushed with git push --force-with-lease." >&2
+		exit 1
+		;;
+	*"returned error: 4"* | *"HTTP 4"* | *"Authentication failed"* | *"Permission denied"*)
+		printf '%s\n' "$said" >&2
+		echo "post-commit: origin did not let the push of $branch through, push it by hand once it may" >&2
+		exit 1
+		;;
+	*"Could not resolve host"* | *"Failed to connect"* | *"timed out"* | *"Connection refused"* | \
+	*"Connection reset"* | *"Network is unreachable"* | *"returned error: 5"* | *"HTTP 5"* | \
+	*"remote end hung up"* | *"early EOF"* | *"unexpected disconnect"* | *"SSL_ERROR_SYSCALL"* | \
+	*"gnutls_handshake"* | *"Empty reply from server"*)
+		;;
+	*)
+		printf '%s\n' "$said" >&2
+		echo "post-commit: the push of $branch failed, and not on the network, push it by hand" >&2
+		exit 1
+		;;
+	esac
 	[ "$attempt" -eq 5 ] && break
+	echo "post-commit: the network failed the push of $branch, try $attempt of 5, the next in $pause s" >&2
 	sleep "$pause"
 	pause=$((pause * 2))
 done
+printf '%s\n' "$said" >&2
 echo "post-commit: the push of $branch failed five times, push it by hand before anything else" >&2
 exit 1

@@ -19,7 +19,8 @@ gone.
   merge into `main` the branch is cleaned into commits of section 3, and only then may it be force
   pushed, with `--force-with-lease` and on that branch alone.
 - A push that fails because of the network is retried at once and then with growing pauses. A push
-  that still fails is the first thing to report, before any other work goes on.
+  that still fails is the first thing to report, before any other work goes on. A push that origin
+  refuses is reported at once, since no retry mends it.
 - An agent ends no session and no answer with an unpushed commit or uncommitted changes. Before it
   stops it checks that `git status` is clean and that `git log @{u}..` is empty.
 
