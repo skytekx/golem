@@ -12,8 +12,8 @@ Every download is checked by its SHA-256, or a jar of the pack by the SHA-512 of
 it is used, and lands under tests/.cache/, which git ignores. The pins are these.
 
 1. Temurin 17.0.21+9 of Eclipse Adoptium, the JDK the Mac mini runs the server on, unpacked to
-   tests/.cache/jdk-17.0.21+9. On macOS the Java home is the Contents/Home of the bundle, and
-   the script links it to the same name.
+   tests/.cache/jdk-17.0.21+9. On macOS the Java home is the Contents/Home of the bundle, which
+   the script moves to that name, without the rest of the bundle.
 2. The installer of Forge 1.20.1-47.4.18 from the Forge maven, which installs the server into
    tests/.cache/forge-server. It downloads the server jar of Minecraft from Mojang and the
    libraries, as the installer does for every Forge server.
