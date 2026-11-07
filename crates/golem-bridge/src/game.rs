@@ -41,6 +41,16 @@ impl Location {
             && self.yaw.is_finite()
             && self.pitch.is_finite()
     }
+
+    /// Answers whether the block of the place lies within the bounds of the world that the
+    /// command tp takes, `Level.isInSpawnableBounds`: x and z from -30000000 to below 30000000,
+    /// and y from -20000000 to below 20000000.
+    pub fn is_in_world(&self) -> bool {
+        let horizontal = -30_000_000.0..30_000_000.0;
+        horizontal.contains(&self.x.floor())
+            && horizontal.contains(&self.z.floor())
+            && (-20_000_000.0..20_000_000.0).contains(&self.y.floor())
+    }
 }
 
 impl fmt::Display for Location {

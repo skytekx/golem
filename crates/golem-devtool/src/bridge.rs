@@ -51,7 +51,8 @@
 //! `commandNames` from inside its handler on the events named `on` and broadcasts how many names
 //! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`. `mover`
 //! answers its `commands` with the helpers of the context that teleport a player to its place
-//! `to` and name them in the player list. `ask` asks the game, as the module game describes.
+//! `to`, to a place that is no number and to one beyond the bounds of the world, and name them in
+//! the player list. `ask` asks the game, as the module game describes.
 
 use std::{
     fs,
@@ -988,7 +989,8 @@ impl Plugin for Reenter {
 
 /// A test plugin that answers its commands with the helpers of the context for the actions on
 /// players: `teleport <uuid>` to its place, `nowhere <uuid>` to a place that is no number,
-/// `name <uuid> <text>` and `clear <uuid>`.
+/// `far <uuid>` to x 30000001, beyond the bounds of the world, `name <uuid> <text>` and
+/// `clear <uuid>`.
 struct Mover {
     name: String,
     commands: Vec<String>,
@@ -1025,6 +1027,13 @@ impl Plugin for Mover {
                     ..self.to.clone()
                 };
                 format!("queued {}", context.teleport(uuid, &nowhere))
+            }
+            "far" => {
+                let far = Location {
+                    x: 30_000_001.0,
+                    ..self.to.clone()
+                };
+                format!("queued {}", context.teleport(uuid, &far))
             }
             "name" => {
                 context.set_list_name(uuid, rest);

@@ -149,13 +149,20 @@ impl<'a> Context<'a> {
     /// Queues a teleport of the player with `uuid` to `location`, also into another dimension,
     /// which the mod runs if they are online, and answers whether it queued one.
     ///
-    /// A location with a coordinate or an angle that is no finite number is refused with a line
-    /// on the log, since the game cannot hold the player there. The place is taken as it is, so
-    /// a plugin that wants a safe one asks the game for it first.
+    /// A location with a coordinate or an angle that is no finite number, or whose block lies
+    /// outside the bounds of the world that the command tp takes, is refused with a line on the
+    /// log, since the game cannot hold the player there. The place is taken as it is, so a plugin
+    /// that wants a safe one asks the game for it first.
     pub fn teleport(&self, uuid: &str, location: &Location) -> bool {
         if !location.is_finite() {
             log(format_args!(
                 "a plugin asked to teleport {uuid} to {location}, which is no finite place, so the runtime refuses it"
+            ));
+            return false;
+        }
+        if !location.is_in_world() {
+            log(format_args!(
+                "a plugin asked to teleport {uuid} to {location}, which lies outside the bounds of the world, so the runtime refuses it"
             ));
             return false;
         }

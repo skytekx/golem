@@ -149,7 +149,7 @@ pub fn teleport(words: &[&str], context: &Context<'_>) -> Vec<String> {
     let [who, dimension, x, y, z] = words else {
         return vec![USAGE.to_owned()];
     };
-    let (Some(x), Some(y), Some(z)) = (coordinate(x), coordinate(y), coordinate(z)) else {
+    let (Some(x), Some(y), Some(z)) = (number(x), number(y), number(z)) else {
         return vec![format!("{USAGE}, with numbers for x, y and z")];
     };
     let game = context.game();
@@ -172,10 +172,15 @@ pub fn teleport(words: &[&str], context: &Context<'_>) -> Vec<String> {
         z,
         ..now
     };
+    if !target.is_in_world() {
+        return vec![format!(
+            "{USAGE}, with x and z from -30000000 to below 30000000 and y from -20000000 to below 20000000"
+        )];
+    }
     match game.safe_location(&target, SAFE_RADIUS) {
         Some(SafePlace::Found(place)) => {
             if context.teleport(&player.uuid, &place) {
-                vec![format!("Teleported {} to {place}.", player.name)]
+                vec![format!("Queued a teleport of {} to {place}.", player.name)]
             } else {
                 vec![format!("{place} is no place to teleport to.")]
             }
@@ -192,11 +197,9 @@ pub fn teleport(words: &[&str], context: &Context<'_>) -> Vec<String> {
     }
 }
 
-/// Answers a coordinate that the game can hold.
-fn coordinate(word: &str) -> Option<f64> {
-    word.parse::<f64>()
-        .ok()
-        .filter(|value| value.is_finite() && value.abs() <= 30_000_000.0)
+/// Answers a word as a finite number.
+fn number(word: &str) -> Option<f64> {
+    word.parse::<f64>().ok().filter(|value| value.is_finite())
 }
 
 /// Answers the lines of `/golem listname <name> [<text>]` and queues the name, or its clearing

@@ -272,17 +272,23 @@ separator, which no field may hold. The first field is the kind.
 
 A number travels as the shortest decimal that reads back as the same number, which `Display` of
 Rust writes and `Double.parseDouble` and `Float.parseFloat` of Java read. A teleport does what the
-command `tp` does: it keeps the chunk of the place loaded for a moment with the ticket
-`post_teleport`, wakes a sleeping player, lets a rider dismount, stops the fall and wraps the yaw
-to -180 to 180 and the pitch to -90 to 90, and `ServerPlayer.teleportTo` moves the player into
-another dimension. It takes the place as it is, so a plugin that wants a safe place asks the game
-for one first. A name of the player list is answered on `PlayerEvent.TabListNameFormat` after
+command `tp` does, step by step as `TeleportCommand.performTeleport` of Minecraft 1.20.1: it posts
+`EntityTeleportEvent.TeleportCommand` of Forge, so a mod may cancel it or move its target, skips a
+place outside the bounds of the world, `Level.isInSpawnableBounds`, which are x and z from
+-30000000 to below 30000000 and y from -20000000 to below 20000000, wraps the yaw to -180 to 180
+and the pitch to -90 to 90, and calls the `teleportTo` of `tp`, which keeps the chunk of the place
+loaded for a moment with the ticket `post_teleport`, lets a rider dismount, wakes a sleeping
+player, turns the head, keeps the camera of a spectator within one dimension and moves the player
+into another dimension, which a mod may cancel on `EntityTravelToDimensionEvent`. The fall stops
+when the player is in the dimension of the place afterwards. It takes the place as it is, so a
+plugin that wants a safe place asks the game for one first. A name of the player list is answered on `PlayerEvent.TabListNameFormat` after
 every other listener, so it wins over the name of another mod, and `refreshTabListName` sends it
 to every client. It holds until Golem clears it or the player leaves.
 
 The mod logs an action of an unknown kind, or of a known kind with the wrong number of fields,
 once and skips it, and so a teleport into a dimension the server does not have, once per
-dimension, and to a place that is no finite number. Each action runs on its own, so an action that
+dimension, to a place that is no finite number or lies outside the bounds of the world, and a
+teleport that a mod cancelled. Each action runs on its own, so an action that
 throws, such as a message to a UUID that does not parse, is logged and the next action runs. The
 host stops the server with the actions `command save-all flush` and `command stop`, so the stop
 path is the same as an operator's at the console.

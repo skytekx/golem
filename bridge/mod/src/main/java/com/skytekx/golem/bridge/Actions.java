@@ -7,7 +7,8 @@
  * okf/bridge.md specifies. An action of a kind the bridge does not know, or with the wrong number
  * of fields, comes from a Golem that is newer or broken. The bridge logs it once and skips it,
  * since the same fault would otherwise repeat on every tick. So does a teleport into a dimension
- * the server does not have or to a place that is no finite number.
+ * the server does not have, to a place that is no finite number or lies outside the bounds of the
+ * world, and a teleport that a mod cancelled.
  */
 package com.skytekx.golem.bridge;
 
@@ -23,9 +24,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.TicketType;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraftforge.event.ForgeEventFactory;
+import net.minecraftforge.event.entity.EntityTeleportEvent;
 
 /** Runs the actions that the natives of Golem answer from Host.drain. */
 final class Actions {
@@ -101,9 +103,10 @@ final class Actions {
 	}
 
 	/**
-	 * Teleports a player, if they are online, as the command tp does: the chunk of the place
-	 * stays loaded for a moment, a rider dismounts, a sleeper wakes, the fall stops and the place
-	 * may lie in another dimension.
+	 * Teleports a player, if they are online, as the command tp does: mods hear of it and may
+	 * cancel it or move it, a place outside the bounds of the world is refused, the chunk of the
+	 * place stays loaded for a moment, a rider dismounts, a sleeper wakes, the fall stops and the
+	 * place may lie in another dimension.
 	 */
 	private void teleport(MinecraftServer server, String[] fields) {
 		if (!fits(fields, 8)) {
@@ -130,19 +133,34 @@ final class Actions {
 		}
 	}
 
-	private static void move(ServerPlayer player, ServerLevel level, double x, double y, double z,
+	/**
+	 * Moves the player as TeleportCommand.performTeleport of Minecraft 1.20.1 does: the event of
+	 * Forge first, which a mod may cancel or whose target it may change, then the bounds of the
+	 * world, then the teleportTo that keeps the chunk loaded with the ticket post_teleport, lets
+	 * a rider dismount, wakes a sleeper and keeps the camera of a spectator within one level.
+	 */
+	private void move(ServerPlayer player, ServerLevel level, double x, double y, double z,
 			float yaw, float pitch) {
-		ChunkPos chunk = new ChunkPos(BlockPos.containing(x, y, z));
-		level.getChunkSource().addRegionTicket(TicketType.POST_TELEPORT, chunk, 1,
-				player.getId());
-		if (player.isSleeping()) {
-			player.stopSleepInBed(true, true);
+		EntityTeleportEvent.TeleportCommand event =
+				ForgeEventFactory.onEntityTeleportCommand(player, x, y, z);
+		if (event.isCanceled()) {
+			skip("teleport/cancelled", "A mod cancelled a teleport that Golem queued");
+			return;
+		}
+		double targetX = event.getTargetX();
+		double targetY = event.getTargetY();
+		double targetZ = event.getTargetZ();
+		if (!finite(targetX, targetY, targetZ, yaw, pitch)
+				|| !Level.isInSpawnableBounds(BlockPos.containing(targetX, targetY, targetZ))) {
+			skip("teleport/bounds", "Golem queued a teleport to a place outside the bounds of the"
+					+ " world, so the bridge skips it");
+			return;
 		}
 		float facing = Mth.wrapDegrees(yaw);
-		player.teleportTo(level, x, y, z, facing, Mth.clamp(Mth.wrapDegrees(pitch), -90.0F,
-				90.0F));
-		player.setYHeadRot(facing);
-		if (!player.isFallFlying()) {
+		float looking = Mth.clamp(Mth.wrapDegrees(pitch), -90.0F, 90.0F);
+		player.teleportTo(level, targetX, targetY, targetZ, Set.of(), facing, looking);
+		// A mod may cancel the travel into another dimension, and then the player stays.
+		if (player.serverLevel() == level && !player.isFallFlying()) {
 			player.setDeltaMovement(player.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D));
 			player.setOnGround(true);
 		}

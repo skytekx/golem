@@ -163,7 +163,7 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `send_message(uuid, text)` | `message`, a system message to one player if they are online |
 | `broadcast(text)` | `broadcast`, a system message to every player and the console |
 | `run_command(command)` | `command`, run as the console, with a leading slash dropped |
-| `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number, which is logged and refused |
+| `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number or the block lies outside the bounds of the world that `tp` takes, which is logged and refused, and answers whether it queued one |
 | `set_list_name(uuid, name)` | `listName`, the name of the player in the player list, cleared by an empty name |
 | `clear_list_name(uuid)` | `listName` with an empty name, which clears it |
 | `actions()` | The queue itself, for what the helpers do not cover |
