@@ -27,10 +27,11 @@ Three of the columns work as follows.
   API](api.md) and Layer is [Bukkit layer](bukkit-layer.md). SRV is the server repository
   `skytekx/skytekx3-1201-server`, read at `3fa5ae68` and, where a row says master, at its master
   `1b9fad9b8f3f`. Aosabi is `netsnek/aosabi` at `6e507dc`, its release 0.1.0, and "the branch" is
-  its branch `claude/wasm-webgpu-rust-rewrite-8o2855` at `4361ee4`. A commit "on port/wiring" or "on
-  port/bridge" lives in the git bundle `handover/port.bundle` and not yet on a pushed branch. This
-  page as the source marks a feature that no other page, issue or file names yet, and "a decision
-  open with the owner" marks a feature whose default stands until the owner rules.
+  its branch `claude/wasm-webgpu-rust-rewrite-8o2855` at `4361ee4`. A commit "on port/bridge" lives
+  in the git bundle `handover/port.bundle` and not yet on a pushed branch, while the work of its
+  branch `port/wiring`, the store and the permissions in `golem run`, is built. This page as the
+  source marks a feature that no other page, issue or file names yet, and "a decision open with
+  the owner" marks a feature whose default stands until the owner rules.
 - The column State holds one of ten values. A Built feature is on the branch `master`, a Handover
   feature on a branch of the bundle, and a Part feature built in part. A Specified feature
   is written in a spec of a port or in [Store](store.md), a Designed one in [Plugin API](api.md),
