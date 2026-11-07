@@ -41,7 +41,7 @@ nodes = ["-essentials.suicide"]
 
 | Table | Key | Type | Left out | What it is |
 | --- | --- | --- | --- | --- |
-| `groups.<name>` | `weight` | Integer of 32 bits | 0 | The rank of the group, a higher weight first |
+| `groups.<name>` | `weight` | Integer of 32 bits | 0 | The rank of the group, a higher weight first. At 0 a group that a player holds directly shares the rank of `default`, see [where Golem differs](#where-golem-differs-from-luckperms) |
 | `groups.<name>` | `inherits` | List of group names | Empty | The groups whose nodes the group takes on |
 | `groups.<name>` | `nodes` | List of nodes | Empty | What the group grants and denies |
 | `players.<uuid>` | `groups` | List of group names | Empty | The groups of the player besides the default group |
@@ -127,6 +127,15 @@ calculator (`BukkitCalculatorFactory.java` lines 59 and 70 on the master branch 
 wildcard in every source. Golem asks the sources one by one, so a wildcard deny of a player takes
 away a node that a group grants by name, and a group of a higher rank decides before a lower one.
 The section on quirks below has the case.
+
+A group without a weight has the weight 0 of the group `default`, and a player holds both at depth
+1, so they share a rank, and by rule 7 a deny of `default` beats a grant of that group, also a grant
+by name against a wildcard deny. With `-worldedit.*` in `default` and `worldedit.wand` in a group
+`builder` without a weight, a player of `builder` is denied `worldedit.wand` with the reason
+`Group default denies worldedit.* and group builder of the same rank grants worldedit.wand, and the
+deny wins`. LuckPerms grants the node, since it finds the node itself before any wildcard. A group
+that must win over a deny of `default` needs a weight above 0, also when it comes from a LuckPerms
+export without a node `weight.<n>`.
 
 On Bukkit, LuckPerms also answers a node that nothing names with the default of the plugin and,
 for an operator, with true (lines 80 to 85 of the same file). The default of the plugin comes
