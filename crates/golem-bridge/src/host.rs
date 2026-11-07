@@ -67,6 +67,7 @@ use crate::{
     Action,
     Actions,
     Event,
+    Flight,
     Game,
     Handler,
     Heights,
@@ -81,6 +82,7 @@ use crate::{
     SafePlace,
     Sender,
     Spawn,
+    Stack,
     TeleportFailure,
     Throttle,
     TickStats,
@@ -258,6 +260,18 @@ impl Game for ServerThread<'_> {
     fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
         Self::allowed("respawnPlace")
             .then(|| self.0.respawn_place(uuid))
+            .flatten()
+    }
+
+    fn flight(&self, uuid: &str) -> Option<Flight> {
+        Self::allowed("flight")
+            .then(|| self.0.flight(uuid))
+            .flatten()
+    }
+
+    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
+        Self::allowed("inventory")
+            .then(|| self.0.inventory(uuid))
             .flatten()
     }
 

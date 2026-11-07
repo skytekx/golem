@@ -29,6 +29,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.server.ServerLifecycleHooks;
@@ -133,6 +135,41 @@ final class GameQueries implements Game {
 		return ofPlayer("Game.respawnPlace", uuid, player -> {
 			return RespawnPlaces.find(player.server, player);
 		});
+	}
+
+	@Override
+	public String flight(String uuid) {
+		return ofPlayer("Game.flight", uuid, player -> join(
+				Boolean.toString(player.getAbilities().mayfly),
+				Boolean.toString(player.getAbilities().flying)));
+	}
+
+	@Override
+	public String[] inventory(String uuid) {
+		return guard.ask("Game.inventory", () -> {
+			MinecraftServer server = server();
+			UUID id = uuid(uuid);
+			ServerPlayer player = server == null || id == null ? null
+					: server.getPlayerList().getPlayer(id);
+			if (player == null) {
+				return null;
+			}
+			Inventory inventory = player.getInventory();
+			List<String> stacks = new ArrayList<>();
+			for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+				ItemStack stack = inventory.getItem(slot);
+				ResourceLocation item = ForgeRegistries.ITEMS.getKey(stack.getItem());
+				if (!stack.isEmpty() && item != null) {
+					// A command or a mod may set a damage below 0, which the game holds at 0 when
+					// it sets one itself.
+					stacks.add(join(Integer.toString(slot), item.toString(),
+							Integer.toString(stack.getCount()),
+							Integer.toString(Math.max(0, stack.getDamageValue())),
+							Boolean.toString(stack.getItem() instanceof BlockItem)));
+				}
+			}
+			return stacks.toArray(new String[0]);
+		}, null);
 	}
 
 	@Override

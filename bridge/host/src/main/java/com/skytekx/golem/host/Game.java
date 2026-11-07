@@ -79,12 +79,30 @@ public interface Game {
 	String mainHand(String uuid);
 
 	/**
+	 * Answers every stack of the inventory of a player, each as its slot, the registry id of the
+	 * item, the count, the damage, 0 at least, and whether the item places a block, in the order
+	 * of the slots, the armor and the off hand included, empty slots left out.
+	 *
+	 * @param uuid the UUID of the player in its usual form with dashes
+	 * @return one answer per stack, or null when the player is not online
+	 */
+	String[] inventory(String uuid);
+
+	/**
 	 * Answers the heights of a dimension: the lowest y of a block and the y above the highest.
 	 *
 	 * @param dimension the id of the dimension, such as minecraft:overworld
 	 * @return the heights, or null when the server has no such dimension
 	 */
 	String heights(String dimension);
+
+	/**
+	 * Answers whether a player may fly and whether they fly now.
+	 *
+	 * @param uuid the UUID of the player in its usual form with dashes
+	 * @return the two fields, true or false, or null when the player is not online
+	 */
+	String flight(String uuid);
 
 	/**
 	 * Answers the nearest place near a target where a player stands safely: x, y and z of the

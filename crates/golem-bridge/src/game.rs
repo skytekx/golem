@@ -114,6 +114,31 @@ pub enum RespawnPlace {
     Unloaded,
 }
 
+/// Whether a player may fly and flies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Flight {
+    /// Whether the player may fly, as in creative, in spectator or by a mod.
+    pub allowed: bool,
+    /// Whether the player flies now.
+    pub flying: bool,
+}
+
+/// A stack of items in the inventory of a player.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Stack {
+    /// The slot: 0 to 8 the hotbar, 9 to 35 the rest of the inventory, 36 to 39 the armor from
+    /// the boots to the helmet and 40 the off hand, as the game and Bukkit number them.
+    pub slot: u32,
+    /// The registry id of the item, such as minecraft:diamond.
+    pub id: String,
+    /// How many items the stack holds.
+    pub count: u32,
+    /// The damage of the item, 0 for an item without durability.
+    pub damage: u32,
+    /// Whether the item places a block.
+    pub block: bool,
+}
+
 /// The shared spawn of a dimension.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spawn {
@@ -254,6 +279,20 @@ pub trait Game {
         None
     }
 
+    /// Answers whether the player with `uuid` may fly and flies. The default answers none.
+    fn flight(&self, uuid: &str) -> Option<Flight> {
+        let _ = uuid;
+        None
+    }
+
+    /// Answers every stack of the inventory of the player with `uuid`, the armor and the off
+    /// hand included, in the order of their slots, empty slots left out. The default answers
+    /// none.
+    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
+        let _ = uuid;
+        None
+    }
+
     /// Answers the player online whose name or UUID is `who`, in any case, or `Some(None)` when
     /// nobody online has it.
     fn player(&self, who: &str) -> Option<Option<OnlinePlayer>> {
@@ -315,6 +354,7 @@ pub mod wire {
 
     use crate::{
         BlockLocation,
+        Flight,
         GameMode,
         Heights,
         Item,
@@ -324,7 +364,8 @@ pub mod wire {
         RespawnPoint,
         SEPARATOR,
         SafePlace,
-        Spawn, //
+        Spawn,
+        Stack, //
     };
 
     /// The answer of `safeLocation` when the search met a chunk that is not loaded, and of
@@ -455,6 +496,31 @@ pub mod wire {
             yaw: angle(yaw)?,
             pitch: 0.0,
         }))
+    }
+
+    /// Reads the answer of `flight`.
+    pub fn flight(answer: &str) -> Option<Flight> {
+        let [allowed, flying] = fields(answer)[..] else {
+            return None;
+        };
+        Some(Flight {
+            allowed: boolean(allowed)?,
+            flying: boolean(flying)?,
+        })
+    }
+
+    /// Reads one answer of `inventory`.
+    pub fn stack(answer: &str) -> Option<Stack> {
+        let [slot, id, count, damage, block] = fields(answer)[..] else {
+            return None;
+        };
+        Some(Stack {
+            slot: slot.parse().ok()?,
+            id: id.to_owned(),
+            count: count.parse().ok()?,
+            damage: damage.parse().ok()?,
+            block: boolean(block)?,
+        })
     }
 
     /// Reads the answer of `spawn` for `dimension`.

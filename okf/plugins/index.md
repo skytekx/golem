@@ -268,6 +268,8 @@ outer one.
 | `respawn_place(uuid)` | The `RespawnPlace` where the player would respawn now: `At` with the place and the yaw, `Nowhere` for the world spawn, or `Unloaded` when a chunk around the point is not loaded |
 | `spawn(dimension)` | The shared spawn of a dimension as a `Spawn`, its block and angle |
 | `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
+| `inventory(uuid)` | Every `Stack` of the inventory, the armor and the off hand included, with its slot, id, count, damage and whether it places a block |
+| `flight(uuid)` | The `Flight` of the player: whether they may fly and fly now |
 | `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |
 | `safe_location(target, radius)` | The `SafePlace` of the search within the radius, at most 8: `Found` with the nearest safe place, with the dimension and the rotation of the target, `Nowhere`, or `Unloaded` when a chunk it must read is not loaded, since a question loads no chunk |
 

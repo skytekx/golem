@@ -30,6 +30,7 @@ use jni::{
 };
 
 use crate::{
+    Flight,
     Game,
     Heights,
     Item,
@@ -39,6 +40,7 @@ use crate::{
     RespawnPoint,
     SafePlace,
     Spawn,
+    Stack,
     Throttle,
     game::wire,
     log, //
@@ -79,6 +81,39 @@ impl<'a, 'local> JniGame<'a, 'local> {
                 )?
                 .l()?;
             text(env, &JString::from(answer))
+        })
+        .flatten()
+    }
+
+    /// Asks the method `method`, which takes no string or one and answers `String[]`, and
+    /// answers its strings, or `None` for null or a failure.
+    fn strings(&self, method: &'static str, value: Option<&str>) -> Option<Vec<String>> {
+        self.ask(method, |env, game| {
+            let array = match value {
+                Some(value) => {
+                    let value = env.new_string(value)?;
+                    env.call_method(
+                        game,
+                        method,
+                        "(Ljava/lang/String;)[Ljava/lang/String;",
+                        &[JValue::Object(&value)],
+                    )?
+                }
+                None => env.call_method(game, method, "()[Ljava/lang/String;", &[])?,
+            }
+            .l()?;
+            if array.is_null() {
+                return Ok(None);
+            }
+            let array = JObjectArray::from(array);
+            let length = env.get_array_length(&array)?;
+            let mut lines = Vec::new();
+            for index in 0..length {
+                let element = JString::from(env.get_object_array_element(&array, index)?);
+                lines.extend(text(env, &element)?);
+                env.delete_local_ref(element)?;
+            }
+            Ok(Some(lines))
         })
         .flatten()
     }
@@ -192,23 +227,7 @@ fn unread<T>(method: &'static str, answer: &str) -> Option<T> {
 
 impl Game for JniGame<'_, '_> {
     fn players(&self) -> Option<Vec<OnlinePlayer>> {
-        let lines = self.ask("players", |env, game| {
-            let array = env
-                .call_method(game, "players", "()[Ljava/lang/String;", &[])?
-                .l()?;
-            if array.is_null() {
-                return Ok(None);
-            }
-            let array = JObjectArray::from(array);
-            let length = env.get_array_length(&array)?;
-            let mut lines = Vec::new();
-            for index in 0..length {
-                let element = JString::from(env.get_object_array_element(&array, index)?);
-                lines.extend(text(env, &element)?);
-                env.delete_local_ref(element)?;
-            }
-            Ok(Some(lines))
-        })??;
+        let lines = self.strings("players", None)?;
         Some(
             lines
                 .iter()
@@ -230,6 +249,21 @@ impl Game for JniGame<'_, '_> {
     fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
         let answer = self.string("respawnPlace", uuid)?;
         wire::respawn_place(&answer).or_else(|| unread("respawnPlace", &answer))
+    }
+
+    fn flight(&self, uuid: &str) -> Option<Flight> {
+        let answer = self.string("flight", uuid)?;
+        wire::flight(&answer).or_else(|| unread("flight", &answer))
+    }
+
+    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
+        let lines = self.strings("inventory", Some(uuid))?;
+        Some(
+            lines
+                .iter()
+                .filter_map(|line| wire::stack(line).or_else(|| unread("inventory", line)))
+                .collect(),
+        )
     }
 
     fn spawn(&self, dimension: &str) -> Option<Spawn> {

@@ -538,3 +538,9 @@ Oldest first. Times are UTC.
   build go together. `04_plugins` holds both answers of a scripted game and their wire form,
   `05_bridge_build` the point of `/spawnpoint` and its place on a stock Forge server, and the game
   of the fake server of `07_forge_boot` answers the new question. See [Bridge](bridge.md#the-game).
+- The game answers the inventory and the flight of a player. `Game::inventory` answers every stack
+  with its slot, the registry id of its item, its count, its damage, held at 0 at least, and whether
+  the item places a block, the armor and the off hand included, and `Game::flight` whether the
+  player may fly and flies now. `04_plugins` holds both answers of a scripted game and their wire
+  form, and `05_bridge_build` the stacks that the console gave a player, one with a damage below 0
+  among them, and their flight on a stock Forge server. See [Bridge](bridge.md#the-game).

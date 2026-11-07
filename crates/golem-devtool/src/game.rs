@@ -18,6 +18,8 @@
 //!                "respawn": {"dimension": "...", "x": 1, "y": 64, "z": 2, "angle": 0,
 //!                            "forced": true},
 //!                "respawnPlace": {"dimension": "...", "x": 1.5, "y": 64.1, "z": 2.5, "yaw": 0},
+//!                "flight": {"allowed": true, "flying": false},
+//!                "inventory": [{"slot": 0, "id": "minecraft:stone", "count": 2, "block": true}],
 //!                "mainHand": null}],
 //!   "dimensions": [{"id": "minecraft:overworld", "spawn": {"x": 0, "y": 64, "z": 0, "angle": 0},
 //!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5}}]
@@ -29,17 +31,19 @@
 //! does not read, and a UUID matches in any case, as `UUID.fromString` of Java reads it. A
 //! player without `respawn` has none and one without `mainHand` holds nothing, one without
 //! `respawnPlace` respawns at the world spawn and `"respawnPlace": "unloaded"` answers that a
-//! chunk around the point is not loaded, and `"players": null` makes the game answer none for
-//! the players, as a game that cannot answer does. A dimension with `safe` answers that place
-//! to a search whose radius, held to 8 as the natives hold it, reaches the block of the place
-//! from the block of the target, one with `"safe": "unloaded"` answers that a chunk the search
-//! must read is not loaded, and one without answers that there is none. A target that is no
-//! finite number gets no answer, as from the natives. A script without `game` asks a game that
-//! answers nothing.
+//! chunk around the point is not loaded, one without `flight` may not fly and one without
+//! `inventory` holds nothing, and `"players": null` makes the game answer none for the players,
+//! as a game that cannot answer does. A dimension with `safe` answers that place to a search
+//! whose radius, held to 8 as the natives hold it, reaches the block of the place from the
+//! block of the target, one with `"safe": "unloaded"` answers that a chunk the search must read
+//! is not loaded, and one without answers that there is none. A target that is no finite number
+//! gets no answer, as from the natives. A script without `game` asks a game that answers
+//! nothing.
 
 use golem_bridge::{
     BlockLocation,
     Event,
+    Flight,
     Game,
     GameMode,
     Heights,
@@ -51,6 +55,7 @@ use golem_bridge::{
     SafePlace,
     Sender,
     Spawn,
+    Stack,
     Verdict,
     wire, //
 };
@@ -150,6 +155,10 @@ struct PlayerSpec {
     location: LocationSpec,
     respawn: Option<RespawnSpec>,
     respawn_place: Option<PlaceOrWord>,
+    #[serde(default)]
+    flight: FlightSpec,
+    #[serde(default)]
+    inventory: Vec<StackSpec>,
     main_hand: Option<ItemSpec>,
 }
 
@@ -182,6 +191,29 @@ enum PlaceOrWord {
     },
     /// The word unloaded.
     Word(Unloaded),
+}
+
+/// Whether a scripted player may fly and flies.
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FlightSpec {
+    #[serde(default)]
+    allowed: bool,
+    #[serde(default)]
+    flying: bool,
+}
+
+/// A stack of the inventory of a scripted player.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StackSpec {
+    slot: u32,
+    id: String,
+    count: u32,
+    #[serde(default)]
+    damage: u32,
+    #[serde(default)]
+    block: bool,
 }
 
 /// The players of a script that names none: nobody is online.
@@ -336,6 +368,31 @@ impl Game for ScriptedGame {
         })
     }
 
+    fn flight(&self, uuid: &str) -> Option<Flight> {
+        let flight = self.of(uuid)?.flight;
+        Some(Flight {
+            allowed: flight.allowed,
+            flying: flight.flying,
+        })
+    }
+
+    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
+        let mut stacks: Vec<Stack> = self
+            .of(uuid)?
+            .inventory
+            .iter()
+            .map(|stack| Stack {
+                slot: stack.slot,
+                id: stack.id.clone(),
+                count: stack.count,
+                damage: stack.damage,
+                block: stack.block,
+            })
+            .collect();
+        stacks.sort_by_key(|stack| stack.slot);
+        Some(stacks)
+    }
+
     fn spawn(&self, dimension: &str) -> Option<Spawn> {
         let spawn = &self.dimension(dimension)?.spawn;
         Some(Spawn {
@@ -431,6 +488,17 @@ fn place_json(answer: Option<RespawnPlace>) -> Value {
     }
 }
 
+/// Answers a flight as JSON.
+fn flight_json(flight: Flight) -> Value {
+    json!({"allowed": flight.allowed, "flying": flight.flying})
+}
+
+/// Answers a stack as JSON.
+fn stack_json(stack: &Stack) -> Value {
+    json!({"slot": stack.slot, "id": stack.id, "count": stack.count, "damage": stack.damage,
+           "block": stack.block})
+}
+
 /// Answers a spawn as JSON.
 fn spawn_json(spawn: &Spawn) -> Value {
     let mut value = block_json(&spawn.block);
@@ -476,9 +544,9 @@ fn maybe<T>(answer: Option<Option<T>>, json: impl Fn(&T) -> Value) -> Value {
 ///
 /// A command answers one line, the JSON of the answer: `players`, `player <who>`,
 /// `location <uuid>`, `respawn <uuid>`, `respawnplace <uuid>`, `spawn <dimension>`,
-/// `hand <uuid>`, `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an
-/// event of `on` it asks for the players and broadcasts how many it got, or that the game did
-/// not answer.
+/// `hand <uuid>`, `inventory <uuid>`, `flight <uuid>`, `heights <dimension>` and
+/// `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it asks for the players and
+/// broadcasts how many it got, or that the game did not answer.
 pub struct Ask {
     pub name: String,
     pub commands: Vec<String>,
@@ -500,6 +568,10 @@ impl Ask {
                 .map_or(Value::Null, location_json),
             ["respawn", uuid] => maybe(game.respawn(uuid), point_json),
             ["respawnplace", uuid] => place_json(game.respawn_place(uuid)),
+            ["flight", uuid] => game.flight(uuid).map_or(Value::Null, flight_json),
+            ["inventory", uuid] => game.inventory(uuid).map_or(Value::Null, |stacks| {
+                json!(stacks.iter().map(stack_json).collect::<Vec<_>>())
+            }),
             ["spawn", dimension] => game
                 .spawn(dimension)
                 .as_ref()
@@ -598,6 +670,8 @@ fn read_wire(entry: WireEntry) -> Result<Value, String> {
             .map_or(Value::Null, location_json),
         "respawn" => maybe(wire::respawn(answer), point_json),
         "respawnPlace" => place_json(wire::respawn_place(answer)),
+        "flight" => wire::flight(answer).map_or(Value::Null, flight_json),
+        "inventory" => wire::stack(answer).as_ref().map_or(Value::Null, stack_json),
         "spawn" => {
             let dimension = entry.dimension.as_deref().unwrap_or("minecraft:overworld");
             wire::spawn(dimension, answer)

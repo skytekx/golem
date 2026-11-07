@@ -55,6 +55,7 @@ pub use crate::{
     },
     game::{
         BlockLocation,
+        Flight,
         Game,
         GameMode,
         Heights,
@@ -66,6 +67,7 @@ pub use crate::{
         RespawnPoint,
         SafePlace,
         Spawn,
+        Stack,
         wire, //
     },
     text::{
