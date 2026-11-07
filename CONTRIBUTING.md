@@ -100,9 +100,9 @@ another branch or a tag the commits that `main` does not hold.
 The code follows the coding style of the Linux kernel, as Aosabi writes it down in its
 [coding style](https://github.com/netsnek/aosabi/blob/main/Documentation/coding-style.md).
 
-- Every file opens with its SPDX lines, see
-  [Documentation/licensing.md](Documentation/licensing.md), and a source file then with a block
-  comment that says what the file is.
+- The SPDX lines of a file stand where [Documentation/licensing.md](Documentation/licensing.md)
+  places them. In a source file they stand at its head, and a block comment that says what the file
+  is follows them.
 - Rust is formatted by `rustfmt` and passes `clippy` with warnings as errors on every commit.
 - Every `unsafe` block, which the JNI host needs, carries a `// SAFETY:` comment that says why it is
   sound, as the kernel requires. Unsafe code lives in the crates that talk to the JVM and nowhere

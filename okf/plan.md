@@ -235,8 +235,8 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 
 ### Code
 
-- Every file opens with its SPDX lines where
-  [Licensing](../Documentation/licensing.md#3-the-spdx-lines) places them, see [License](#license).
+- The SPDX lines of a file stand where [Licensing](../Documentation/licensing.md#3-the-spdx-lines)
+  places them, in a source file at its head, see [License](#license).
 - Rust is formatted with `rustfmt` and passes `clippy` with warnings as errors, as the Rust code of
   the kernel does. Every `unsafe` block, which the JNI host needs, carries a `// SAFETY:` comment
   that says why it is sound, as the kernel requires.

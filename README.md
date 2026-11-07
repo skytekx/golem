@@ -21,10 +21,11 @@ Golem is licensed under the GNU Affero General Public License 3.0 only, `AGPL-3.
 text is in [LICENSE](LICENSE). The ports of Bukkit plugins that [ports.toml](ports.toml) lists
 keep the licenses of the plugins they port, `MIT` for the port of LuckPerms and `GPL-3.0-or-later`
 for the ports of EssentialsX and EssentialsXSpawn. Whoever runs a changed Golem for players must
-offer those players its source. Every file states its license in an SPDX tag at its head or in a
-`.license` file beside it, and [Documentation/licensing.md](Documentation/licensing.md) explains
-these rules and their exceptions, the texts under [LICENSES/](LICENSES/) and the work of others
-that [NOTICE](NOTICE) names.
+offer those players its source. Every file but [NOTICE](NOTICE) and the license texts states its
+license in an SPDX tag at its head or in a `.license` file beside it. NOTICE takes its tags from
+[REUSE.toml](REUSE.toml), and `LICENSE` and the texts under [LICENSES/](LICENSES/) carry none.
+[Documentation/licensing.md](Documentation/licensing.md) explains these rules, the license texts
+and the work of others that NOTICE names.
 
 ## Tests
 
