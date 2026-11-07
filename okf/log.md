@@ -21,9 +21,10 @@ Oldest first. Times are UTC.
   the hooks under `tools/hooks/`, the notebook `02_commit_lint` and CONTRIBUTING.md. The history
   of the branch was rewritten into that form.
 - A spike booted Forge 47.4.18 on Temurin 17.0.21 through the JNI invocation API inside a Rust
-  process, reached `Done` in 26 s, stopped it through the server thread and saw `DestroyJavaVM`
-  return 0. A second spike proved that a Forge mod calls a native method of a class on the module
-  path that the host registered. See [Bridge](bridge.md).
+  process in the cloud container of the session. The server logged `Done` after 26 s by its own
+  count, and the spike stopped it through the server thread and saw `DestroyJavaVM` return 0. A
+  second spike proved that a Forge mod calls a native method of a class on the module path that the
+  host registered. See [Bridge](bridge.md).
 - The Cargo workspace of the first milestone went in, with the crates `golem`, `golem-jvm`,
   `golem-bridge`, `golem-plugin`, `golem-permissions` and `golem-devtool`.
 - Four agents built the parts of the first milestone in parallel, each in a work tree of its own,
@@ -149,3 +150,86 @@ Oldest first. Times are UTC.
   and README.md to the prose rules of CONTRIBUTING.md and checks that the index links every page
   and that [Testing](../Documentation/testing.md) names every notebook. CI runs it in the job of
   the licenses, and `10_docs_lint` holds it to each of its seven rules.
+- A bug hunt of 2026-11-06 went through the tree in five areas: the Rust host, the bridge and the
+  plugin runtime, the licensing and the permissions, the tooling with CI, the hooks and
+  `tests/fetch.py`, and the docs. Finders on Opus and on Fable searched each area, skeptics of both
+  models tried to refute each finding, and a judge on Opus ruled on each area. The judges confirmed
+  66 findings and refuted 27, and 58 remained once the findings that named the same defect were
+  merged. The conflict of rustup on `bin/cargo-fmt` that failed the notebooks job of CI joined them
+  as the 59th. Fixers on Opus fixed each area on top of `b0f0d8a`, each fix with its notebook case
+  where it has a behaviour, checks on Fable held the fixes of each area to their findings, and the
+  points that the checks raised were fixed or ruled on before the merge. What stays open, among it
+  the decisions that the fixers left to the owner, stands in [Open items](open-items.md). The fixes,
+  by area:
+  - The Rust host: a thread dump on `SIGQUIT` frees its local references of the JNI, and the signal
+    thread attaches under its name `golem-signals`. `System.exit` runs on a thread of its own,
+    `golem-exit`, so a dump and a later signal are still served while the shutdown hooks save the
+    worlds. A signal queues the stop only while the server ticks, from its first tick until
+    `ServerStoppedEvent`, and else ends the JVM through `System.exit` with 128 plus the signal, as
+    java does, so a signal stops the server at every stage. A `SIGQUIT` of a tool whose attach
+    socket is gone logs one line instead of a dump. golem reads its command line as strings of the
+    system, so a command or an argument of `main` that is not UTF-8 is an error instead of a panic,
+    refuses a host jar that is no file before the JVM starts, says that the JVM could not start when
+    HotSpot aborts inside `JNI_CreateJavaVM`, and runs the Forge version that `run.sh` names when
+    the server holds several. `build.rs` names HEAD only in the checkout of Golem itself, with
+    `-dirty` when the files of the binary differ from it, and `/golem source` links the repository
+    alone for such a commit. The page of the JVM host states the counts of notebook 03, whose
+    verdict reads them off the page, and names an argument file that is not UTF-8 among the
+    differences on purpose, and the answers of the agents on a signal, on `SIGQUIT` and on the
+    commit of a build follow the page. Notebooks 03 and 07 hold each fix, and notebook 07 sees a
+    stop that saves the worlds and holds a stop that waits on a hung server thread to java.
+  - The bridge and the plugin runtime: a plugin command named like a command of the game or of a mod
+    takes the plain name, and the command it replaces stays as `minecraft:<name>`, but for
+    `setblock`, `summon`, `testforblock` and `tellraw`, which keep the command of the game as
+    `commands.replace-commands` of Spigot does. The lines that the natives and the plugins log while
+    a native runs reach `logs/latest.log` through the new method `log` of `Game`, with the logger
+    `golem`. The runtime logs the panics of a plugin at powers of ten, behind a panic hook that
+    stays silent while a call of a plugin runs. A command that Golem queues informs no operator, the
+    MSPT holds the work of the bridge at the end of a tick one tick late, an address in a line of
+    Golem opens on a click, and `respawn` says whether the player left the End, which changes the
+    descriptor of the native and `Event::Respawn`. `/golem` names an unknown subcommand as it was
+    typed, and the docs say what `golem source` prints and on which thread each native runs.
+    Notebooks 04, 05 and 07 hold each fix, notebook 04 checks a line that the runtime writes,
+    notebook 07 runs commands of golem in a function, and notebook 08 reads the lines of a clean
+    boot where they stand now.
+  - The licensing and the permissions: rule 9 of the license lint holds every port to files under
+    its path, a `Cargo.toml` with the name of the port, the text of its license and a section of
+    NOTICE with its Version, License and Files lines, and rule 6 holds NOTICE to its annotation in
+    `REUSE.toml` with the precedence `override`. Outside git the lint skips what `.gitignore` names,
+    and notebook 01 judges a copy of the tree. `LICENSES/MIT.txt` is the generic text that REUSE
+    downloads, `ports.toml` pins LuckPerms 5.5.71 to the commit `8fa4c244927c` and names
+    EssentialsXSpawn 2.22.0, and licensing.md and NOTICE describe the ports in every section that
+    they change and say that golem links no port yet. The README, the plan, licensing.md and the
+    page of the plugins name the GraphQL API on Aosabi, its subscriptions, the native code of world
+    generation and the offer of the source in the server list as work to come, and section 7 of
+    licensing.md says what cargo deny checks in CI. The group admin of the seed denies 22 of the
+    nodes that EssentialsX marks `default: false`, which an operator of the live server never held,
+    `Permissions::value` allocates nothing, which notebook 06 counts, and the page of the
+    permissions says that a group without a weight shares the rank of `default`. Notebooks 01 and 06
+    hold each fix, and notebook 09 now reads the group admin from the seed, as it reads the group
+    `default`, so it holds the store to the seed with those denies.
+  - The tooling: the commit lint judges a commit of a range as git stored it and the file of the
+    hook as git will store it, with the comment character of git, its mode of cleanup and the cut
+    line only where git cuts, and the hook leaves out a merge. The lint and Commitizen refuse the
+    subjects `fixup!`, `squash!`, `amend!` and `Revert` that git writes, rule 4 spares only the
+    trailers of the last paragraph, `Co-authored-by` passes as GitHub spells it, and so does a
+    summary of one character. `cz bump` raises the major version for a breaking change, and
+    `cz commit` takes the body and the trailers on several lines. The hook and CONTRIBUTING.md say
+    that `git revert` and `git cherry-pick` skip the hook, and post-commit retries only a push that
+    failed on the network and gives a push that a rule of origin refuses advice of its own. The job
+    `commits` of CI takes its range from the event, so CI checks the commits of a push to main and
+    no longer fails after a merge. Every job that runs cargo installs the toolchain of
+    `rust-toolchain.toml` with its components in one step before its first cargo, so no proxy of
+    rustup adds a component on the fly, where two of them raced on `bin/cargo-fmt` and failed runs
+    47, 60 and 67, and the new notebook `11_toolchain` holds every such job to that step.
+    `tests/fetch.py` installs Forge and Gradle beside their place and renames them once they are
+    whole, its docstring says that it moves the Java home of macOS, and the comment of
+    `tests/pyproject.toml` and the page on testing say that only the eight named packages are
+    pinned. Notebooks 02, 08 and 11 hold each fix.
+  - The docs: the README and the plan name the ports and their licenses where they state the license
+    of Golem, and name the files whose tags stand in `REUSE.toml` or nowhere, and the plan and
+    section 4 of CONTRIBUTING.md leave the place of the SPDX tags to licensing.md. The decisions say
+    that the commit lint checks the form of a sign off and not whose it is, the pages of the bridge,
+    the plugins and the permissions say that no plugin checks a node of `golem-permissions` yet, and
+    section 9 of CONTRIBUTING.md names the two addresses of others that a license or a rule
+    requires. Notebook 10 holds each of these pages to the tree.
