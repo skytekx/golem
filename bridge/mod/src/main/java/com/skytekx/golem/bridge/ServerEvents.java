@@ -43,6 +43,7 @@ public final class ServerEvents {
 	@SubscribeEvent
 	public void starting(ServerStartingEvent event) {
 		MinecraftServer server = event.getServer();
+		GameQueries.stopped(false);
 		guard.run("Host.serverStarting", () -> {
 			Host.serverStarting(ForgeVersion.getVersion(), server.getServerVersion());
 		});
@@ -69,12 +70,14 @@ public final class ServerEvents {
 	}
 
 	/**
-	 * Reports that the server has stopped.
+	 * Reports that the server has stopped. Minecraft closed every level before this event, so the
+	 * game answers no question of Golem from here on.
 	 *
 	 * @param event the event of Forge
 	 */
 	@SubscribeEvent
 	public void stopped(ServerStoppedEvent event) {
+		GameQueries.stopped(true);
 		guard.run("Host.serverStopped", Host::serverStopped);
 	}
 

@@ -180,10 +180,12 @@ and the first such replacement of the process is logged.
 ## The game
 
 `Context::game` answers what the game holds while the call runs on the server thread: every event
-but a chat message, every command and a permission that a mod asks on the server thread. On any
-other thread, such as for a chat message, every question answers none, and the log names the first
-such question of the process. Every answer is `None` when the game cannot answer, and an answer
-that may be empty is an `Option` inside, so `?` takes the outer one.
+but a chat message and `ServerStopped`, every command and a permission that a mod asks on the
+server thread. On any other thread, such as for a chat message, every question answers none, and
+the log names the first such question of the process. On `ServerStopped` every question answers
+none as well, since Minecraft closed every level before that event. Every answer is `None` when
+the game cannot answer, and an answer that may be empty is an `Option` inside, so `?` takes the
+outer one.
 
 | Question | Answer |
 | --- | --- |

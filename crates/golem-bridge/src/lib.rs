@@ -123,7 +123,8 @@ pub enum Event {
     ServerStarted,
     /// The server is stopping.
     ServerStopping,
-    /// The server has stopped, after the worlds were saved.
+    /// The server has stopped, after the worlds were saved and closed, so the game answers no
+    /// question.
     ServerStopped,
     /// A server tick ended.
     Tick {

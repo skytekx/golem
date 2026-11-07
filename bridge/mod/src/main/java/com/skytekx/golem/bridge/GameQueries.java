@@ -6,9 +6,11 @@
  *
  * Golem asks only while a native of the server thread runs. Every answer still checks the thread
  * itself and answers null on another one, so a fault of Golem can never touch the game from the
- * outside. Each answer is its fields joined by the unit separator U+001F, as okf/bridge.md
- * specifies, and a field that holds the separator, such as a display name a mod made, has it
- * replaced by a space. A query that throws is logged through the guard and answers null.
+ * outside. From ServerStoppedEvent on every answer is null as well, since Minecraft closed every
+ * level before that event, and a question would read closed chunks or wait for closed workers.
+ * Each answer is its fields joined by the unit separator U+001F, as okf/bridge.md specifies, and
+ * a field that holds the separator, such as a display name a mod made, has it replaced by a
+ * space. A query that throws is logged through the guard and answers null.
  */
 package com.skytekx.golem.bridge;
 
@@ -37,6 +39,9 @@ final class GameQueries implements Game {
 
 	/** The answer of safeLocation when the search met a chunk that is not loaded. */
 	private static final String UNLOADED = "unloaded";
+
+	/** Whether ServerStoppedEvent fired, after which the levels of the server are closed. */
+	private static volatile boolean stopped;
 
 	private final Guard guard;
 
@@ -143,10 +148,24 @@ final class GameQueries implements Game {
 	}
 
 	/**
-	 * Answers the server when the caller runs on its thread, and null on any other thread, since
-	 * the game may be read on its own thread alone.
+	 * Notes whether the server has stopped. The listeners of the life of the server call it
+	 * before they report the start and the stop of the server to Golem.
+	 *
+	 * @param value true from ServerStoppedEvent on, false from ServerStartingEvent on
+	 */
+	static void stopped(boolean value) {
+		stopped = value;
+	}
+
+	/**
+	 * Answers the server when the caller runs on its thread while the server has not stopped,
+	 * and null otherwise, since the game may be read on its own thread alone and its levels are
+	 * closed once it stopped.
 	 */
 	private static MinecraftServer server() {
+		if (stopped) {
+			return null;
+		}
 		MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
 		return server != null && server.isSameThread() ? server : null;
 	}

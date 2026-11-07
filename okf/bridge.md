@@ -235,9 +235,11 @@ crosses into the caller of the native, and the question answers none. A question
 an answer that does not read are logged the first time, the tenth, the hundredth and every
 further power of ten, with the class and the message of what the question threw, and the stack
 trace of a question is printed for its first failure alone. A native whose own call of the JNI
-fails is logged the same way. The object of the mod checks the thread a
-second time with `isSameThread` of the server and answers null on any other thread, so the game is
-read on its own thread alone, whatever Golem does.
+fails is logged the same way. The object of the mod checks the thread a second time with
+`isSameThread` of the server and answers null on any other thread, so the game is read on its own
+thread alone, whatever Golem does. It answers null from `ServerStoppedEvent` on as well, also on
+the server thread, since Minecraft closed every level and its workers before that event, so a
+question would read closed chunks or wait for a worker that never answers.
 
 ## Permissions
 
