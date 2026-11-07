@@ -472,3 +472,20 @@ Oldest first. Times are UTC.
   tool answers Olga, and the stop by `SIGTERM` reads the group, its node and its member from the
   file of the store. With it every case that the port of LuckPerms lacked is in. See
   [Plugins](plugins/index.md#permissions).
+- Every teleport reports how it ends. The action `teleport` carries an id, which `golem-bridge`
+  hands out once per process, and where a plugin asks for it the radius of a search for a safe
+  place, which the mod runs once a ticket of its own loaded the chunks of the search. Every id gets
+  one report, through the native `teleported` with where the player was and is, or through
+  `teleportFailed` with one of eight reasons, and a plugin sees `Event::Teleported` or
+  `Event::TeleportFailed`. A teleport that still waits in the queue of Golem when the server stops
+  ends with `stopped`, also when the game stops without `ServerStoppingEvent`, and the queue takes
+  none from there to the next start.
+  An error that the guard of the mod lets pass ends the server from inside an action, and the mod
+  then reports `error` for the teleport that ran and `stopped` for the teleports of that drain
+  behind it before it throws the error on. So every id gets its report on every way that the game
+  ends its server while the JVM still runs the mod, and a JVM that is halted or killed reports
+  nothing. `Context::queue_teleport` answers the id, beside `Context::teleport`. The wire form of
+  the action and the natives of the host class change with it, so the host jar, the mod and the
+  natives of one build go together. `04_plugins` holds the wire form, the ids, the reports and the
+  stop, and `05_bridge_build` five of the reasons on a stock Forge server. See
+  [Bridge](bridge.md#the-end-of-a-teleport) and [Open items](open-items.md#open-in-what-is-built).

@@ -95,10 +95,20 @@ final class GameQueries implements Game {
 
 	@Override
 	public String location(String uuid) {
-		return ofPlayer("Game.location", uuid, player -> join(dimension(player.serverLevel()),
-				Double.toString(player.getX()), Double.toString(player.getY()),
-				Double.toString(player.getZ()), Float.toString(player.getYRot()),
-				Float.toString(player.getXRot())));
+		return ofPlayer("Game.location", uuid, GameQueries::place);
+	}
+
+	/**
+	 * Answers where a player is in the form of the answer of location: the dimension, x, y and
+	 * z of the feet, the yaw and the pitch.
+	 *
+	 * @param player the player
+	 * @return the place of the player
+	 */
+	static String place(ServerPlayer player) {
+		return join(dimension(player.serverLevel()), Double.toString(player.getX()),
+				Double.toString(player.getY()), Double.toString(player.getZ()),
+				Float.toString(player.getYRot()), Float.toString(player.getXRot()));
 	}
 
 	@Override

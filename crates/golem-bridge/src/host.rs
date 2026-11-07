@@ -80,11 +80,13 @@ use crate::{
     SafePlace,
     Sender,
     Spawn,
+    TeleportFailure,
     Throttle,
     TickStats,
     TickWindow,
     Verdict,
-    log, //
+    log,
+    wire, //
 };
 
 /// The version of Golem that `version()` answers.
@@ -303,6 +305,7 @@ pub fn server_starting(
 ) {
     const NATIVE: &str = "serverStarting";
     let _ = SERVER_THREAD.set(thread::current().id());
+    host().actions.start();
     guard(NATIVE, (), || {
         let (Some(forge_version), Some(minecraft_version)) = (
             required(NATIVE, "forgeVersion", forge_version),
@@ -328,18 +331,36 @@ pub fn server_started(game: &dyn Game) {
     });
 }
 
-/// Reports `ServerStoppingEvent`.
+/// Reports `ServerStoppingEvent`, after it ended every teleport that still waits in the queue of
+/// actions with [`TeleportFailure::Stopped`], oldest first, since no tick drains the queue from
+/// here on. The queue takes no teleport until the next `serverStarting()`.
 pub fn server_stopping(game: &dyn Game) {
-    guard("serverStopping", (), || {
-        dispatch("serverStopping", &Event::ServerStopping, game);
+    const NATIVE: &str = "serverStopping";
+    guard(NATIVE, (), || {
+        for (id, uuid) in host().actions.stop() {
+            let reason = TeleportFailure::Stopped;
+            dispatch(NATIVE, &Event::TeleportFailed { id, uuid, reason }, game);
+        }
+        dispatch(NATIVE, &Event::ServerStopping, game);
     });
 }
 
 /// Reports `ServerStoppedEvent`, after which no tick drains the queue of actions.
+///
+/// A server whose loop ends by a fault stops without `ServerStoppingEvent`. So the teleports
+/// that still wait in the queue of actions end here as [`server_stopping`] ends them, with
+/// [`TeleportFailure::Stopped`], oldest first and before the plugins hear that the server
+/// stopped, and the queue takes no teleport until the next `serverStarting()`. Behind a stop
+/// that the game announced the queue holds none, so nothing is reported twice.
 pub fn server_stopped(game: &dyn Game) {
+    const NATIVE: &str = "serverStopped";
     TICKING.store(false, Ordering::Release);
-    guard("serverStopped", (), || {
-        dispatch("serverStopped", &Event::ServerStopped, game);
+    guard(NATIVE, (), || {
+        for (id, uuid) in host().actions.stop() {
+            let reason = TeleportFailure::Stopped;
+            dispatch(NATIVE, &Event::TeleportFailed { id, uuid, reason }, game);
+        }
+        dispatch(NATIVE, &Event::ServerStopped, game);
     });
 }
 
@@ -459,6 +480,104 @@ pub fn respawn(
         };
         dispatch(NATIVE, &event, game);
     });
+}
+
+/// Reports that the teleport `id`, which a plugin queued, moved the player with `uuid` from the
+/// place `from` to the place `to`, each in the wire form of the answer of `location`.
+///
+/// An id below 0, which no action carries, is a fault of the mod, which is logged, and no
+/// event reaches a plugin. A report whose id reads and whose UUID or place does not is such a
+/// fault as well, and ends the teleport of that id with [`TeleportFailure::Error`], so the id
+/// still gets its one report.
+pub fn teleported(
+    id: i64,
+    uuid: Option<&str>,
+    from: Option<&str>,
+    to: Option<&str>,
+    game: &dyn Game,
+) {
+    const NATIVE: &str = "teleported";
+    guard(NATIVE, (), || {
+        let Some(id) = teleport(NATIVE, id) else {
+            return;
+        };
+        let uuid = required(NATIVE, "uuid", uuid);
+        let from = required(NATIVE, "from", from).and_then(|from| place(NATIVE, "from", &from));
+        let to = required(NATIVE, "to", to).and_then(|to| place(NATIVE, "to", &to));
+        match (uuid, from, to) {
+            (Some(uuid), Some(from), Some(to)) => {
+                dispatch(NATIVE, &Event::Teleported { id, uuid, from, to }, game);
+            }
+            (uuid, ..) => unread(NATIVE, id, uuid, game),
+        }
+    });
+}
+
+/// Reports that the teleport `id`, which a plugin queued, ended without a move of the player
+/// with `uuid`, for the reason that the mod names, or threw, which leaves their place unknown.
+///
+/// A reason that this build does not know is a fault of the mod, which is logged, and the event
+/// carries [`TeleportFailure::Error`], so the plugin still learns that the teleport ended. So
+/// does a report whose id reads and whose UUID or reason is null. An id below 0 reports nothing.
+pub fn teleport_failed(id: i64, uuid: Option<&str>, reason: Option<&str>, game: &dyn Game) {
+    const NATIVE: &str = "teleportFailed";
+    guard(NATIVE, (), || {
+        let Some(id) = teleport(NATIVE, id) else {
+            return;
+        };
+        let fields = (
+            required(NATIVE, "uuid", uuid),
+            required(NATIVE, "reason", reason),
+        );
+        let (uuid, reason) = match fields {
+            (Some(uuid), Some(reason)) => (uuid, reason),
+            (uuid, _) => {
+                unread(NATIVE, id, uuid, game);
+                return;
+            }
+        };
+        let reason = TeleportFailure::from_name(&reason).unwrap_or_else(|| {
+            log(format_args!(
+                "the native teleportFailed got the reason {reason:?}, which this build does not know, so it reports an error"
+            ));
+            TeleportFailure::Error
+        });
+        dispatch(NATIVE, &Event::TeleportFailed { id, uuid, reason }, game);
+    });
+}
+
+/// Ends the teleport `id` with [`TeleportFailure::Error`] for a report of the mod that does not
+/// read, so the id still gets its one report. The event carries the UUID of the report, or an
+/// empty one when the report named none. What did not read is on the log already.
+fn unread(native: &'static str, id: u64, uuid: Option<String>, game: &dyn Game) {
+    log(format_args!(
+        "the native {native} got a report of the teleport {id} that does not read, so it reports an error for it"
+    ));
+    let (uuid, reason) = (uuid.unwrap_or_default(), TeleportFailure::Error);
+    dispatch(native, &Event::TeleportFailed { id, uuid, reason }, game);
+}
+
+/// Answers the id of a teleport, or logs that the mod passed one below 0, which no action
+/// carries.
+fn teleport(native: &str, id: i64) -> Option<u64> {
+    let id = u64::try_from(id).ok();
+    if id.is_none() {
+        log(format_args!(
+            "the native {native} got an id below 0, which no teleport carries, so it reports nothing"
+        ));
+    }
+    id
+}
+
+/// Answers a place in the wire form of `location`, or logs that it does not read.
+fn place(native: &str, field: &str, answer: &str) -> Option<Location> {
+    let place = wire::location(answer);
+    if place.is_none() {
+        log(format_args!(
+            "the native {native} got {answer:?} for {field}, which is no place"
+        ));
+    }
+    place
 }
 
 /// Answers the names of the commands the mod registers.

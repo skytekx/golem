@@ -56,7 +56,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Area | Built | Handover | Part | Specified | Designed | Surveyed | Open | Held | None | Out | All |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
-| [The bridge](#the-bridge) | 2 | 4 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
+| [The bridge](#the-bridge) | 2 | 3 | 2 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 6 | 0 | 2 | 0 | 0 | 0 | 4 | 5 | 0 | 0 | 17 |
 | [The store](#the-store) | 4 | 0 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 8 |
@@ -75,7 +75,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 18 | 4 | 12 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 378 |
+| All | 18 | 3 | 13 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 378 |
 
 ## The JVM host and macOS
 
@@ -102,7 +102,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
-| The result of a teleport: an id, a safe radius of 0 to 8, chunks held by a ticket, and the events `teleported` and `teleportFailed` with eight reasons, with the three reasons that 05 does not assert yet added | Bridge needs (need 1), issues #28, #39, #43, #44, #63, #65, commit 35dc669 on port/bridge | Handover | 04, 05 |
+| The result of a teleport: an id, a safe radius of 0 to 8, chunks held by a ticket, and the events `teleported` and `teleportFailed` with eight reasons, of which 05 asserts five and not yet `cancelled`, `unloaded` and `error` | Bridge (the end of a teleport), Bridge needs (need 1), issues #28, #39, #43, #44, #63, #65, Open items (open in what is built) | Part | 04, 05 |
 | Styled text built in Rust and sent as a component, and a broadcast that skips hidden players | Bridge needs (need 2), issues #35, #64, #76, commit 699bb0b on port/bridge | Handover | 04, 05 |
 | The small queries: the respawn point with its angle and forced flag, the respawn place, the inventory, flight, the dimensions with sea level and day time, and the most players, split from one unfinished commit into four, with the natives counted 18 | Bridge needs (need 4), issues #28, #86, #91, commit ca30d08 on port/bridge | Handover | 04, 05, 07 |
 | The game still answers during `playerLeft`, with the quit position | Bridge needs (need 5), issues #55, #89, commit ca30d08 on port/bridge | Handover | 05, 07 |

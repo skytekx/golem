@@ -92,7 +92,11 @@ public final class Host {
 	/** Reports that the server is stopping. */
 	public static native void serverStopping();
 
-	/** Reports that the server has stopped, after the worlds were saved. */
+	/**
+	 * Reports that the server has stopped, after the worlds were saved. The natives end every
+	 * teleport that still waits in the queue of Golem there, when the game stopped without
+	 * {@link #serverStopping()}.
+	 */
 	public static native void serverStopped();
 
 	/**
@@ -155,6 +159,28 @@ public final class Host {
 	 */
 	public static native void respawn(String uuid, String name, String dimension,
 			boolean endConquered);
+
+	/**
+	 * Reports that a teleport that Golem queued moved the player.
+	 *
+	 * @param id the id of the teleport, as its action carried it
+	 * @param uuid the UUID of the player in its usual form with dashes
+	 * @param from where the player was right before the move, in the form of the answer of
+	 *     {@link Game#location(String)}
+	 * @param to where the player is after the move, in the same form
+	 */
+	public static native void teleported(long id, String uuid, String from, String to);
+
+	/**
+	 * Reports that a teleport that Golem queued ended without a move, or threw.
+	 *
+	 * @param id the id of the teleport, as its action carried it
+	 * @param uuid the UUID of the player, as the action carried it
+	 * @param reason why the player stayed: offline, dimension, place, cancelled, unsafe,
+	 *     unloaded or stopped, or error for a teleport that threw, which leaves the place of the
+	 *     player unknown
+	 */
+	public static native void teleportFailed(long id, String uuid, String reason);
 
 	/**
 	 * Answers the names of the commands of the plugins, which the mod registers with Brigadier.

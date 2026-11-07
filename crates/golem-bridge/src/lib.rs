@@ -48,6 +48,7 @@ pub use crate::{
     actions::{
         Action,
         Actions,
+        MAX_SAFE_RADIUS,
         SEPARATOR, //
     },
     game::{
@@ -167,6 +168,90 @@ pub enum Event {
         /// respawn without a death, so a plugin that acts after a death leaves such a player be.
         end_conquered: bool,
     },
+    /// A teleport that a plugin queued moved the player.
+    Teleported {
+        /// The id of the teleport, as the action carried it.
+        id: u64,
+        /// The UUID of the player.
+        uuid: String,
+        /// Where the player was right before the move.
+        from: Location,
+        /// Where the player is after the move, which a safe search or a mod may have changed.
+        to: Location,
+    },
+    /// A teleport that a plugin queued ended without a move, or threw.
+    TeleportFailed {
+        /// The id of the teleport, as the action carried it.
+        id: u64,
+        /// The UUID of the player, as the action carried it, or an empty one when a report of
+        /// the mod that does not read named none.
+        uuid: String,
+        /// Why the player stayed, or [`TeleportFailure::Error`], which leaves their place
+        /// unknown.
+        reason: TeleportFailure,
+    },
+}
+
+/// Why a teleport that a plugin queued ended without a move, as the native `teleportFailed`
+/// names it. [`TeleportFailure::Error`] alone leaves open whether the player moved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TeleportFailure {
+    /// No player of the UUID was online when the teleport ran, the player left while it waited
+    /// for its chunks, or a mod made the player leave inside the move, before the game moved
+    /// them.
+    Offline,
+    /// The server has no dimension of the id.
+    Dimension,
+    /// A number of the place does not read or is no finite number, the radius of the search
+    /// lies outside 0 to 8, or the place lies outside the bounds of the world, also after a mod
+    /// moved it.
+    Place,
+    /// A mod cancelled the teleport, or its travel into another dimension.
+    Cancelled,
+    /// The search found no safe place within its radius.
+    Unsafe,
+    /// The chunks of the search did not load while the teleport waited for them.
+    Unloaded,
+    /// The server stopped while the teleport waited, in the mod for its chunks or in the queue
+    /// of actions for its tick, or an error ended the server from inside an action of the drain
+    /// that handed the teleport to the mod, before its turn.
+    Stopped,
+    /// The teleport threw, which the log of the server holds, or the mod named a reason this
+    /// build does not know. The place of the player is unknown then, since a mod may throw
+    /// behind the move.
+    Error,
+}
+
+impl TeleportFailure {
+    /// Answers the reason as the native `teleportFailed` names it, such as unsafe.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Offline => "offline",
+            Self::Dimension => "dimension",
+            Self::Place => "place",
+            Self::Cancelled => "cancelled",
+            Self::Unsafe => "unsafe",
+            Self::Unloaded => "unloaded",
+            Self::Stopped => "stopped",
+            Self::Error => "error",
+        }
+    }
+
+    /// Answers the reason of its name, or `None` for a name this build does not know.
+    pub fn from_name(name: &str) -> Option<Self> {
+        [
+            Self::Offline,
+            Self::Dimension,
+            Self::Place,
+            Self::Cancelled,
+            Self::Unsafe,
+            Self::Unloaded,
+            Self::Stopped,
+            Self::Error,
+        ]
+        .into_iter()
+        .find(|reason| reason.name() == name)
+    }
 }
 
 impl Event {
@@ -183,6 +268,8 @@ impl Event {
             Self::Chat { .. } => "chat",
             Self::Death { .. } => "death",
             Self::Respawn { .. } => "respawn",
+            Self::Teleported { .. } => "teleported",
+            Self::TeleportFailed { .. } => "teleportFailed",
         }
     }
 

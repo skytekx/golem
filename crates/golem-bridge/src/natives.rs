@@ -150,7 +150,7 @@ const STRING_CLASS: &str = "java/lang/String";
 /// Every native method of the host class: its name, its descriptor and its function.
 ///
 /// The names and the descriptors are those of the host class in okf/bridge.md.
-fn table() -> [(&'static str, &'static str, *mut c_void); 16] {
+fn table() -> [(&'static str, &'static str, *mut c_void); 18] {
     [
         ("version", "()Ljava/lang/String;", version as *mut c_void),
         (
@@ -191,6 +191,16 @@ fn table() -> [(&'static str, &'static str, *mut c_void); 16] {
             "respawn",
             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V",
             respawn as *mut c_void,
+        ),
+        (
+            "teleported",
+            "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+            teleported as *mut c_void,
+        ),
+        (
+            "teleportFailed",
+            "(JLjava/lang/String;Ljava/lang/String;)V",
+            teleport_failed as *mut c_void,
         ),
         (
             "commandNames",
@@ -530,6 +540,42 @@ extern "system" fn respawn<'local>(
                 end_conquered != JNI_FALSE,
                 game,
             );
+        });
+        Ok(())
+    });
+}
+
+extern "system" fn teleported<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    id: jlong,
+    uuid: JString<'local>,
+    from: JString<'local>,
+    to: JString<'local>,
+) {
+    answer(&mut env, "teleported", nothing, |env| {
+        let uuid = string(env, &uuid)?;
+        let from = string(env, &from)?;
+        let to = string(env, &to)?;
+        with_game(env, |game| {
+            host::teleported(id, uuid.as_deref(), from.as_deref(), to.as_deref(), game);
+        });
+        Ok(())
+    });
+}
+
+extern "system" fn teleport_failed<'local>(
+    mut env: JNIEnv<'local>,
+    _class: JClass<'local>,
+    id: jlong,
+    uuid: JString<'local>,
+    reason: JString<'local>,
+) {
+    answer(&mut env, "teleportFailed", nothing, |env| {
+        let uuid = string(env, &uuid)?;
+        let reason = string(env, &reason)?;
+        with_game(env, |game| {
+            host::teleport_failed(id, uuid.as_deref(), reason.as_deref(), game);
         });
         Ok(())
     });

@@ -67,24 +67,29 @@ public final class ServerEvents {
 	}
 
 	/**
-	 * Reports that the server is stopping.
+	 * Ends the teleports that wait for their chunks and reports that the server is stopping.
 	 *
 	 * @param event the event of Forge
 	 */
 	@SubscribeEvent
 	public void stopping(ServerStoppingEvent event) {
+		actions.stopping(event.getServer());
 		guard.run("Host.serverStopping", Host::serverStopping);
 	}
 
 	/**
 	 * Reports that the server has stopped. Minecraft closed every level before this event, so the
-	 * game answers no question of Golem from here on.
+	 * game answers no question of Golem from here on. A server whose loop ends by a fault stops
+	 * without {@link ServerStoppingEvent}, so the teleports that still wait for their chunks end
+	 * here, before Golem hears that the server stopped. Behind a stop that the game announced
+	 * none waits.
 	 *
 	 * @param event the event of Forge
 	 */
 	@SubscribeEvent
 	public void stopped(ServerStoppedEvent event) {
 		GameQueries.stopped(true);
+		actions.stopping(event.getServer());
 		guard.run("Host.serverStopped", Host::serverStopped);
 	}
 

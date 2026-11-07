@@ -47,17 +47,20 @@
 //! A step is a native method by its Java name with its Java parameters, where a missing parameter
 //! is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`, `serverStopped`, `tick`
 //! (with `nanos`, and `repeat` and `sleepMs` of the devtool), `playerJoined`, `playerLeft`, `chat`,
-//! `death`, `respawn` (with `endConquered`, false when left out), `commandNames`, `command` (with
-//! `level`, 4 when left out), `permission` and `drain`. A `death` step takes the `dimension`, `x`,
-//! `y`, `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands for
-//! null. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue), `install`
-//! (a fresh handler of the same script), `sleep` and `together`, which runs its `steps` each on a
-//! thread of its own, the next one `staggerMs` after the one before, as Forge calls `chat` on a
-//! worker thread beside the server thread. A step of `together` is a native method, `stats` or
-//! `sleep`.
+//! `death`, `respawn` (with `endConquered`, false when left out), `teleported`, `teleportFailed`,
+//! `commandNames`, `command` (with `level`, 4 when left out), `permission` and `drain`. A `death`
+//! step takes the `dimension`, `x`, `y`, `z`, `yaw` and `pitch` of the place, each 0 when left
+//! out, and no dimension stands for null. The `from` and `to` of `teleported` are a location,
+//! which the step writes in the wire form of the answer of `location`, or a string that the step
+//! hands the native as it is. The devtool adds `stats`, `budgets`, `push` (an action straight
+//! into the queue), `install` (a fresh handler of the same script), `sleep` and `together`, which
+//! runs its `steps` each on a thread of its own, the next one `staggerMs` after the one before, as
+//! Forge calls `chat` on a worker thread beside the server thread. A step of `together` is a
+//! native method, `stats` or `sleep`.
 //!
-//! The test plugins are these. `echo` broadcasts the name of every event but a tick, and the
-//! location of a death, unless it is `quiet`, and answers its `commands` with a line, a message
+//! The test plugins are these. `echo` broadcasts the name of every event but a tick, the
+//! location of a death, and the id, the UUID and the places of a teleport or the reason it failed,
+//! unless it is `quiet`, and answers its `commands` with a line, a message
 //! to a player sender and a console command. `cancel` cancels a chat message that holds its
 //! `word` and answers cancel to every other event, which the runtime must ignore. `panic` panics
 //! on the events named `on`, on a permission when `on` is `permission`, and in its `commands`.
@@ -342,6 +345,17 @@ enum Step {
         #[serde(default)]
         end_conquered: bool,
     },
+    Teleported {
+        id: i64,
+        uuid: Option<String>,
+        from: Option<PlaceArgument>,
+        to: Option<PlaceArgument>,
+    },
+    TeleportFailed {
+        id: i64,
+        uuid: Option<String>,
+        reason: Option<String>,
+    },
     CommandNames,
     Command {
         name: Option<String>,
@@ -384,6 +398,36 @@ enum Step {
     },
 }
 
+/// A place that a step hands a native in the wire form of the answer of `location`: a string
+/// as it is, which may not read, or a location, which the step writes in that form.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum PlaceArgument {
+    Wire(String),
+    Place(LocationSpec),
+}
+
+impl PlaceArgument {
+    /// Answers the place in the wire form of `location`.
+    fn wire(&self) -> String {
+        match self {
+            Self::Wire(wire) => wire.clone(),
+            Self::Place(place) => {
+                let place = Location::from(place.clone());
+                [
+                    place.dimension,
+                    place.x.to_string(),
+                    place.y.to_string(),
+                    place.z.to_string(),
+                    place.yaw.to_string(),
+                    place.pitch.to_string(),
+                ]
+                .join(&golem_bridge::SEPARATOR.to_string())
+            }
+        }
+    }
+}
+
 /// An action as JSON.
 #[derive(Deserialize)]
 #[serde(
@@ -404,9 +448,13 @@ enum ActionSpec {
         text: String,
     },
     Teleport {
+        #[serde(default)]
+        id: u64,
         uuid: String,
         #[serde(flatten)]
         location: LocationSpec,
+        #[serde(default)]
+        safe: Option<u32>,
     },
     ListName {
         uuid: String,
@@ -420,9 +468,16 @@ impl From<ActionSpec> for Action {
             ActionSpec::Command { command } => Self::Command(command),
             ActionSpec::Message { uuid, text } => Self::Message { uuid, text },
             ActionSpec::Broadcast { text } => Self::Broadcast(text),
-            ActionSpec::Teleport { uuid, location } => Self::Teleport {
+            ActionSpec::Teleport {
+                id,
+                uuid,
+                location,
+                safe,
+            } => Self::Teleport {
+                id,
                 uuid,
                 location: location.into(),
+                safe,
             },
             ActionSpec::ListName { uuid, name } => Self::ListName { uuid, name },
         }
@@ -435,10 +490,17 @@ fn action_json(action: &Action) -> Value {
         Action::Command(command) => json!({"kind": "command", "command": command}),
         Action::Message { uuid, text } => json!({"kind": "message", "uuid": uuid, "text": text}),
         Action::Broadcast(text) => json!({"kind": "broadcast", "text": text}),
-        Action::Teleport { uuid, location } => {
+        Action::Teleport {
+            id,
+            uuid,
+            location,
+            safe,
+        } => {
             let mut value = location_json(location);
             value["kind"] = json!("teleport");
+            value["id"] = json!(id);
             value["uuid"] = json!(uuid);
+            value["safe"] = json!(safe);
             value
         }
         Action::ListName { uuid, name } => json!({"kind": "listName", "uuid": uuid, "name": name}),
@@ -760,28 +822,6 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
             "chat",
             host::chat(uuid.as_deref(), name.as_deref(), message.as_deref(), game),
         ),
-        Step::Death {
-            uuid,
-            name,
-            cause,
-            dimension,
-            x,
-            y,
-            z,
-            yaw,
-            pitch,
-        } => done("death", || {
-            let location = dimension
-                .clone()
-                .map(|dimension| place(dimension, [*x, *y, *z], [*yaw, *pitch]));
-            host::death(
-                uuid.as_deref(),
-                name.as_deref(),
-                cause.as_deref(),
-                location,
-                game,
-            );
-        }),
         Step::Respawn {
             uuid,
             name,
@@ -796,6 +836,9 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
                 game,
             );
         }),
+        Step::Death { .. } | Step::Teleported { .. } | Step::TeleportFailed { .. } => {
+            return report(step, game);
+        }
         Step::CommandNames => answer("commandNames", host::command_names()),
         Step::Command {
             name,
@@ -842,6 +885,44 @@ fn place(dimension: String, [x, y, z]: [f64; 3], [yaw, pitch]: [f32; 2]) -> Loca
         yaw,
         pitch,
     }
+}
+
+/// Runs a step that reports what became of a player at a place: a death, or the end of a
+/// teleport, `teleported` or `teleportFailed`.
+fn report(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
+    Some(match step {
+        Step::Death {
+            uuid,
+            name,
+            cause,
+            dimension,
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+        } => done("death", || {
+            let location = dimension
+                .clone()
+                .map(|dimension| place(dimension, [*x, *y, *z], [*yaw, *pitch]));
+            host::death(
+                uuid.as_deref(),
+                name.as_deref(),
+                cause.as_deref(),
+                location,
+                game,
+            );
+        }),
+        Step::Teleported { id, uuid, from, to } => done("teleported", || {
+            let from = from.as_ref().map(PlaceArgument::wire);
+            let to = to.as_ref().map(PlaceArgument::wire);
+            host::teleported(*id, uuid.as_deref(), from.as_deref(), to.as_deref(), game);
+        }),
+        Step::TeleportFailed { id, uuid, reason } => done("teleportFailed", || {
+            host::teleport_failed(*id, uuid.as_deref(), reason.as_deref(), game);
+        }),
+        _ => return None,
+    })
 }
 
 /// Runs `steps` each on a thread of its own, the next one `stagger_ms` after the one before,
@@ -1015,6 +1096,15 @@ impl Plugin for Echo {
                 end_conquered: true,
                 ..
             } => context.broadcast(&format!("{} respawn from the End", self.name)),
+            Event::Teleported { id, uuid, from, to } => context.broadcast(&format!(
+                "{} teleported {id} {uuid} from {from} to {to}",
+                self.name
+            )),
+            Event::TeleportFailed { id, uuid, reason } => context.broadcast(&format!(
+                "{} teleportFailed {id} {uuid} {}",
+                self.name,
+                reason.name()
+            )),
             _ => context.broadcast(&format!("{} {}", self.name, event.name())),
         }
         Verdict::Pass
@@ -1197,7 +1287,8 @@ impl Plugin for Reenter {
 }
 
 /// A test plugin that answers its commands with the helpers of the context for the actions on
-/// players: `teleport <uuid>` to its place, `nowhere <uuid>` to a place that is no number,
+/// players: `teleport <uuid>` to its place, `safe <uuid> <radius>` to the nearest safe place
+/// within the radius of it, which answers the id, `nowhere <uuid>` to a place that is no number,
 /// `far <uuid>` to x 30000001, beyond the bounds of the world, `name <uuid> <text>` and
 /// `clear <uuid>`.
 struct Mover {
@@ -1230,6 +1321,13 @@ impl Plugin for Mover {
         );
         let answer = match verb {
             "teleport" => format!("queued {}", context.teleport(uuid, &self.to)),
+            "safe" => match rest.parse() {
+                Ok(radius) => match context.queue_teleport(uuid, &self.to, Some(radius)) {
+                    Some(id) => format!("queued the teleport {id}"),
+                    None => "refused".to_owned(),
+                },
+                Err(_) => "safe takes a radius".to_owned(),
+            },
             "nowhere" => {
                 let nowhere = Location {
                     x: f64::NAN,
@@ -1494,6 +1592,7 @@ fn encode_entry(entry: EncodeEntry) -> Value {
     let wire = match entry {
         EncodeEntry::Wire { wire } => wire,
         EncodeEntry::Infinite { infinite } => Action::Teleport {
+            id: 1,
             uuid: infinite.uuid,
             location: Location {
                 dimension: infinite.dimension,
@@ -1503,6 +1602,7 @@ fn encode_entry(entry: EncodeEntry) -> Value {
                 yaw: f32::INFINITY,
                 pitch: f32::NAN,
             },
+            safe: None,
         }
         .encode(),
         EncodeEntry::Action(spec) => Action::from(spec).encode(),

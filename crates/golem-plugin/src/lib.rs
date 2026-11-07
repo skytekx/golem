@@ -42,6 +42,7 @@ use golem_bridge::{
     Event,
     Game,
     Location,
+    MAX_SAFE_RADIUS,
     NoGame,
     Sender,
     Verdict,
@@ -169,26 +170,56 @@ impl<'a> Context<'a> {
     ///
     /// A location with a coordinate or an angle that is no finite number, or whose block lies
     /// outside the bounds of the world that the command tp takes, is refused with a line on the
-    /// log, since the game cannot hold the player there. The place is taken as it is, so a plugin
-    /// that wants a safe one asks the game for it first.
+    /// log, since the game cannot hold the player there, and so is every teleport while the
+    /// server stops, since no tick would run it. The place is taken as it is, so a plugin that
+    /// wants a safe one asks the game for it first or uses [`Context::queue_teleport`] with a
+    /// radius. The teleport reports how it ended as [`queue_teleport`](Context::queue_teleport)
+    /// says.
     pub fn teleport(&self, uuid: &str, location: &Location) -> bool {
+        self.queue_teleport(uuid, location, None).is_some()
+    }
+
+    /// Queues a teleport of the player with `uuid` to `location`, also into another dimension,
+    /// and answers its id, or `None` when it refuses the teleport as [`Context::teleport`] does.
+    ///
+    /// With a radius, the mod loads the chunks near the location first and moves the player to
+    /// the nearest safe place within the radius, held to 8 blocks, with the rotation of the
+    /// location, as the question `safe_location` of the game finds it once the chunks are
+    /// loaded. Every id that this answers reports the end of its teleport once, as the event
+    /// [`Event::Teleported`] with where the player was and is, or [`Event::TeleportFailed`] with
+    /// the reason, on the server thread, at the end of a tick at the earliest. From the stop of
+    /// the server to the next `serverStarting` no tick runs a teleport, so the call answers
+    /// `None` then, and a teleport that still waits in the queue at the stop ends there with
+    /// [`TeleportFailure::Stopped`](golem_bridge::TeleportFailure::Stopped), also when the
+    /// game stops without `serverStopping`. So an id gets its report on every way that the
+    /// game ends its server while the JVM still runs the mod. A JVM that is halted or killed
+    /// runs nothing, so no report comes then, and no teleport outlives the process.
+    pub fn queue_teleport(
+        &self,
+        uuid: &str,
+        location: &Location,
+        safe_radius: Option<u32>,
+    ) -> Option<u64> {
         if !location.is_finite() {
             log(format_args!(
                 "a plugin asked to teleport {uuid} to {location}, which is no finite place, so the runtime refuses it"
             ));
-            return false;
+            return None;
         }
         if !location.is_in_world() {
             log(format_args!(
                 "a plugin asked to teleport {uuid} to {location}, which lies outside the bounds of the world, so the runtime refuses it"
             ));
-            return false;
+            return None;
         }
-        self.actions.push(Action::Teleport {
-            uuid: uuid.to_owned(),
-            location: location.clone(),
-        });
-        true
+        let safe = safe_radius.map(|radius| radius.min(MAX_SAFE_RADIUS));
+        let id = self.actions.teleport(uuid, location, safe);
+        if id.is_none() {
+            log(format_args!(
+                "a plugin asked to teleport {uuid} while the server stops, so the runtime refuses it"
+            ));
+        }
+        id
     }
 
     /// Queues the name that the player list shows for the player with `uuid` until they leave

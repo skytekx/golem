@@ -84,10 +84,16 @@ The runtime calls every plugin in the order of `add`, each with the event and a 
 | `Chat` | `chat` | Yes | Cancel at the first plugin that cancels, else pass |
 | `Death` | `death` | No | Pass |
 | `Respawn` | `respawn` | No | Pass |
+| `Teleported` | `teleported` | No | Pass |
+| `TeleportFailed` | `teleportFailed` | No | Pass |
 
 `Event::Death` carries the `Location` where the player died: the dimension, the coordinates of
 the feet and the rotation, so a plugin such as the port of `back` keeps the place without asking
-the game.
+the game. `Event::Teleported` carries the id of a teleport that a plugin queued, the UUID and
+where the player was and is, so the port of `back` keeps the place before a move that worked, and
+`Event::TeleportFailed` the id, the UUID and the `TeleportFailure`, as
+[Bridge](../bridge.md#the-end-of-a-teleport) names the reasons. Every plugin hears both, whichever
+plugin queued the teleport, and tells its own teleports by their ids.
 
 For a chat message the first plugin that answers `Cancel` ends the chain: the plugins after it
 never see the message, and the native answers true, so the mod cancels `ServerChatEvent`. Every
@@ -221,7 +227,8 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `send_message(uuid, text)` | `message`, a system message to one player if they are online |
 | `broadcast(text)` | `broadcast`, a system message to every player and the console |
 | `run_command(command)` | `command`, run as the console, with a leading slash dropped, whose answer reaches the log of the server and no operator in the game |
-| `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number or the block lies outside the bounds of the world that `tp` takes, which is logged and refused, and answers whether it queued one |
+| `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number, the block lies outside the bounds of the world that `tp` takes, or the server stops, from `serverStopping`, or from `serverStopped` when the game did not announce the stop, to the next `serverStarting`, which is logged and refused, and answers whether it queued one |
+| `queue_teleport(uuid, location, safe_radius)` | `teleport` with the next id of the process and the radius of the search for a safe place, held to 8, or `None` for the place as it is, refused as `teleport` refuses, and answers the id that the events `Teleported` and `TeleportFailed` carry, each id once, unless the JVM is halted or killed before, see [Bridge](../bridge.md#the-end-of-a-teleport) |
 | `set_list_name(uuid, name)` | `listName`, the name of the player in the player list, cleared by an empty name |
 | `clear_list_name(uuid)` | `listName` with an empty name, which clears it |
 | `actions()` | The queue itself, for what the helpers do not cover |

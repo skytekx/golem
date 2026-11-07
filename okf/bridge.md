@@ -59,6 +59,8 @@ public final class Host {
 			double x, double y, double z, float yaw, float pitch);
 	public static native void respawn(String uuid, String name, String dimension,
 			boolean endConquered);
+	public static native void teleported(long id, String uuid, String from, String to);
+	public static native void teleportFailed(long id, String uuid, String reason);
 	public static native String[] commandNames();
 	public static native String[] command(String name, String senderUuid, String senderName,
 			int level, String arguments);
@@ -89,6 +91,8 @@ does not run, instead of failing on every event.
 | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
 | `death(uuid, name, cause, dimension, x, y, z, yaw, pitch)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type and where the player died | None |
 | `respawn(uuid, name, dimension, endConquered)` | On `PlayerRespawnEvent`, with the id of the dimension and `isEndConquered` of the event, which is true when the player left the End through its exit portal and did not die | None |
+| `teleported(id, uuid, from, to)` | When a teleport of Golem moved the player, with its id and where the player was and is, see [The end of a teleport](#the-end-of-a-teleport) | None |
+| `teleportFailed(id, uuid, reason)` | When a teleport of Golem ended without a move or threw, with its id and the reason | None |
 | `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
 | `command(name, uuid, senderName, level, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
 | `permission(uuid, node)` | When a mod asks the PermissionAPI of Forge for a node of the type Boolean, on any thread | `PERMISSION_TRUE`, `PERMISSION_FALSE`, or `PERMISSION_NONE` for the default resolver of the node |
@@ -341,7 +345,7 @@ separator, which no field may hold. The first field is the kind.
 | `command` | The command without its slash | Runs it as the console, with the level and the name of the console, whose answer reaches the console and the log of the server but no operator in the game, see below |
 | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
 | `broadcast` | The text | Sends the text as a system message to every player and the console |
-| `teleport` | The UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` | Teleports the player there, if they are online, also into another dimension |
+| `teleport` | The id, the UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` and the radius of the search for a safe place, empty for none | Teleports the player there, or to the nearest safe place within the radius once the chunks of the search are loaded, also into another dimension, and reports how it ended, see [The end of a teleport](#the-end-of-a-teleport) |
 | `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
 
 A command of Golem runs with a source of its own in place of the console of the server, so the
@@ -369,12 +373,83 @@ and `refreshTabListName` sends it to every client. It holds until Golem clears i
 leaves.
 
 The mod logs an action of an unknown kind, or of a known kind with the wrong number of fields, once
-and skips it, and so a teleport into a dimension the server does not have, once per dimension, to a
-place whose numbers do not read, that is no finite number or that lies outside the bounds of the
-world, and a teleport that a mod cancelled. Each action runs on its own, so an action that throws,
-such as a message to a UUID that does not parse, is logged and the next action runs. The host stops
-the server with the actions `command save-all flush` and `command stop`, so the stop path is the
-same as an operator's at the console.
+and skips it, and so a teleport whose id does not read, a teleport into a dimension the server does
+not have, once per dimension, to a place whose numbers do not read, that is no finite number or
+that lies outside the bounds of the world, with a radius outside 0 to 8, and a teleport that a mod
+cancelled. Each action runs on its own, so an action that throws, such as a message to a UUID that
+does not parse, is logged and the next action runs. The host stops the server with the actions
+`command save-all flush` and `command stop`, so the stop path is the same as an operator's at the
+console.
+
+### The end of a teleport
+
+Every teleport carries an id, which `Actions::teleport` of `golem-bridge` hands out once per process
+from 1 on, so the plugin that queued it learns how it ended. Every id gets exactly one report, on
+the server thread, unless the JVM is halted or killed before, as the end of this section says. The
+mod reports through one of two natives, at the end of the tick that ended the teleport as a rule,
+and for a teleport that waits also when its player leaves or the server stops. The natives
+themselves report a teleport that never reached the mod, as the end of this section says.
+
+| Native | When | Fields |
+| --- | --- | --- |
+| `teleported(id, uuid, from, to)` | The player moved | `from` is where the player was right before the move and `to` where they are after it, each in the form of the answer of `location`, so `to` holds what a safe search or a mod made of the target |
+| `teleportFailed(id, uuid, reason)` | The teleport ended without a move, or threw | The reason, one word of the table below, and the UUID as the action carried it |
+
+| Reason | Why the teleport ended |
+| --- | --- |
+| `offline` | No player of the UUID is online when the teleport runs, the UUID does not parse, the player left while the teleport waited for its chunks, or a mod made the player leave inside the move, before the game moved them |
+| `dimension` | The server has no dimension of the id |
+| `place` | A number does not read or is no finite number, the radius lies outside 0 to 8, or the place lies outside the bounds of the world, also after a mod moved it |
+| `cancelled` | A mod cancelled `EntityTeleportEvent.TeleportCommand`, or the travel into another dimension on `EntityTravelToDimensionEvent` |
+| `unsafe` | The search found no safe place within its radius |
+| `unloaded` | The chunks of the search did not load within 600 ticks, 30 seconds at 20 TPS |
+| `stopped` | The server stopped while the teleport waited, in the mod for its chunks or in the queue of Golem for its tick, or an error ended the server from inside an action of the drain that handed the teleport to the mod, before its turn |
+| `error` | The teleport threw. The guard of the mod logs what it catches, and the game goes on. An error that the guard lets pass ends the server, and the teleport that ran ends with this reason before. Either leaves the place of the player unknown, since a mod may throw behind the move. The natives also end a teleport with it whose report does not read, a null or a place that is none, under the UUID of the report or an empty one, where the id reads |
+
+A teleport without a radius moves the player at once, as `tp` does. A teleport with a radius
+searches near its target as `safeLocation` searches, and moves the player to the middle of the
+block it found, with the rotation of the target. The search reads loaded chunks alone, so the mod
+first checks that every chunk of the columns within the radius of the block of the target is
+loaded, at most four. When one is not, it adds a ticket of its own, `golem_teleport` at the level
+of a full chunk, for each of them, keyed by the id, so two teleports never take each other's
+ticket away, and the game loads or generates the chunks on its workers over the next ticks, while
+no tick waits for them. At the end of every tick the mod looks again, before it runs the new
+actions, searches once the chunks are loaded, removes its tickets and moves the player, and after
+600 ticks it gives up with `unloaded`. The ticket runs out by itself 20 ticks after that, should a
+fault keep the mod from removing it. So a far home or a warp whose chunks no player keeps loaded
+finds its safe place, which `safeLocation` answers `unloaded` for.
+
+The teleports of one player run in the order of their actions: a teleport of a player who has one
+that waits for its chunks waits behind it, also when it has no radius, and the reports of one player
+come in that order. When the player leaves, every teleport of theirs that waits in the mod ends with
+`offline` before `playerLeft` reaches Golem, and one that still stands in the queue of Golem then
+ends with `offline` at the end of that tick, behind `playerLeft`. A mod may make a player leave
+inside the move of a teleport: the teleports that wait behind it end on the spot, and the one that
+runs ends when its move returns, behind them and behind `playerLeft`, with `offline` when the player
+is gone behind `EntityTeleportEvent.TeleportCommand`, where the mod moves nobody.
+
+On `ServerStoppingEvent` every teleport that waits in the mod ends with `stopped` before
+`serverStopping` reaches Golem. No tick drains the queue of Golem from there on, so the native
+`serverStopping()` ends every teleport that still waits in that queue the same way, oldest first,
+before the plugins hear of the stop, and the queue takes no teleport until the next
+`serverStarting()`. A server whose loop ends by a fault stops without `ServerStoppingEvent`, and
+Forge still posts `ServerStoppedEvent`. There the mod and the native `serverStopped()` end what
+still waits in the same way, before the plugins hear that the server stopped, and behind a stop that
+the game announced nothing waits, so nothing is reported twice. The game removes its players before
+`ServerStoppedEvent`, and a player whose connection has closed by then leaves there, so the
+teleports that wait in the mod for that player end with `offline`, as at every leave. Such a fault
+may fly out of an action of the bridge itself: the guard of the mod catches an exception and a
+linkage error, and every other error of the JVM, such as a stack that overflows in a listener of
+another mod, passes it and ends the loop of the server. The teleport that ran stands in no queue
+then, and the actions of that drain behind it never run. So the mod reports `error` for the teleport
+that ran and `stopped` for every teleport of that drain behind it, at once and so before the
+teleports that wait in the mod end, and throws the error on. So every id gets its report on every
+way that the game ends its server while the JVM still runs the mod. A JVM that is halted, as the
+watchdog of the dedicated server halts it, or killed, runs nothing, so no report comes then, and no
+teleport outlives the process. The Rust side also refuses a place that is no finite number or
+outside the bounds of the world before it queues a teleport, as
+[Plugins](plugins/index.md#the-context-of-a-call) says, so `place` names a fault of the mod or a mod
+that moved the target there.
 
 ## The rules of the server thread
 
@@ -478,7 +553,7 @@ jars against this page.
 - The host jar holds exactly two classes, `com/skytekx/golem/host/Host.class` and the interface
   `com/skytekx/golem/host/Game.class`, of class file version 61, and depends on its package and
   `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
-  public methods of `Host` are the 16 natives of the first Java block above, each with the
+  public methods of `Host` are the 18 natives of the first Java block above, each with the
   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
   `available()`, and those of `Game` are the 8 abstract methods of the block of
   [The game](#the-game).
@@ -506,7 +581,16 @@ library of its class loader holds. A minimal offline client of Minecraft 1.20.1 
 runs a command of the plugins, uses a selector, dies, respawns, is teleported into the Nether and
 named in the player list, and leaves, and the console runs the command as the player and as an
 armor stand. The stand in natives ask the object of `connect` every question of the game on the
-server thread and once from the worker thread of a chat message, where it answers null. While a
+server thread and once from the worker thread of a chat message, where it answers null. They queue
+teleports with ids: into the Nether, into a dimension the server does not have, to places that are
+no number, onto the roof of the Nether 4000 blocks away, whose chunks no player loaded and whose
+search lands on the bedrock at y 128 once they are, and behind it above the Overworld 3000 blocks
+away, where no place is safe, for a UUID of nobody online and one that does not parse, into chunks
+that no player loaded for a player who is kicked in the same tick, and for a second player online
+at the stop. Every teleport must end once, on the server thread, in the order of the teleports of
+its player, with the place or the reason of the table of
+[The end of a teleport](#the-end-of-a-teleport), the kicked one before `playerLeft` and the one of
+the stop before `serverStopping`. While a
 second client is online, the natives take the game mode from the first player for one question of
 the players, so that the answer of that player throws, and `players()` must answer the second
 player alone, with one error of the guard. The natives name `seed` and `teleport`, which the game

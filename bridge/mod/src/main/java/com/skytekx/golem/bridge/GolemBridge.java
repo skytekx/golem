@@ -41,8 +41,12 @@ public final class GolemBridge {
 		}
 		Guard guard = new Guard();
 		ListNames names = new ListNames();
+		Teleports teleports = new Teleports(guard);
 		MinecraftForge.EVENT_BUS.register(names);
-		MinecraftForge.EVENT_BUS.register(new ServerEvents(guard, new Actions(guard, names)));
+		// The teleports of a player who leaves end before Golem hears that the player left.
+		MinecraftForge.EVENT_BUS.register(teleports);
+		MinecraftForge.EVENT_BUS.register(new ServerEvents(guard,
+				new Actions(guard, names, teleports)));
 		MinecraftForge.EVENT_BUS.register(new PlayerEvents(guard));
 		MinecraftForge.EVENT_BUS.register(new PluginCommands(guard));
 		MinecraftForge.EVENT_BUS.register(new Permissions(guard));
