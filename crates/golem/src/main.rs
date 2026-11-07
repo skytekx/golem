@@ -16,7 +16,12 @@
 //! The program golem.
 
 use std::{
+    ffi::{
+        OsStr,
+        OsString, //
+    },
     io::Write,
+    os::unix::ffi::OsStrExt,
     path::{
         Path,
         PathBuf, //
@@ -81,8 +86,18 @@ struct RunOptions {
     arguments: Vec<String>,
 }
 
+/// The text of an argument that must be text, or the error that names it.
+fn text<'a>(argument: &'a OsStr, what: &str) -> Result<&'a str, String> {
+    argument
+        .to_str()
+        .ok_or_else(|| format!("the argument {} {what} is not UTF-8", argument.display()))
+}
+
 /// Reads the options of golem run, each as `--name value` or `--name=value`.
-fn parse_run(arguments: &[String]) -> Result<RunOptions, String> {
+///
+/// The paths take any bytes, as the paths of the system do. The arguments of main must be text,
+/// since the launch hands them to the JVM as text.
+fn parse_run(arguments: &[OsString]) -> Result<RunOptions, String> {
     let mut options = RunOptions {
         server: PathBuf::from("."),
         java_home: None,
@@ -93,13 +108,20 @@ fn parse_run(arguments: &[String]) -> Result<RunOptions, String> {
     let mut rest = arguments.iter();
     while let Some(argument) = rest.next() {
         if argument == "--" {
-            options.arguments = rest.cloned().collect();
+            options.arguments = rest
+                .map(|argument| text(argument, "after --").map(str::to_owned))
+                .collect::<Result<_, _>>()?;
             break;
         }
-        let (name, inline) = match argument.split_once('=') {
-            Some((name, value)) if name.starts_with("--") => (name, Some(value.to_owned())),
-            _ => (argument.as_str(), None),
+        let bytes = argument.as_bytes();
+        let (name, inline) = match bytes.iter().position(|&byte| byte == b'=') {
+            Some(equals) if bytes.starts_with(b"--") => (
+                OsStr::from_bytes(&bytes[..equals]),
+                Some(OsStr::from_bytes(&bytes[equals + 1..]).to_owned()),
+            ),
+            _ => (argument.as_os_str(), None),
         };
+        let name = name.to_str().unwrap_or_default();
         let value = inline
             .or_else(|| rest.next().cloned())
             .ok_or_else(|| format!("{name} needs a value"));
@@ -109,12 +131,13 @@ fn parse_run(arguments: &[String]) -> Result<RunOptions, String> {
             "--host-jar" => options.host_jar = Some(PathBuf::from(value?)),
             "--budget-ms" => {
                 let value = value?;
+                let value = text(&value, "of --budget-ms")?;
                 let millis = value.parse().map_err(|_| {
                     format!("--budget-ms takes a whole number of milliseconds, not {value}")
                 })?;
                 options.budget = Duration::from_millis(millis);
             }
-            _ => return Err(format!("run has no option {argument}")),
+            _ => return Err(format!("run has no option {}", argument.display())),
         }
     }
     Ok(options)
@@ -559,7 +582,7 @@ fn report(outcome: Result<Outcome, JvmError>) -> ExitCode {
 }
 
 /// golem run: starts the Forge server in the JVM and waits until it ends.
-fn run(arguments: &[String]) -> Result<ExitCode, String> {
+fn run(arguments: &[OsString]) -> Result<ExitCode, String> {
     let options = parse_run(arguments)?;
     let server = resolve(&options.server, "the server directory")?;
     let java_home = java_home(options.java_home)?;
@@ -584,8 +607,13 @@ fn run(arguments: &[String]) -> Result<ExitCode, String> {
 }
 
 fn main() -> ExitCode {
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
-    match arguments.first().map(String::as_str) {
+    // The arguments may hold any bytes, which std::env::args would answer with a panic.
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let Some(command) = arguments.first() else {
+        eprintln!("{USAGE}");
+        return ExitCode::FAILURE;
+    };
+    match command.to_str() {
         Some("run") => run(&arguments[1..]).unwrap_or_else(|error| {
             eprintln!("golem: {error}");
             ExitCode::FAILURE
@@ -602,12 +630,8 @@ fn main() -> ExitCode {
             println!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Some(other) => {
-            eprintln!("golem: no command {other}\n{USAGE}");
-            ExitCode::FAILURE
-        }
-        None => {
-            eprintln!("{USAGE}");
+        _ => {
+            eprintln!("golem: no command {}\n{USAGE}", command.display());
             ExitCode::FAILURE
         }
     }

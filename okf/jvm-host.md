@@ -37,15 +37,19 @@ golem run [--server <dir>] [--java-home <dir>] [--host-jar <file>] [--budget-ms 
 | `--budget-ms` | 1 | The budget of one call into a plugin, in milliseconds, `DEFAULT_BUDGET` of `golem-plugin` |
 | `-- <arg>...` | None | Arguments of main behind those of `unix_args.txt`, such as `nogui` |
 
-Every option also takes the form `--name=value`. `golem run` resolves the server directory, the
-Java home and the host jar to absolute paths, changes into the server directory, since the paths
-of `unix_args.txt` are relative to it, and reads the launch as [The launch](#the-launch)
-describes. It puts `-Xrs` in front of the options and the host jar on the module path, installs the
-plugin runtime with the core plugin as the handler of the bridge, starts the watch of the signals
-and runs the JVM. It exits with 0 when main returned and `DestroyJavaVM` answered 0, and with 1
-otherwise. `golem source` prints the version, the repository and the commit of the binary, which
-`build.rs` takes from the variable `GOLEM_COMMIT`, else from `git rev-parse HEAD`, else names
-unknown. `golem version` and `golem help` print the version and the usage.
+Every option also takes the form `--name=value`. The server directory and the Java home may hold
+bytes that are not UTF-8, as a path of the system may, but the path of the host jar, the command,
+the value of `--budget-ms` and the arguments of main after `--` must be UTF-8, since the JVM takes
+the module path and the arguments of main as text, and one that is not is an error. `golem run`
+resolves the server directory, the Java home and the host jar to absolute paths, changes into the
+server directory, since the paths of `unix_args.txt` are relative to it, and reads the launch as
+[The launch](#the-launch) describes. It puts `-Xrs` in front of the options and the host jar on the
+module path, installs the plugin runtime with the core plugin as the handler of the bridge, starts
+the watch of the signals and runs the JVM. It exits with 0 when main returned and `DestroyJavaVM`
+answered 0, and with 1 otherwise. `golem source` prints the version, the repository and the commit
+of the binary, which `build.rs` takes from the variable `GOLEM_COMMIT`, else from
+`git rev-parse HEAD`, else names unknown. `golem version` and `golem help` print the version and the
+usage.
 
 ## The launch
 
