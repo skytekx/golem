@@ -288,7 +288,10 @@ fn print_thread_dump() {
         return;
     };
     let dump = vm.attach_current_thread_as_daemon().and_then(|mut env| {
-        let dump = thread_dump(&mut env);
+        // The thread stays attached and never returns to Java, so nothing else frees the local
+        // references of a dump, and each would keep its objects, the text of the dump among
+        // them, until the process ends. A frame of their own frees them once the text is read.
+        let dump = env.with_local_frame(16, thread_dump);
         if env.exception_check().unwrap_or(false) {
             let _ = env.exception_describe();
             let _ = env.exception_clear();
