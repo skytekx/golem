@@ -33,7 +33,8 @@ entries:
   - notebook: 04_plugins
     cell_timeout: 1800
 
-  # The jars of the bridge against okf/bridge.md, and the mod on three stock Forge servers.
+  # The jars of the bridge against okf/bridge.md, and the mod on four stock Forge servers, the fourth
+  # on a world whose forge-server.toml names forge:default_handler.
   - notebook: 05_bridge_build
     cell_timeout: 1800
 

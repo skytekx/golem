@@ -17,7 +17,7 @@ and the executed copy shows every output on the way to the failure.
 | `tests/matrix.yaml` | The entries the runner sweeps, in order, with their parameters |
 | `tests/run.py` | The runner, papermill over the kernel `golem` |
 | `tests/harness/` | What the notebooks share: where the repository is, how a process runs, and a player of Minecraft 1.20.1 in `minecraft.py` |
-| `tests/fetch.py` | The downloads of the notebooks that boot Forge: Temurin 17, the Forge server and Gradle, each checked by its SHA-256 |
+| `tests/fetch.py` | The downloads of the notebooks that boot Forge: Temurin 17, the Forge server and Gradle, each checked by its SHA-256. With `--only modpack` it builds the SkyTekx 3 modpack of the live server from a pinned commit of its repository instead: every jar of the index checked by its size and the SHA-512 of the index, the Arclight jar by its SHA-256, and the 31 libraries of the `installer.json` of that jar by their SHA-256 |
 | `tests/pyproject.toml` | The exact pins of the Python packages the harness needs |
 | `tests/notebooks/out/` | The executed notebooks and `report.json` of a run, never committed |
 
@@ -37,15 +37,36 @@ tests/.venv/bin/python tests/run.py --list
 ```
 
 The notebooks that build or boot Golem need more than Python. `cargo` of the toolchain in
-`rust-toolchain.toml` builds the crates for 03, 04, 06 and 07. `tests/fetch.py` downloads Temurin
-17.0.21, installs the Forge server 1.20.1-47.4.18 and unpacks Gradle 8.14.3 under `tests/.cache/`,
-which git ignores, for 03, 05 and 07, and 05 needs a C compiler as `cc`. The first build of the
-bridge downloads and remaps Minecraft into the Gradle cache of the user, which takes minutes, and
-later builds take seconds:
+`rust-toolchain.toml` builds `golem` for 03, 07 and 08 and `golem-devtool` for 03, 04, 06, 08 and
+09. `golem-devtool` takes `golem-store`, whose bundled SQLite the build compiles with the C compiler
+of the host, so every notebook that builds it needs a C compiler as `cc`, and so does 05 for its
+stand in natives. `tests/fetch.py` downloads Temurin 17.0.21, installs the Forge server
+1.20.1-47.4.18 and unpacks Gradle 8.14.3 under `tests/.cache/`, which git ignores, for 03, 05, 07
+and 08. The first build of the bridge downloads and remaps Minecraft into the Gradle cache of the
+user, which takes minutes, and later builds take seconds:
 
 ```
 python3 -I tests/fetch.py
 ```
+
+Notebook 08 boots the modpack of the live server, which it needs fetched first:
+
+```
+python3 -I tests/fetch.py --only modpack
+```
+
+The fetch takes the repository of the server at the pinned commit without a work tree, and the jars
+of the pack and the libraries of Arclight from GitHub, Modrinth, Maven Central and the repository of
+Sponge. `du` measured the result at about 1.4 GB under `tests/.cache/modpack` and
+`tests/.cache/skytekx3-1201-server` on 2026-11-07 in the cloud container of the session. The four
+boots of the notebook run one after the other, since each held about 7.5 GiB of resident memory,
+and the whole notebook took 19 minutes in its run of 2026-11-06 in the same container, see
+[Modpack](../okf/modpack.md#running-it). The parameter `arclight = False` leaves out the boot under
+Arclight and the boot of golem on its world.
+
+Notebook 09 needs the module `sqlite3` of the Python of the harness with SQLite 3.37 or newer, since
+it writes rows into a copy of a store, whose tables are `STRICT`, and builds the files and logs of
+other applications that the store must refuse.
 
 The pins are the ones in `tests/pyproject.toml`, and CI reads them from there. The runner prints
 one line per entry and a summary, writes `tests/notebooks/out/<id>.ipynb` for every entry and
@@ -94,7 +115,9 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | `01_license_lint` | Does the license lint pass this tree, refuse every break of its nine rules, and agree with `reuse lint`? |
 | `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, and agree with Commitizen? |
 | `03_launch_args` | Does the JVM host read the launch of a Forge server as the java launcher of Temurin 17 reads it, and does a program run in its embedded JVM as it runs under java? |
-| `04_plugins` | Do the 14 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin, the queue, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
-| `05_bridge_build` | Does the Gradle build of `bridge/` give the host jar and the reobfuscated mod of `okf/bridge.md`, and does the mod stay off with one warning on a stock Forge without the host jar or its natives, and call every native and run every action when natives answer? |
+| `04_plugins` | Do the 16 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin with the tools of operators, the chain of plugins that decide a permission, a port that answers a permission as LuckPerms did through Arclight, the questions of the plugins to a scripted game, the queue, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
+| `05_bridge_build` | Does the Gradle build of `bridge/` give the host jar and the reobfuscated mod of `okf/bridge.md`, does the mod stay off with one warning on a stock Forge without the host jar or its natives, and with stand in natives does it call every native, answer every question of the game on the server thread and none from `serverStopped` on, and run every action, and does a fourth boot on a world whose `forge-server.toml` names `forge:default_handler` log one warning? |
 | `06_permissions` | Does `golem-permissions` refuse every break of its format, decide every check by the rules of `okf/plugins/permissions.md` in their order, and does the seed grant the 39 nodes of the live group default and no admin command? |
-| `07_forge_boot` | Does `golem run` boot Forge with the bridge connected to the real natives, answer `golem` on the console and to a player, and stop on a signal with the worlds saved, with and without the bridge mod? |
+| `07_forge_boot` | Does `golem run` boot Forge with the bridge connected to the real natives, answer `golem` on the console and to a player, tell the sources of a command apart, read the game with the respawn point as Minecraft stores it, teleport and name a player through the tools of operators, hold the search for a safe place to each of its rules, answer through the JNI without Minecraft when a question waits, throws, does not read or names 2000 players, and stop on a signal with the worlds saved, with and without the bridge mod? |
+| `08_modpack_boot` | Does `golem run` boot the 289 mods of the SkyTekx 3 modpack of the live server as the java launcher does, with the same mods, errors and warnings of the loader, 20 TPS and a clean stop, and open the world that Arclight wrote, and does `tests/fetch.py --only modpack` hold to its docstring? |
+| `09_store` | Does `golem-store` keep the schema of `okf/store.md`, answer and refuse every call, keep a prefix of its changes after a kill, a failed writer and a panic, refuse every file that is no store without changing it, bound the changes that wait for the writer, and answer the calls of the server thread inside their budget? |
