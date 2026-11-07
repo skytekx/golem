@@ -519,6 +519,8 @@ refuses every entry it cannot place, and names the player and the debt, which an
 EssentialsX, such as with `eco set`, before the migration runs again. The port of the economy takes
 every amount in whole cents, as the store does, so a payment below one cent is refused there.
 
+Issue: [#106](https://github.com/skytekx/golem/issues/106).
+
 ### Names
 
 EssentialsX folds the names of homes, warps and spawn groups, while the store compares them byte for
@@ -535,6 +537,8 @@ EssentialsX found.
 The folding of a port is also what keeps white space, a zero width character or a character that
 turns the direction of text out of the name of a home, as in EssentialsX, since the store refuses
 only control characters.
+
+Issue: [#107](https://github.com/skytekx/golem/issues/107).
 
 ## The place in the program golem
 
