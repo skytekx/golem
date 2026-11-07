@@ -39,25 +39,33 @@ pub fn whoami(sender: &Sender, game: &dyn Game) -> Vec<String> {
     let line = match sender {
         Sender::Console => "You run /golem as the console.".to_owned(),
         Sender::Other { name, level } => format!("You run /golem as {name} at the level {level}."),
-        Sender::Player(player) => match game.player(&player.uuid) {
-            Some(Some(online)) => format!(
+        Sender::Player { player, level } => match game.player(&player.uuid) {
+            Some(Some(online)) if online.level == *level => format!(
                 "You run /golem as the player {} at the operator level {}.",
                 player.name, online.level
             ),
-            _ => format!("You run /golem as the player {}.", player.name),
+            Some(Some(online)) => format!(
+                "You run /golem as the player {} at the operator level {}, from a source at the level {level}.",
+                player.name, online.level
+            ),
+            _ => format!(
+                "You run /golem as the player {} from a source at the level {level}.",
+                player.name
+            ),
         },
     };
     vec![line]
 }
 
 /// Answers the refusal of the subcommand `name` for a sender below the operator level, or
-/// `None` when the sender may run it.
+/// `None` when the sender may run it. A player counts at the lower of the level of the source
+/// and their operator level.
 pub fn refusal(name: &str, sender: &Sender, game: &dyn Game) -> Option<Vec<String>> {
     let allowed = match sender {
         Sender::Console => true,
         Sender::Other { level, .. } => *level >= OPERATOR_LEVEL,
-        Sender::Player(player) => match game.player(&player.uuid) {
-            Some(Some(online)) => online.level >= OPERATOR_LEVEL,
+        Sender::Player { player, level } => match game.player(&player.uuid) {
+            Some(Some(online)) => online.level.min(*level) >= OPERATOR_LEVEL,
             Some(None) | None => false,
         },
     };

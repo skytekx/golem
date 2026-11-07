@@ -86,10 +86,21 @@ pub const MAX_LEVEL: u8 = 4;
 pub enum Sender {
     /// The server console or RCON: a source without an entity at the level [`MAX_LEVEL`].
     Console,
-    /// A player in the game, also when another source runs the command as them.
-    Player(Player),
-    /// Every other source: a command block, a function, or a command that runs as an entity
-    /// that is no player.
+    /// A player who runs the command themself.
+    ///
+    /// A plugin judges them by the lower of `level` and the rights of the player, since the
+    /// game may run a command of a player at another level, such as a function of an
+    /// advancement at the level 2.
+    Player {
+        /// The player.
+        player: Player,
+        /// The permission level of the source, from 0 to [`MAX_LEVEL`], which is the operator
+        /// level of the player unless the game ran the command at another one.
+        level: u8,
+    },
+    /// Every other source: a command block, a function, or a command that another source runs
+    /// as an entity through `execute as`, a player included, named after that entity at the
+    /// level of the source, so it never borrows the rights of a player.
     Other {
         /// The name of the source as the game gives it, such as `@` for a command block.
         name: String,

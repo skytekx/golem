@@ -449,8 +449,8 @@ pub fn command_names() -> Vec<String> {
 
 /// Runs a command and answers the lines its sender sees.
 ///
-/// A sender with a UUID and a name is a player, one with neither at the level 4 is the console,
-/// and one with a name alone is another source at its level. Every other sender is a fault of
+/// A sender with a UUID and a name is a player at the level of the source, one with neither at
+/// the level 4 is the console, and one with a name alone is another source at its level. Every other sender is a fault of
 /// the mod, and the command is refused rather than run as the console, which may do more than
 /// any other source.
 pub fn command(
@@ -486,10 +486,13 @@ fn sender(uuid: Option<&str>, name: Option<&str>, level: i32, command: &str) -> 
         return None;
     };
     match (uuid, name) {
-        (Some(uuid), Some(name)) => Some(Sender::Player(Player {
-            uuid: uuid.to_owned(),
-            name: name.to_owned(),
-        })),
+        (Some(uuid), Some(name)) => Some(Sender::Player {
+            player: Player {
+                uuid: uuid.to_owned(),
+                name: name.to_owned(),
+            },
+            level,
+        }),
         (None, None) if level == MAX_LEVEL => Some(Sender::Console),
         (None, Some(name)) => Some(Sender::Other {
             name: name.to_owned(),

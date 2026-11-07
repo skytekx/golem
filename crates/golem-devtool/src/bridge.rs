@@ -827,7 +827,7 @@ impl Plugin for Echo {
     ) -> Vec<String> {
         let who = match sender {
             Sender::Console => "the console".to_owned(),
-            Sender::Player(player) => {
+            Sender::Player { player, .. } => {
                 context.send_message(
                     &player.uuid,
                     &format!("{} heard {}", self.name, player.name),

@@ -7,7 +7,8 @@
  * one greedy string argument, so the plugin parses its arguments itself. Brigadier asks for no
  * permission level: the plugin checks the sender through golem-permissions. The natives learn who
  * runs a command and at which permission level, so a command block or a function never passes for
- * the console, as okf/bridge.md specifies.
+ * the console, and a source that runs a command as a player through execute as never passes for
+ * that player, as okf/bridge.md specifies.
  */
 package com.skytekx.golem.bridge;
 
@@ -100,16 +101,19 @@ public final class PluginCommands {
 	}
 
 	/**
-	 * Asks the plugin with the source of the command and its permission level: a player with
-	 * their UUID and name, the console and RCON with neither, and every other source with its
-	 * name alone.
+	 * Asks the plugin with the source of the command and its permission level: a player who runs
+	 * it themself with their UUID and name, the console and RCON with neither, and every other
+	 * source with its name alone. A command that another source runs as a player through execute
+	 * as keeps that source in the field source of the stack, which Forge makes public, so it
+	 * reaches the plugin as that source, named after the player, and never borrows the rights
+	 * of the player.
 	 */
 	private static String[] ask(CommandSourceStack source, String name, String arguments) {
 		int level = level(source);
 		Entity entity = source.getEntity();
 		String uuid = null;
 		String sender = null;
-		if (entity instanceof ServerPlayer player) {
+		if (entity instanceof ServerPlayer player && source.source == player) {
 			uuid = player.getStringUUID();
 			sender = player.getGameProfile().getName();
 		} else if (entity != null || level < Commands.LEVEL_OWNERS) {

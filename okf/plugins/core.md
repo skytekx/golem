@@ -37,9 +37,10 @@ arguments, which `source`, `status`, `whoami` and `help` ignore.
 | `/golem <other>` | Everyone | `The subcommand <other> of /golem is unknown.` and the help |
 
 The console runs the same command, without the slash, and sees the same lines. A source below the
-level reads `Only the console and operators of level 2 and more may run /golem <name>.`, and a
-player is judged by their operator level as the game answers it, whoever made the command run as
-them.
+level reads `Only the console and operators of level 2 and more may run /golem <name>.`. A player
+is judged by the lower of their operator level as the game answers it and the level of the source,
+and a command that another source runs as a player through `execute as` is judged by the level of
+that source alone, as [Plugins](index.md#commands) says.
 
 ## Source
 
@@ -87,8 +88,9 @@ answers.
 | Sender | Answer |
 | --- | --- |
 | The console and RCON | `You run /golem as the console.` |
-| A player | `You run /golem as the player Tester at the operator level 0.` |
-| Another source | `You run /golem as @ at the level 2.` for a command block, or the name of an entity |
+| A player | `You run /golem as the player Tester at the operator level 0.`, and `, from a source at the level 2` before the full stop when the game runs their command at another level than their operator level |
+| A player whose operator level the game does not answer | `You run /golem as the player Tester from a source at the level 0.`, which names the level of the source alone |
+| Another source | `You run /golem as @ at the level 2.` for a command block, or the name of the entity it runs as through `execute as`, a player included |
 
 A command block keeps the line as its last output, which `data get block <x> <y> <z> LastOutput`
 shows, and a function sees no line, since the game hides the answers to a silent source.
