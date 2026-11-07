@@ -382,11 +382,12 @@ as `i64`.
 | `set_spawn(group, location)` | Sets the spawn of a group, `DEFAULT_GROUP` for the one spawn |
 | `remove_spawn(group)`, `spawn(group)`, `spawns()` | As for homes |
 
-A name of a home, a warp or a setting and the group of a spawn are compared byte for byte, and the
-store takes any name of 1 to 64 characters without a control character. A port folds a name as its
-plugin does before it calls the store, see [Names](#names). The spawn of the group `default` is the
-one spawn of the server, which holds for every player whose groups have none, as in
-EssentialsXSpawn.
+A name of a home, a warp or a setting and the group of a spawn are compared byte for byte. The store
+takes any name of a home, a warp or a setting of 1 to 64 characters without a control character,
+and the group of a spawn as it takes a group of the permissions, with 1 to 256 bytes and no white
+space or control character, see [Refusals](#refusals). A port folds a name as its plugin does
+before it calls the store, see [Names](#names). The spawn of the group `default` is the one spawn
+of the server, which holds for every player whose groups have none, as in EssentialsXSpawn.
 
 ### Mail and ignore lists
 
@@ -487,8 +488,9 @@ for at all.
 | `Invalid` | `the name of a home is empty`, `the name of a home has 65 characters, more than 64`, `the location of a home has the x NaN, which is not a finite number` |
 
 The rules of a value: a name of a player, a home, a warp, a setting key, a nickname or the sender of
-a mail has 1 to 64 characters and no control character. A node, a group or a dimension has 1 to 256
-bytes and no white space or control character. A text of a mail, a note or a setting value has at
+a mail has 1 to 64 characters and no control character. A node, a group of the permissions, the
+group of a spawn, the permission of a warp or a dimension has 1 to 256 bytes and no white space or
+control character. A text of a mail, a note or a setting value has at
 most 65536 bytes and no NUL, and a mail is not empty. A location is finite, and the store takes a
 coordinate or an angle of -0.0 as 0.0, since SQLite writes a REAL without a fraction as an integer
 and the file gives the zero back without its sign. A read then answers the same before a restart
