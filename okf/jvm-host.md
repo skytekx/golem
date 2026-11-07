@@ -234,7 +234,10 @@ server tick until the server stopped, the bridge mod drains the queue of actions
 tick, and the first signal in that time queues the actions `command save-all flush` and
 `command stop` and logs `[golem] SIGTERM: queued save-all flush and stop on the server thread`. The
 bridge mod runs both commands as the console at the end of the next tick, so the stop is the same as
-the one of an operator. A later signal logs that the stop is already queued and changes nothing.
+the one of an operator. A later signal logs that the stop is already queued and changes nothing,
+since a second stop would only race the first. A server thread that hangs keeps the queued stop
+waiting until `SIGKILL`, as under java, where the shutdown hook of the server waits for the server
+thread without a bound.
 
 A shutdown signal that golem started with ignored stays ignored, as HotSpot leaves it, so a server
 under `nohup` keeps running on a hangup, and golem logs that at the start.
