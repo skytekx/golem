@@ -81,6 +81,14 @@ nodes = [
 # this group stands for them, with every node of Essentials and every node of Golem itself, such
 # as the commands that change the permissions.
 #
+# An operator on the live server does not hold every node of Essentials. The plugin.yml of
+# EssentialsX 2.22.0 marks 23 nodes default: false, switches such as keepinv that a player gets
+# only by hand, and LuckPerms answers an operator false for them, since it asks the default of the
+# plugin before it grants an operator everything. The group denies each of them by name, so
+# essentials.* grants the rest. Golem has no child permissions, so the children of
+# essentials.exempt are denied one by one. The group default grants essentials.back.ondeath, and
+# an operator holds it there too, so the group leaves that one alone.
+#
 # Unknown: which admin commands the operators really use. The usage audit of the plan answers
 # that, and the group may then grant less than every node of Essentials.
 [groups.admin]
@@ -89,4 +97,27 @@ inherits = ["default"]
 nodes = [
     "essentials.*",
     "golem.*",
+    # The nodes of EssentialsX 2.22.0 that are default: false, but essentials.back.ondeath.
+    "-essentials.afk.auto",
+    "-essentials.balancetop.exclude",
+    "-essentials.ban.exempt",
+    "-essentials.chat.ignoreexempt",
+    "-essentials.exempt",
+    "-essentials.home.compass",
+    "-essentials.invsee.preventmodify",
+    "-essentials.keepinv",
+    "-essentials.keepxp",
+    "-essentials.kick.exempt",
+    "-essentials.kit.exemptdelay",
+    "-essentials.mute.exempt",
+    "-essentials.near.exclude",
+    "-essentials.nick.allowunsafe",
+    "-essentials.nick.hideprefix",
+    "-essentials.sethome.bed",
+    "-essentials.silentjoin",
+    "-essentials.silentjoin.vanish",
+    "-essentials.silentquit",
+    "-essentials.sudo.exempt",
+    "-essentials.tempban.exempt",
+    "-essentials.vanish.pickup",
 ]

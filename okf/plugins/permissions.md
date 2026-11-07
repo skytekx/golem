@@ -129,9 +129,11 @@ away a node that a group grants by name, and a group of a higher rank decides be
 The section on quirks below has the case.
 
 On Bukkit, LuckPerms also answers a node that nothing names with the default of the plugin and,
-for an operator, with true (lines 80 to 85 of the same file). Golem knows no operator in its
-permissions and no default of a plugin. An undefined node is undefined, and the group `admin` of
-the seed stands for the operators.
+for an operator, with true (lines 80 to 85 of the same file). The default of the plugin comes
+first, so an operator gets false for a node that the `plugin.yml` of its plugin marks
+`default: false`, such as `essentials.keepinv`. Golem knows no operator in its permissions and no
+default of a plugin. An undefined node is undefined, and the group `admin` of the seed stands for
+the operators, so it denies such nodes by name.
 
 The format has no contexts such as a world or a server, no expiry and no meta such as a prefix.
 The importer of a LuckPerms export, which the data migration of the
@@ -206,10 +208,18 @@ each with the prefix `essentials.`.
 
 The group `admin` has the weight 100, inherits `default` and grants `essentials.*` and `golem.*`.
 The live server has no such group. Its admin commands stay with the operators, who hold them
-through the defaults of Bukkit, as the same page says. The notebook checks that a player of the
-group `default` holds each of the 39 nodes and none of the admin commands, such as
-`essentials.setspawn`, `essentials.eco`, `essentials.gamemode` and `golem.perm`, and that a player
-of the group `admin` holds them.
+through the defaults of Bukkit, as the same page says. An operator there holds none of the 23
+nodes that the `plugin.yml` of EssentialsX 2.22.0 marks `default: false`, switches that a player
+gets only by hand, so the group denies 22 of them by name, every one but `essentials.back.ondeath`,
+which the group `default` grants. They are `afk.auto`, `balancetop.exclude`, `ban.exempt`,
+`chat.ignoreexempt`, `exempt`, `home.compass`, `invsee.preventmodify`, `keepinv`, `keepxp`,
+`kick.exempt`, `kit.exemptdelay`, `mute.exempt`, `near.exclude`, `nick.allowunsafe`,
+`nick.hideprefix`, `sethome.bed`, `silentjoin`, `silentjoin.vanish`, `silentquit`, `sudo.exempt`,
+`tempban.exempt` and `vanish.pickup`, each with the prefix `essentials.`. Golem has no child
+permissions, so the children of `essentials.exempt` stand in the list by name. The notebook
+checks that a player of the group `default` holds each of the 39 nodes and none of the admin
+commands, such as `essentials.setspawn`, `essentials.eco`, `essentials.gamemode` and `golem.perm`,
+that a player of the group `admin` holds them, and that the admin holds none of the 22 switches.
 
 What nobody knows yet, and the comments of the file say so too:
 
