@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 #
 # The plugin runtime of Golem: the trait of a plugin, the calls on the server thread with their
-# time budget, the store and the permissions that it hands the plugins, and the core plugin with
+# time budget, the store and the permissions that it hands the plugins, the plugin that answers
+# the PermissionAPI of Forge with the commands of the port of LuckPerms, and the core plugin with
 # the command golem.
 
 [package]

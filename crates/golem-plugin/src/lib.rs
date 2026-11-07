@@ -23,6 +23,7 @@
 //! | `operator` | The subcommands of /golem that ask the game, most of them for operators |
 //! | `services` | What the runtime hands every plugin beside the game: the store and the permissions |
 //! | `permissions` | [`Resolver`], the permissions of the store, and the check of a node for a sender |
+//! | `permissions_plugin` | [`PermissionsPlugin`], the `PermissionAPI` of Forge and the commands of the port of `LuckPerms` |
 //!
 //! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
 //! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
@@ -31,6 +32,7 @@
 mod core_plugin;
 mod operator;
 mod permissions;
+mod permissions_plugin;
 mod runtime;
 mod services;
 
@@ -61,6 +63,7 @@ pub use crate::{
         PermissionAnswer,
         Resolver, //
     },
+    permissions_plugin::PermissionsPlugin,
     runtime::{
         Budget,
         Budgets,

@@ -428,3 +428,17 @@ Oldest first. Times are UTC.
   `luckperms.*` to the group `admin`. `golem-devtool permissions-command` runs the commands on a
   configuration, and `06_permissions` holds them to their texts. See
   [Permissions](plugins/permissions.md#the-commands-of-luckperms).
+- `golem run` answers the PermissionAPI of Forge and the commands of LuckPerms. The plugin
+  `golem-permissions` of the runtime answers every Boolean node of an online player as LuckPerms
+  did through Arclight, and leaves a player who is not online to the default resolver. It owns
+  `/luckperms` with its aliases: a command runs on the set of the store, writes what it changed to
+  the store and installs it in the resolver, so the next check sees it, and every tick hands the
+  resolver a look at the generation of the store. A command writes through the handle of the store
+  that never waits, which the resolver keeps and hands out alone, and asks for room for all of its
+  changes first, so it changes all or nothing and never waits for the writer. While the set of the
+  store does not load, no command runs, and the console and a holder of a node of the commands read
+  why. `04_plugins` holds the answers on the server thread and beside it, the commands on a store, a
+  command on a set that does not load and a command while the writer of the store is behind, and
+  `07_forge_boot` a selector and a tool of operators that follow a node which the console sets, with
+  the change in the file of the store after a stop by `SIGTERM` and after a stop without the bridge.
+  See [Plugins](plugins/index.md#permissions) and [Open items](open-items.md).

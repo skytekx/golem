@@ -5,7 +5,7 @@ type: Spec
 title: Bridge
 description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the game that Rust may ask, the permission handler of Forge, the wire form of the actions and the rules of the server thread.
 tags: [bridge, jni, forge, contract]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Bridge
@@ -327,7 +327,8 @@ default resolver of a node is never asked. The mods of the modpack that ask such
 Mekanism, Nature's Compass, Ars Magica Legacy, Balm, CC: Tweaked, JEI, spark and Simple Voice
 Chat, which asks `voicechat.speak` for every packet of a microphone. The handler of Golem falls to
 the default resolver when no plugin answers, which often grants a node to every player or to an
-operator level, so the port of LuckPerms must answer these nodes as LuckPerms did, see
+operator level, so the plugin of the permissions of `golem run`, the port of LuckPerms, answers
+these nodes for an online player as LuckPerms did, see
 [Permissions](plugins/permissions.md#arclight-forwards-every-permission-of-a-mod-to-luckperms).
 
 ## Actions

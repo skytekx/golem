@@ -11,10 +11,12 @@ generation.
 `golem run` boots the Forge server of a directory unchanged in its embedded JVM and stops it
 through the server thread on a signal. A Forge mod in `bridge/` reports the game to the natives of
 Golem, which hand it to the plugins in Rust, the first of them the command `golem` with the offer
-of the source. The permissions that replace LuckPerms are a crate with the seed of SkyTekx. The
-ports of EssentialsX and EssentialsXSpawn on the plugin runtime, the switch of the SkyTekx server
-from Arclight to Golem and the GraphQL API are planned. The [wiki](okf/index.md) holds the state
-and the design, and [Features](okf/features.md) lists what is built and what is planned.
+of the source. The permissions that replace LuckPerms are a plugin of the runtime with the seed of
+SkyTekx and the commands of LuckPerms: it keeps them in the store of the plugins beside the world
+and answers the PermissionAPI of Forge. The ports of EssentialsX and EssentialsXSpawn on the plugin
+runtime, the switch of the SkyTekx server from Arclight to Golem and the GraphQL API are planned.
+The [wiki](okf/index.md) holds the state and the design, and [Features](okf/features.md) lists what
+is built and what is planned.
 
 ## License
 

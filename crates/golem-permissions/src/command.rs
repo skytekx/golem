@@ -135,6 +135,32 @@ fn not_ported(label: &str, path: &str) -> String {
     ))
 }
 
+/// Whether the sender of `host` holds the node of any command of the port.
+pub fn holds_any(host: &dyn Host) -> bool {
+    MAIN.iter().any(|main| main.authorized(host))
+}
+
+/// The line that the caller answers in place of a command while the permissions that the
+/// command would build on do not load. The reason can name a group, a node or the UUID of a
+/// player of the configuration, so the caller hands it for the console and for a sender who
+/// holds a node of the commands alone, and every other sender reads the line without it.
+pub fn not_loaded(reason: Option<&str>) -> String {
+    match reason {
+        Some(reason) => prefixed(&format!(
+            "The permissions of Golem do not load, so no command runs: {reason}."
+        )),
+        None => prefixed("The permissions of Golem do not load, so no command runs."),
+    }
+}
+
+/// The line that the caller answers in place of the lines of a command whose changes the store
+/// does not take now, so that the command changed nothing.
+pub fn busy() -> String {
+    prefixed(
+        "The store of Golem takes no change now, so nothing changed. Run the command again later.",
+    )
+}
+
 /// The line of arguments that would name a context, which Golem does not have.
 fn no_context(arguments: &[&str]) -> String {
     prefixed(&format!(

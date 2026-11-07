@@ -33,7 +33,8 @@
 //! `storeClosed`, which is null for a script without a store. With `permissions` alone the
 //! runtime checks with those permissions. With both, the devtool seeds a store that holds no
 //! group with the permissions, as `golem run` seeds one, and a store that holds a group gives the
-//! runtime the resolver over its set. The steps `stored`, which answers the TOML of the set of the
+//! runtime the resolver over its set. The plugin `permissions` is the plugin `golem-permissions`
+//! of the runtime with that resolver. The steps `stored`, which answers the TOML of the set of the
 //! store, `generation`, which answers the generation the resolver holds and that of the store,
 //! `refresh`, which wakes the reload of the resolver with `Resolver::refresh` and waits up to a
 //! second for it, and `behind`, which puts a group into the store behind the resolver, as another
@@ -71,7 +72,8 @@
 //! the player list. `ask` asks the game, as the module game describes. `keeper` reaches the store
 //! through the context of its call: its `commands` set and answer a setting, answer the counts of
 //! the writer, hold the writer still, name a setting that the plugin sets behind a held writer when
-//! it sees `ServerStopped`, and answer whether a context that no runtime made holds a store.
+//! it sees `ServerStopped`, answer whether a context that no runtime made holds a store, and set a
+//! setting through the store that the resolver of the permissions hands out.
 
 use std::{
     fs,
@@ -101,6 +103,7 @@ use golem_plugin::{
     Context,
     CorePlugin,
     DEFAULT_BUDGET,
+    PermissionsPlugin,
     Plugin,
     Resolver,
     Runtime,
@@ -265,6 +268,8 @@ enum PluginSpec {
     /// A plugin that answers its commands with the check of each node of the arguments for the
     /// sender, through the context.
     Checker { name: String, commands: Vec<String> },
+    /// The plugin of the permissions of the runtime, the port of `LuckPerms`.
+    Permissions,
 }
 
 /// The default of a count of the script.
@@ -607,7 +612,17 @@ impl Run {
                     runtime.set_permissions(resolver.clone());
                 }
                 for spec in &self.plugins {
-                    runtime.add(build_plugin(spec, &self.source));
+                    match (spec, &self.resolver) {
+                        (PluginSpec::Permissions, Some(resolver)) => {
+                            runtime.add(Box::new(PermissionsPlugin::new(resolver.clone())));
+                        }
+                        (PluginSpec::Permissions, None) => runtime.add(Box::new(
+                            PermissionsPlugin::new(Resolver::from_permissions(
+                                golem_permissions::Permissions::default(),
+                            )),
+                        )),
+                        _ => runtime.add(build_plugin(spec, &self.source)),
+                    }
                 }
                 self.budgets = Some(runtime.budgets_handle());
                 self.actions = golem_bridge::install(Box::new(runtime));
@@ -953,6 +968,10 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             stopped: None,
         }),
         PluginSpec::Checker { name, commands } => Box::new(Checker { name, commands }),
+        // Run::install adds the plugin of the permissions with the resolver of the script.
+        PluginSpec::Permissions => Box::new(PermissionsPlugin::new(Resolver::from_permissions(
+            golem_permissions::Permissions::default(),
+        ))),
     }
 }
 
@@ -1245,9 +1264,10 @@ impl Plugin for Mover {
 /// of the feature testing of golem-store, `stopped <ms> <key>`, after which the plugin holds the
 /// writer still for that long and sets the setting once it sees `ServerStopped`, `outside`,
 /// which answers whether a context that no runtime made holds a store, `room <n>`, which
-/// answers whether the store takes that many changes now, and `fill <n>`, which sets the
+/// answers whether the store takes that many changes now, `fill <n>`, which sets the
 /// setting `fill` that many times and answers how many of them the store took and why it took
-/// no more.
+/// no more, and `resolver <key> <value>`, which sets a setting through the store that the
+/// resolver of the permissions hands out.
 struct Keeper {
     name: String,
     commands: Vec<String>,
@@ -1325,6 +1345,13 @@ impl Plugin for Keeper {
             "fill" => match key.parse::<u64>() {
                 Ok(changes) => fill(store, changes),
                 Err(_) => format!("{key} is no number of changes"),
+            },
+            "resolver" => match context.permissions().and_then(Resolver::store) {
+                Some(handle) => match handle.set_setting(key, value) {
+                    Ok(()) => format!("set {key}"),
+                    Err(error) => format!("refused {key}: {error}"),
+                },
+                None => "the resolver hands out no store".to_owned(),
             },
             "pause" => match key.parse::<u64>() {
                 Ok(ms) => match store.testing_pause_writer(Duration::from_millis(ms)) {

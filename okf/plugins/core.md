@@ -5,7 +5,7 @@ type: Spec
 title: Core plugin
 description: The core plugin of Golem and its command golem, which names the license and the source of the running build as section 13 of the AGPL asks, the TPS and MSPT of the server, the budget of every plugin, who runs a command, and the tools of operators that read the game, teleport a player to a safe place and name them in the player list.
 tags: [plugins, core, command, agpl, source, status, operators, game]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Core plugin
@@ -42,19 +42,19 @@ as it is typed.
 | `/golem listname <name> [<text>]` | `golem.listname` or an operator | The name of a player in the player list, cleared without a text |
 | `/golem <other>` | Everyone | `The subcommand <other> of /golem is unknown.` and the help |
 
-The console runs the same command, without the slash, and sees the same lines. A sender who may
-not run a tool reads `Only the console, operators of level 2 and more and a player who holds
+The console runs the same command, without the slash, and sees the same lines. A sender who may not
+run a tool reads `Only the console, operators of level 2 and more and a player who holds
 golem.<name> may run /golem <name>.`. A rule of the permissions decides first: a player whom a rule
 grants the node runs the tool whatever their operator level and the level of the source, and a
-player whom a rule denies it is refused, also as an operator. Where no rule names the node, a
-player is judged by the lower of their operator level as the game answers it and the level of the
-source, so an operator of level 2 and more keeps every tool without a node, and a player whom the
-game does not answer reads that the game gives no answer. A command that another source runs as a
-player through `execute as` is judged by the level of that source alone, as
-[Plugins](index.md#commands) says, so no source borrows the nodes or the level of a player. The
-seed grants `golem.*` to the group `admin`, which has no members yet. The level is the rule for a
-source that is no player, since such a source has no nodes, and the level 2 is the level of the
-game masters of Minecraft, at which a command block and a function run.
+player whom a rule denies it is refused, also as an operator. Where no rule names the node, a player
+is judged by the lower of their operator level as the game answers it and the level of the source,
+so an operator of level 2 and more keeps every tool without a node, and a player whom the game does
+not answer reads that the game gives no answer. A command that another source runs as a player
+through `execute as` is judged by the level of that source alone, as [Plugins](index.md#commands)
+says, so no source borrows the nodes or the level of a player. The seed grants `golem.*` to the
+group `admin`, which the console fills with `lp user <name> parent add admin`. The level is the rule
+for a source that is no player, since such a source has no nodes, and the level 2 is the level of
+the game masters of Minecraft, at which a command block and a function run.
 
 ## Source
 

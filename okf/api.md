@@ -1970,6 +1970,26 @@ joined by U+001F until the shared base moves it, and nothing of its meaning is t
 | The PermissionAPI handler | Stays, answering from `golem-permissions` as `Permissible.hasPermission` does |
 | The level of a sender | `CommandSender.permissionLevel`, Golem's own, and the default `OP` of a permission for a source without a profile |
 
+The handler of the PermissionAPI and the check of a sender are built. The plugin `golem-permissions`
+of the runtime answers the PermissionAPI for a player who is online with
+`Permissions::has_permission`, as `Permissible.hasPermission` answered it on the live server: a node
+that a rule names as the rule says, and a node that nothing names true for an operator, a player on
+the list of operators at a level of 1 or more, and false for every other player. It leaves a player
+who is not online to the default resolver of the node. `Context::has_permission` and
+`Context::check_permission` answer a plugin of the runtime what `Permissible.hasPermission(name:)`
+and `isPermissionSet(name:)` answer, the second as the field `set` of `PermissionAnswer`, see
+[Permissions](plugins/permissions.md#the-check-of-a-sender). They differ from section 9.9 in two
+points. A source without a profile holds every node from the level 2 and none below it, the default
+`OP` of the table above, but the check gives a player no default of a plugin, since no plugin
+declares its permissions to the runtime yet, so a node that no rule decides is not held and not set,
+and a plugin that wants a default applies it itself. The tools of operators of `/golem` do so: a
+rule decides first, so a deny takes a tool from an operator too, and where no rule names
+`golem.<name>` a player keeps the tool at the lower of their operator level and the level of the
+source, from 2 on, see [Core plugin](plugins/core.md#the-command-golem). And the tables are not
+rebuilt on every change: a command of the port of LuckPerms installs its change at once, while a
+change that another writer puts into the store reaches the checks once the next tick woke the reload
+of the resolver.
+
 The shared base writes these as the first entries of the mapping and of `api/golem-own.toml`, and
 `golem_bridge::Game` and `Context::game()` become a shim over `golem-client`, so `golem-essentials`,
 `golem-essentials-spawn` and the notebooks `04_plugins`, `05_bridge_build` and `07_forge_boot` keep

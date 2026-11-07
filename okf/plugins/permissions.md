@@ -19,9 +19,10 @@ names the rule that made it. The [store](../store.md#permissions) holds the same
 and hands them to the crate as TOML of the same format, and `golem run` seeds it from
 `config/permissions.toml` of the server, or from the seed of the Golem repository, as
 [Store](../store.md#the-place-in-the-program-golem) says. The runtime of the plugins resolves every
-check with the crate over the set of the store, and a plugin asks it whether a sender holds a
-node, as [the check of a sender](#the-check-of-a-sender) says. No port answers the PermissionAPI
-of Forge through `on_permission` yet.
+check with the crate over the set of the store, which it loads again when the store changes, and a
+plugin asks it whether a sender holds a node, as [the check of a sender](#the-check-of-a-sender)
+says. The plugin `golem-permissions` of the runtime answers the PermissionAPI of Forge with it and
+runs [the commands of LuckPerms](#the-commands-of-luckperms).
 
 The notebook `tests/notebooks/06_permissions.ipynb` holds every rule on this page to a case.
 
@@ -207,15 +208,14 @@ call of `value`. The senders are those of [Plugins](index.md#commands).
 
 The program `golem` builds the resolver from the store after the seed, so a set of the store that
 this crate refuses stops the start with `golem: the permissions of the store <path> do not load:
-<reason>`, before the JVM exists. A change of the store moves its generation. `Resolver::refresh`
-looks at the generation, which costs one lock of the store, and wakes the thread
-`golem-permissions`, which reads the set and its generation under one lock of the store, loads it
-and swaps it in. A check never waits for that reload and answers with the set the resolver holds
-until then. A set that this crate refuses, such as one whose inheritance is a cycle, is logged once
-with its generation, `the permissions of the store <path> at the generation 3 do not load, so the
-checks keep the permissions they hold: <reason>`, and the checks keep the set they hold. Nothing in
-`golem run` changes the permissions of the store or calls `refresh` yet, so a running server keeps
-the set of its start.
+<reason>`, before the JVM exists. A change of the store moves its generation. The plugin
+`golem-permissions` hands `Resolver::refresh` a look at the generation on every tick, which costs
+one lock of the store, and `refresh` wakes the thread `golem-permissions`, which reads the set and
+its generation under one lock of the store, loads it and swaps it in. A check never waits for that
+reload and answers with the set the resolver holds until then. A set that this crate refuses, such
+as one whose inheritance is a cycle, is logged once with its generation, `the permissions of the
+store <path> at the generation 3 do not load, so the checks keep the permissions they hold:
+<reason>`, and the checks keep the set they hold.
 
 ## The commands of LuckPerms
 
@@ -262,7 +262,9 @@ entries it changed and the permissions to install, so its caller writes the entr
 and installs the result at once. A change that breaks a rule changes nothing and answers `The
 permissions of Golem refuse the change, so nothing changed: <reason>.`, such as a parent that closes
 a cycle of inheritance. The module names no store and no runtime, so the crate keeps its license
-and its callers. No plugin of the runtime runs the commands yet, so `golem run` answers no `/lp`.
+and its callers. The plugin of the permissions in the runtime runs the commands, writes the entries
+to the store and installs the result, so the next check sees the change, see
+[Plugins](index.md#permissions).
 
 Where the port differs from LuckPerms:
 
@@ -472,11 +474,15 @@ ask such nodes.
 Under Golem the handler `golem:permissions` asks the plugins and falls to the default resolver of
 the node when no plugin answers, as [Bridge](../bridge.md#permissions) says. A default resolver
 often grants a node to every player or to an operator level, so who may speak in voice chat or
-use spark would change without a word. When this crate answers the PermissionAPI through
-`on_permission`, it answers every Boolean node of an online player as LuckPerms did on the live
-server, a node that nothing names included, unless the owner decides and records which nodes go
-back to the defaults of their mods. The notebook `04_plugins` holds a plugin that answers that way
-to its answers, beside one that leaves the node to the default resolver.
+use spark would change without a word. So the plugin `golem-permissions` of the runtime answers
+every Boolean node of an online player through `on_permission` as LuckPerms did on the live
+server, with `Permissions::has_permission`, a node that nothing names included, and leaves a
+player who is not online to the default resolver, as [Plugins](index.md#permissions) says, until
+the owner decides and records which nodes go back to the defaults of their mods. The notebook
+`04_plugins` holds the plugin to those answers on the server thread and beside it, and
+`07_forge_boot` holds a selector of a player who is no operator, which the default resolver of
+Forge refuses below the level 2, to the node that the console sets and unsets with the port of
+LuckPerms.
 
 Issue: [#105](https://github.com/skytekx/golem/issues/105).
 

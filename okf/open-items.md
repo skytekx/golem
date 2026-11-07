@@ -22,7 +22,12 @@ A number such as H03 names a finding of the bug hunt of 2026-11-06, see [Change 
   the default resolvers of their mods, see
   [Permissions](plugins/permissions.md#arclight-forwards-every-permission-of-a-mod-to-luckperms)
   and issue [#105](https://github.com/skytekx/golem/issues/105). Until the owner records a decision
-  in [Decisions](decisions.md), the port of LuckPerms keeps the answers of LuckPerms.
+  in [Decisions](decisions.md), the plugin of the permissions of `golem run` keeps the answers of
+  LuckPerms.
+- Whether a command block, a function and every other source that is no player keep every node of
+  the plugins from the level 2, as they keep the tools of operators of `/golem`, or hold the
+  commands of the permissions only at the level 4 of the console, see
+  [Permissions](plugins/permissions.md#the-check-of-a-sender).
 - The four decisions of the Bukkit layer: Paper, Java 21, the order of the injection of the
   permissible, and how `golem-permissions` asks a Bukkit permission plugin, see
   [Bukkit layer](bukkit-layer.md#13-decisions-for-the-owner).
@@ -84,14 +89,37 @@ Golem API.
   inside a call of the plugin and whose time grows with the players of the store, so no figure holds
   the two to the budget of a call, see [Store](store.md#mail-and-ignore-lists). The bench gains the
   two calls, and the cost table of the store their rows, when that table is next taken.
-- No command changes the permissions of the store on a running server yet, and nothing wakes the
-  reload of the resolver there, so `golem run` checks with the set of its start, see
-  [Permissions](plugins/permissions.md#the-check-of-a-sender). The port of the commands of LuckPerms
-  changes that.
-- `golem-permissions` answers no `on_permission` yet. A port of LuckPerms answers every Boolean
-  node of an online player as LuckPerms did through Arclight, see the open decision above, and
-  the importer of a LuckPerms export, the members of the group admin and a comparison of the seed
-  with an `lp export` of the Mac mini are open.
+- The members of the group `admin`. Golem grants the commands of LuckPerms and of EssentialsX to the
+  group `admin` alone and leaves only the tools of `/golem` with the operators, so at the switch the
+  console puts each operator into the group with `lp user <name> parent add admin`, see
+  [Permissions](plugins/permissions.md#the-commands-of-luckperms). The importer of a LuckPerms
+  export and a comparison of the seed with an `lp export` of the Mac mini are open.
+- The native `permission` carries the UUID and the node alone and does not say whether Forge asked
+  `getPermission` or `getOfflinePermission`, so the plugin of the permissions tells an online player
+  itself and answers a mod that asks `getOfflinePermission` for a player who is online as
+  `getPermission`. A flag of the native would tell them apart, which changes the contract of
+  [Bridge](bridge.md#permissions). Off the server thread the plugin reads the operator levels once
+  a second, so a change of the level reaches such a check within a second.
+- An entry of the list of operators at the level 0 counts as no operator for the PermissionAPI,
+  since the game answers the level alone, where `isOp` of Bukkit counts it. `/op` gives the level of
+  `op-permission-level`, 4 by default, so such an entry comes from an edit of the list or from a
+  level of 0 there.
+- The commands of LuckPerms find an offline player by name only once the store knows them, which
+  the port of EssentialsX records on a join, so until then they take the UUID of such a player.
+- A command of LuckPerms loads the whole changed set into `golem-permissions` on the server thread,
+  so on a large set it may go over the budget of 1 ms, which the log then names. Moving that load
+  to a thread of its own, with the answer of the command once it is done, is open.
+- No command mends a set of the permissions that `golem-permissions` refuses. While the set of the
+  store does not load, the plugin runs no command of LuckPerms, and the next start of `golem run`
+  refuses the store, so such a set is mended in the file of the store, outside the game. No path of
+  `golem run` leads to such a set today, since a command loads its change before it writes it and
+  the seed is loaded before it is written. A way to mend or to replace such a set is open.
+- The command tree of a player is not sent again when their permissions change, as the command list
+  updater of LuckPerms does, see [Plugin API](api.md#99-permissions), so a player still sees every
+  command in the completion of the chat.
+- The mod looks for links in every line of an answer with `ForgeHooks.newChatWithLinks`, so a word
+  with a dot, such as a node in a line of LuckPerms, becomes a component of its own. The client
+  shows the same text, and the colors of LuckPerms are gone, since a line is plain text.
 - `/golem status` does not name the permission handler that Forge took, issue
   [#141](https://github.com/skytekx/golem/issues/141). The warning that the mod logs on
   `ServerStartingEvent` when Forge takes another handler than `golem:permissions` is the only sign.
@@ -152,12 +180,15 @@ Golem API.
   over the budget, one for each of the three, the longest `/golem player Tester` of an operator at
   6.546 ms. The call of the core plugin on `serverStarting`, which logs a line through the game,
   takes 0.260 ms on that boot.
-- Notebook 08 fails a boot of golem on a call of a plugin over its budget of 1 ms. It runs only
-  `/golem source` and `/golem status`, which ask the game nothing. On its run with the fixes of the
-  bug hunt, in the cloud container of the session on 2026-11-07, the longest call of the core plugin
-  took 0.210 ms on the boot under golem and 0.241 ms on the boot of golem on the world of Arclight,
-  as `/golem status` counts them. A loaded machine might still push such a call over the budget with
-  no fault of the core plugin and fail the notebook.
+- Notebook 08 fails a boot of golem on calls of the core plugin over its budget of 1 ms. It runs
+  only `/golem source` and `/golem status`, which ask the game nothing. On its run with the fixes of
+  the bug hunt, in the cloud container of the session on 2026-11-07, the longest call of the core
+  plugin took 0.210 ms on the boot under golem and 0.241 ms on the boot of golem on the world of
+  Arclight, as `/golem status` counts them. A thread that loses its cpu inside a call shows a call
+  over the budget whatever the plugin did, so the notebook fails a boot only where more than one
+  call of the core plugin in a hundred is over the budget or its calls cost 0.1 ms or more on the
+  mean, see [Modpack](modpack.md#what-the-notebook-checks). A loaded machine might still pass those
+  bounds with no fault of the core plugin, and the notebook holds no other plugin to them.
 - A half install of Forge or Gradle that `tests/fetch.py` left in its place, before it installed
   beside the place, still passes as in place, since the proof is `unix_args.txt` or `bin/gradle` in
   that place, so such a cache of the downloads is removed by hand once.

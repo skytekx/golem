@@ -9,7 +9,12 @@
  * costs about a whole budget, so a check reads the permissions that the resolver holds and never
  * waits for a reload. Resolver::refresh looks at the generation, which costs one lock of the store,
  * so the server thread may call it once per tick, and wakes the thread golem-permissions, which
- * reads the set and its generation under one lock of the store, loads it and swaps it in.
+ * reads the set and its generation under one lock of the store, loads it and swaps it in. A caller
+ * that loaded a change before it wrote it, as a command that changes the permissions does, hands
+ * the result to Resolver::install, so the change holds at once, and the reload that follows its
+ * write finds the same set. The resolver keeps the handle of the store that never waits and hands
+ * out no other, so a change that a plugin makes through it is refused where the writer of the
+ * store is too far behind and never waits for it.
  *
  * okf/plugins/permissions.md defines the rules of a check for each sender.
  */
@@ -42,7 +47,8 @@ struct Loaded {
 }
 
 struct Shared {
-    /// The store whose set the resolver loads, or none for a resolver of fixed permissions.
+    /// The store whose set the resolver loads, as the handle that never waits, or none for a
+    /// resolver of fixed permissions.
     store: Option<Store>,
     loaded: RwLock<Loaded>,
     /// The generation whose set did not load, which the resolver does not try again.
@@ -81,7 +87,9 @@ fn load(store: &Store) -> Result<(u64, Permissions), (u64, String)> {
 
 impl Resolver {
     /// The resolver of the permissions of `store`, loaded on the calling thread, which is the
-    /// start of the program, with the thread `golem-permissions` that loads them again.
+    /// start of the program, with the thread `golem-permissions` that loads them again. The
+    /// resolver keeps the handle of the store that never waits, whatever handle it is given, as
+    /// the runtime does, so no change through [`Resolver::store`] waits for the writer.
     ///
     /// # Errors
     ///
@@ -94,7 +102,7 @@ impl Resolver {
                 store.path().display()
             )
         })?;
-        let resolver = Self::new(Some(store.clone()), generation, permissions);
+        let resolver = Self::new(Some(store.clone().never_waiting()), generation, permissions);
         let (wake, wakes) = mpsc::channel::<()>();
         let shared = Arc::clone(&resolver.shared);
         std::thread::Builder::new()
@@ -134,9 +142,21 @@ impl Resolver {
         }
     }
 
+    /// The permissions the resolver holds now.
+    pub fn permissions(&self) -> Arc<Permissions> {
+        Arc::clone(&self.shared.read().permissions)
+    }
+
     /// The generation of the store whose set the resolver holds.
     pub fn generation(&self) -> u64 {
         self.shared.read().generation
+    }
+
+    /// The store of the resolver, if it has one, as the handle that never waits: a change through
+    /// it that finds the writer as far behind as the store lets it fall is refused and changes
+    /// nothing. The resolver hands out no other handle.
+    pub fn store(&self) -> Option<&Store> {
+        self.shared.store.as_ref()
     }
 
     /// Wakes the thread `golem-permissions` when the generation of the store moved past the set
@@ -161,6 +181,33 @@ impl Resolver {
         if wake.as_ref().is_none_or(|wake| wake.send(()).is_err()) {
             self.shared.pending.store(false, Ordering::SeqCst);
         }
+    }
+
+    /// The set of the store with its generation, read as one, for a command of the port to
+    /// build on. The calling thread loads the set first when the generation of the store moved
+    /// past the one the resolver holds, so a command never builds on a set that the store has
+    /// left. A resolver without a store answers the permissions it holds.
+    ///
+    /// # Errors
+    ///
+    /// Answers why the set of the store does not load. The resolver keeps the set it holds for
+    /// the checks, which is older than the store, so a command must not build on it.
+    pub fn current(&self) -> Result<(u64, Arc<Permissions>), String> {
+        if let Some(store) = &self.shared.store
+            && store.permissions_generation() > self.generation()
+        {
+            let (generation, permissions) = load(store).map_err(|(_, error)| error)?;
+            self.shared.install(generation, Arc::new(permissions));
+        }
+        let loaded = self.shared.read();
+        Ok((loaded.generation, Arc::clone(&loaded.permissions)))
+    }
+
+    /// Installs `permissions`, which hold every change of the store up to `generation` and may
+    /// hold later ones, as a command hands the generation of before its own writes, unless the
+    /// resolver holds a later generation already.
+    pub fn install(&self, generation: u64, permissions: Permissions) {
+        self.shared.install(generation, Arc::new(permissions));
     }
 
     /// Whether `sender` holds `node`, by the rules of okf/plugins/permissions.md, without the

@@ -52,12 +52,13 @@ from HEAD, as [JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of
 let resolver = Resolver::from_store(&store)?;
 let mut runtime = Runtime::new(budget);
 runtime.set_store(store.clone());
-runtime.set_permissions(resolver);
+runtime.set_permissions(resolver.clone());
 runtime.add(Box::new(CorePlugin::new(Source {
     version: VERSION.to_owned(),
     repository: REPOSITORY.to_owned(),
     commit: COMMIT.to_owned(),
 })));
+runtime.add(Box::new(PermissionsPlugin::new(resolver)));
 let actions = golem_bridge::install(Box::new(runtime));
 ```
 
@@ -172,6 +173,42 @@ a permission from what it holds and never waits for the game. The native carries
 context of Forge, such as the dimension of a check, so the answer of a plugin holds in every
 context in which a mod asks the node, and only the default resolver sees the context.
 
+The program golem adds the plugin `golem-permissions`, `PermissionsPlugin`, after the core plugin.
+It answers every Boolean node of an online player as LuckPerms 5.5.71 answered it through Arclight
+on the live server, with `Permissions::has_permission` of the resolver: a node that a rule names
+as the rule says, after it lowercased the node, and a node that nothing names true for an operator
+and false for every other player, see
+[Permissions](permissions.md#arclight-forwards-every-permission-of-a-mod-to-luckperms). An operator
+is a player whose operator level is 1 or more, which every player on the list of operators has,
+as `isOp` of Bukkit answers it, unless that list gives them the level 0. A player who is not online
+gets `None`, so the node falls to its default resolver, as Arclight left `getOfflinePermission`
+to the handler it wrapped. The native does not say whether Forge asked `getPermission` or
+`getOfflinePermission`, so the plugin tells an online player by the game on the server thread and,
+on every other thread, by the operator levels it keeps from the joins and the leaves and reads
+from the players once a second while one is online, so a change of the operator level reaches a
+check of another thread within a second. It asks the game nothing off the server thread.
+
+The plugin also owns `/luckperms` and its aliases, the commands of [the port of
+LuckPerms](permissions.md#the-commands-of-luckperms). A command reads the set of the store and its
+generation as one, after it loaded the set when the generation of the store moved, runs on it,
+writes every entry it changed to the store with `put_permission_group`, `remove_permission_group`
+and `put_player_permissions`, in its order, and installs the changed permissions in the resolver
+under the generation of before its writes, so the next check, also of the same tick, sees the
+change, and the reload that the next tick wakes finds the same set. It writes through the handle of
+the store that never waits, which the resolver keeps and which is the only one that it hands out,
+and it asks `Store::room` for all of its changes before the first. So a command makes all of its
+changes or none and never waits for the writer of the store: where the store has no room, the
+command changes nothing, the plugin logs that, and the sender reads `[LP] The store of Golem takes
+no change now, so nothing changed. Run the command again later.`. While the set of the store does
+not load, the resolver keeps an older set for the checks, so a command changes nothing and answers
+`[LP] The permissions of Golem do not load, so no command runs: <reason>.` to the console and to a
+sender who holds a node of the commands by that older set. Every other sender reads the line without
+its reason, since the reason can name a group, a node or the UUID of a player. When the store
+refuses a change, the plugin logs why, loads the set of the store again and sends the line of
+LuckPerms for a failed save, such as `[LP] There was an error whilst saving user data for Alex.`. On
+every tick the plugin hands the resolver a look at the generation of the store, so a change that
+another writer put into the store reaches the checks once the thread `golem-permissions` loaded it.
+
 ## The context of a call
 
 A plugin never changes the game itself. It queues actions through its context, and the mod runs
@@ -193,7 +230,7 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk. It is the handle that never waits for the writer either: a change that finds the writer as far behind as the store lets it fall answers `StoreError::Behind` and changes nothing, so a command tells its sender that the server is busy, and one that makes several changes asks `room` first. A plugin changes the store inside its calls alone, on no thread of its own, so that the answer of `room` holds, see [Store](../store.md#the-threads) |
 | `check_permission(sender, node)` | Whether the sender holds the node, as `PermissionAnswer` with `granted`, `set`, which says whether a rule decided, and the `reason`, by the rules of [the check of a sender](permissions.md#the-check-of-a-sender) |
 | `has_permission(sender, node)` | The same answer without the reason, for a player one call of `Permissions::value`, which allocates nothing, for the server thread |
-| `permissions()` | The `Resolver` of the permissions that the program gave the runtime with `Runtime::set_permissions`, or none |
+| `permissions()` | The `Resolver` of the permissions that the program gave the runtime with `Runtime::set_permissions`, or none. Its `store()` is the handle of the store that never waits, as `store()` of the context is, and the resolver hands out no other |
 
 Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
 plugin, so every change of the plugins is in the file before the JVM ends, also when nothing closes

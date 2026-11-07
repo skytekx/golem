@@ -47,6 +47,7 @@ use golem_jvm::{
 use golem_plugin::{
     CorePlugin,
     DEFAULT_BUDGET,
+    PermissionsPlugin,
     Resolver,
     Runtime,
     Source, //
@@ -222,16 +223,17 @@ fn source() -> Source {
     }
 }
 
-/// Installs the plugin runtime with the store, the permissions of the store and the core plugin as
-/// the handler of the bridge, and answers the queue of actions the mod drains on the server
-/// thread. A set of the store that `golem-permissions` refuses stops the start, since every check
-/// would then deny every player.
+/// Installs the plugin runtime with the store, the permissions of the store, the core plugin and
+/// the plugin of the permissions as the handler of the bridge, and answers the queue of actions the
+/// mod drains on the server thread. A set of the store that `golem-permissions` refuses stops the
+/// start, since every check would then deny every player.
 fn install_plugins(budget: Duration, store: &Store) -> Result<Actions, String> {
     let resolver = Resolver::from_store(store)?;
     let mut runtime = Runtime::new(budget);
     runtime.set_store(store.clone());
-    runtime.set_permissions(resolver);
+    runtime.set_permissions(resolver.clone());
     runtime.add(Box::new(CorePlugin::new(source())));
+    runtime.add(Box::new(PermissionsPlugin::new(resolver)));
     Ok(golem_bridge::install(Box::new(runtime)))
 }
 
