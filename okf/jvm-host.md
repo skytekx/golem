@@ -86,6 +86,9 @@ options, the main class `cpw.mods.bootstraplauncher.BootstrapLauncher` and the a
 - Empty quotes make an empty token, except at the very end of a file without a line end, where the
   launcher drops them.
 - A NUL byte is refused. The launcher cuts the token at it, which is never what a file means.
+- A file that is not UTF-8 is refused, since the launch of Golem is text. The launcher hands the
+  bytes on, and the JVM decodes them in the encoding of the platform, so under UTF-8 a byte of
+  Latin-1, such as the é of `café`, reaches the server as the replacement character.
 
 ### The expansion of @files
 
@@ -327,6 +330,7 @@ Each difference is on purpose, and `03_launch_args` checks that it is the only o
 | `getInputArguments` ends with `exit` and `abort` | The hooks are options of `JNI_CreateJavaVM`, and HotSpot records every option | None |
 | `--disable-@files` works | The launcher of Java 17 passes the option on to the JVM, which refuses it as unrecognized | [#7](https://github.com/skytekx/golem/issues/7) |
 | A NUL byte in an argument file is an error | The launcher cuts the token at the byte | [#6](https://github.com/skytekx/golem/issues/6) |
+| An argument file that is not UTF-8 is an error | The launcher hands its bytes to the JVM, which turns a byte that is not UTF-8 into the replacement character without an error | None |
 | `JDK_JAVA_OPTIONS` and `CLASSPATH` do not apply | The launch is the files of the server alone | [#5](https://github.com/skytekx/golem/issues/5) |
 | No warnings for `-checksource`, `-cs`, `-noasyncgc` and `-Xfuture` | A library of the host prints no lines of the launcher, and the options act the same | None |
 
