@@ -66,6 +66,20 @@ Oldest first. Times are UTC.
   hid, `-J-server` and a source file in upper case, a merge commit at the edge of a shallow clone,
   the target directory of cargo, the include of macOS, the missing steps of CI and the pages that
   said what was no longer true.
+- The owner ruled that a Golem plugin that ports a Bukkit plugin keeps the license of that plugin
+  and names its holders. `ports.toml` names every port with its path, its upstream, its source, its
+  license and the holders of the upstream, and rule 9 of the license lint holds every file under the
+  path of a port to that license and to a copyright line of each holder beside the one of Florian
+  Kleber, the `Cargo.toml` of the port to the license and NOTICE to a section on the upstream.
+  Notebook `01_license_lint` holds a good port and one break of each part. The port of LuckPerms
+  5.5.71, `golem-permissions`, went under the MIT license of LuckPerms. The crates
+  `golem-essentials` and `golem-essentials-spawn` went in as the places of the ports of EssentialsX
+  2.22.0 and EssentialsXSpawn 2.22.0, so that rule 9 holds every file of them from the first one on.
+  They are under the GPL 3 or later, whose text `LICENSES/GPL-3.0-or-later.txt` is the LICENSE file
+  of EssentialsX 2.22.0 byte for byte, and `deny.toml` lets the two crates carry that license.
+  NOTICE has a section on LuckPerms, on EssentialsX and on EssentialsXSpawn and says how the ports
+  combine with the AGPL 3 in the program golem. See [Decisions](decisions.md) and
+  [Licensing](../Documentation/licensing.md#6-the-ports-and-what-golem-never-carries).
 - Three parts went onto the branch `integrate/foundation`, each built by an agent of its own:
   - The check of the modpack: `tests/fetch.py --only modpack` builds the SkyTekx 3 modpack of the
     live server from a pinned commit of its repository, and `08_modpack_boot` boots it under java,
