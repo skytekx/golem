@@ -241,32 +241,24 @@ fn shutdown(inner: &Inner) -> Result<(), StoreError> {
     outcome
 }
 
-/// Stops the writer through its queue and waits until its thread ended.
+/// Stops the writer through its queue and waits until its thread ended. A writer that is gone
+/// before the stop, or that panics before it answers, answers the failure that every change and
+/// flush of the store answers, such as `the writer thread panicked`.
 fn stop(inner: &Inner, sender: Sender<Message>) -> Result<(), StoreError> {
     let (reply, answer) = mpsc::sync_channel(1);
-    let sent = sender.send(Message::Stop(reply));
+    let sent = sender.send(Message::Stop(reply)).is_ok();
     drop(sender);
-    let outcome = match sent {
-        Ok(()) => answer.recv().unwrap_or_else(|_| {
-            Err(StoreError::Failed(
-                "the writer ended before it closed the file".to_owned(),
-            ))
-        }),
-        Err(_) => Err(StoreError::Failed(
-            "the writer ended before the stop".to_owned(),
-        )),
-    };
+    let answered = if sent { answer.recv().ok() } else { None };
     let handle = inner
         .writer
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .take();
-    if let Some(handle) = handle
-        && handle.join().is_err()
-    {
-        return Err(StoreError::Failed("the writer panicked".to_owned()));
+    let panicked = handle.is_some_and(|handle| handle.join().is_err());
+    match answered {
+        Some(outcome) if !panicked => outcome,
+        _ => Err(StoreError::Failed(inner.shared.end_reason())),
     }
-    outcome
 }
 
 impl Store {
@@ -369,9 +361,10 @@ impl Store {
         }
         // A writer that is gone takes no change, so the change is refused before it touches the
         // cache. Only a writer that ends between this look and the send below leaves the change
-        // in the cache of a failed store.
+        // in the cache of a failed store. A thread that ended has recorded its failure already,
+        // so neither waits.
         if shared.ended.load(Ordering::Acquire) {
-            return Err(StoreError::Failed("the writer thread ended".to_owned()));
+            return Err(StoreError::Failed(shared.end_reason()));
         }
         let (value, op) = change(&mut state.cache)?;
         if let Some(op) = op {
@@ -380,13 +373,7 @@ impl Store {
                 .as_ref()
                 .map(|sender| sender.send(Message::Write(op)));
             if !matches!(sent, Some(Ok(()))) {
-                let reason = "the writer thread ended".to_owned();
-                shared.failed.store(true, Ordering::Release);
-                *shared
-                    .failure
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason.clone());
-                return Err(StoreError::Failed(reason));
+                return Err(StoreError::Failed(shared.end_reason()));
             }
             shared.queued.fetch_add(1, Ordering::Release);
             shared
@@ -403,22 +390,20 @@ impl Store {
     /// Sends a message that carries a reply to the writer and waits for the reply. The message
     /// is built and sent under the lock of the cache, as every change sends its operation, so
     /// the cache that `message` sees is the file plus exactly the changes before the message in
-    /// the queue.
+    /// the queue. A writer that is gone, or that panics before it answers, answers the failure
+    /// that every change answers.
     fn ask<T>(
         &self,
         message: impl FnOnce(&Cache, mpsc::SyncSender<Result<T, StoreError>>) -> Message,
     ) -> Result<T, StoreError> {
         let (reply, answer) = mpsc::sync_channel(1);
-        {
+        let sent = {
             let state = self.lock();
             let sender = state.sender.as_ref().ok_or(StoreError::Closed)?;
-            sender
-                .send(message(&state.cache, reply))
-                .map_err(|_| StoreError::Failed("the writer thread ended".to_owned()))?;
-        }
-        answer
-            .recv()
-            .map_err(|_| StoreError::Failed("the writer ended before it answered".to_owned()))?
+            sender.send(message(&state.cache, reply)).is_ok()
+        };
+        let answered = if sent { answer.recv().ok() } else { None };
+        answered.unwrap_or_else(|| Err(StoreError::Failed(self.inner.shared.end_reason())))
     }
 
     /// Runs a read on the connection of the writer, after every change before it.
@@ -1375,9 +1360,15 @@ impl Store {
     pub fn testing_pause_writer(&self, pause: std::time::Duration) -> Result<(), StoreError> {
         let state = self.lock();
         let sender = state.sender.as_ref().ok_or(StoreError::Closed)?;
-        sender
+        let sent = sender
             .send(Message::Read(Box::new(move |_| std::thread::sleep(pause))))
-            .map_err(|_| StoreError::Failed("the writer thread ended".to_owned()))
+            .is_ok();
+        drop(state);
+        if sent {
+            Ok(())
+        } else {
+            Err(StoreError::Failed(self.inner.shared.end_reason()))
+        }
     }
 
     /// Lets the file of the writer grow by `pages` pages at most, through the `max_page_count` of
@@ -1399,16 +1390,11 @@ impl Store {
         })
     }
 
-    /// Makes the writer thread panic after every change before the call, and answers once the
-    /// thread is gone, so a notebook sees what the store does without its writer.
+    /// Makes the writer thread panic after every change before the call, and answers the failure
+    /// of the panic once the thread is gone, as every call that waits for the writer does, so a
+    /// notebook sees what the store does without its writer.
     pub fn testing_panic_writer(&self) -> Result<(), StoreError> {
-        let answer = self.query(|_| -> Result<(), StoreError> {
-            panic!("golem-devtool makes the writer panic")
-        });
-        while !self.inner.shared.ended.load(Ordering::Acquire) {
-            std::thread::yield_now();
-        }
-        answer
+        self.query(|_| -> Result<(), StoreError> { panic!("golem-devtool makes the writer panic") })
     }
 
     /// Runs `sql` on the connection of the writer after every change before the call, behind the

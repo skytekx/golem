@@ -134,7 +134,9 @@ What this gives:
   answered `Ok`, changed the cache and is lost with it, and `stats()` counts it among the lost
   changes with the rest of the batch. Reads still answer from the cache, which then holds changes
   that the file lacks, so the server is restarted, which reads the file again. A writer thread
-  that panics fails the store the same way, with the reason `the writer thread panicked`.
+  that panics fails the store the same way, with the reason `the writer thread panicked`. No
+  writer is left then, so a call that reads through it, such as `check`, `ledger` or
+  `durability`, answers that reason as well, and so does every close.
 - `close` applies every change, checkpoints the log into the file with `wal_checkpoint(TRUNCATE)`,
   closes it and ends the writer, and answers whether every change reached the file. A change after
   it answers `the store is closed`. A second close, also one on another thread while the first

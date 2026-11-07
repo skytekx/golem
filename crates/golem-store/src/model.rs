@@ -204,8 +204,10 @@ pub struct PlayerPermissions {
 pub enum StoreError {
     /// The call breaks a rule of the store, and nothing changed.
     Refused(Refusal),
-    /// The writer failed to write an earlier change, so the store takes no more changes. The
-    /// file holds every change before the one that failed.
+    /// The writer failed to write an earlier change, or its thread panicked, so the store takes
+    /// no more changes. The file holds every change before the one that failed. Every later
+    /// change, flush and close answers the same reason, and after a panic, which leaves no
+    /// writer, so does every call that reads through the writer.
     ///
     /// The store learns of the failure only once the writer has tried the failed batch change by
     /// change, so every change it took after the failing one until then answered `Ok`, changed

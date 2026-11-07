@@ -231,10 +231,36 @@ impl Shared {
         self.failure()
             .map_or(Ok(()), |reason| Err(StoreError::Failed(reason)))
     }
+
+    /// Why the writer takes no more messages, for a call that found its queue gone or got no
+    /// answer: the failure of the writer, such as `the writer thread panicked`, so every call
+    /// answers the one reason. The writer drops a message without an answer only while its
+    /// thread ends, and a panic records its failure on the way out of the thread, so this waits
+    /// until the thread has left [`run`]. A writer that ended without a failure is recorded as
+    /// failed with the reason `the writer thread ended`, so the store refuses every later change.
+    pub fn end_reason(&self) -> String {
+        let mut lock = self
+            .room_lock
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        while !self.ended.load(Ordering::Acquire) {
+            lock = self.room.wait(lock).unwrap_or_else(PoisonError::into_inner);
+        }
+        drop(lock);
+        let reason = self
+            .failure
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get_or_insert_with(|| "the writer thread ended".to_owned())
+            .clone();
+        self.failed.store(true, Ordering::Release);
+        reason
+    }
 }
 
 /// Marks the writer as ended when its thread leaves [`run`], also on a panic, which fails the
-/// store, and wakes every change that waits for room, so none waits for a writer that is gone.
+/// store, and wakes every change that waits for room and every call that waits for
+/// [`Shared::end_reason`], so none waits for a writer that is gone.
 struct Ended<'a>(&'a Shared);
 
 impl Drop for Ended<'_> {
