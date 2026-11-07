@@ -257,7 +257,12 @@ Forge 47 asks one permission handler whether a player holds a node, when a mod c
 `forge-server.toml` is a configuration of the world, in `world/serverconfig/`, and Forge copies it
 from `defaultconfigs/` of the server when a world has none, so a new world takes the handler from
 `defaultconfigs/forge-server.toml`. Without the key, or on a server whose mod is off, Forge uses its
-default handler `forge:default_handler` and logs that it could not find `golem:permissions`.
+default handler `forge:default_handler` and logs that it could not find `golem:permissions`. A
+world taken over from a server without Golem keeps its own file, which names
+`forge:default_handler`, and then Forge logs no more than an info line for the handler it takes.
+So the mod asks `PermissionAPI.getActivePermissionHandler` on `ServerStartingEvent`, right after
+Forge chose the handler, and when that is not `golem:permissions` it logs one warning that names
+the handler and the file of the world, since no plugin decides a permission of a mod then.
 
 | Node | What the handler answers |
 | --- | --- |
@@ -403,7 +408,7 @@ jars against this page.
   Minecraft, the constants of an enum and the methods that a class takes from Brigadier, and no
   official name of Mojang appears.
 
-It then boots a copy of the Forge server of `tests/fetch.py` on port 25633 three times, through
+It then boots a copy of the Forge server of `tests/fetch.py` on port 25633 four times, through
 the java launcher of the JDK with the argument files of the server, as `run.sh` does. Each boot
 must reach `Done`, stop cleanly with no FATAL line and no crash report, and find the mod.
 
@@ -412,6 +417,7 @@ must reach `Done`, stop cleanly with no FATAL line and no crash report, and find
 | Without the host jar | Log one warning that the host class is missing, and nothing else, while Forge falls back to its own permission handler |
 | With `golem-host.jar` on the `-p` of a copied `unix_args.txt` | Log one warning that the natives are not registered, while Forge falls back to its own permission handler |
 | With the host jar and stand in natives | Call every native, answer every question of the game, run every action, decide `forge.use_entity_selectors` through the native, and stop the server through the actions |
+| The same, once `forge-server.toml` of the world names `forge:default_handler` | Log one warning that Forge answers the PermissionAPI with that handler, which names the file of the world |
 
 The stand in natives are a small C library that the notebook compiles and loads with
 `-agentpath`, since HotSpot searches the symbols of an agent library for a native method that no

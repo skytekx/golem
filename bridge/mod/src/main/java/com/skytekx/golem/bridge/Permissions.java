@@ -10,19 +10,28 @@
  * another type, leaves the node to its default resolver, which is what the default handler of
  * Forge answers, so a plugin decides only what it knows.
  *
+ * Forge logs no more than an info line for the handler it takes, and a world from a server
+ * without Golem keeps a forge-server.toml that names forge:default_handler. So the mod warns on
+ * ServerStartingEvent when Forge took another handler, since the plugins would decide nothing.
+ *
  * Mods ask Forge on any thread, so the native may be called beside the server thread.
  */
 package com.skytekx.golem.bridge;
 
 import com.skytekx.golem.host.Host;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.storage.LevelResource;
+import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.server.permission.PermissionAPI;
 import net.minecraftforge.server.permission.events.PermissionGatherEvent;
 import net.minecraftforge.server.permission.handler.IPermissionHandler;
 import net.minecraftforge.server.permission.nodes.PermissionDynamicContext;
@@ -51,6 +60,29 @@ public final class Permissions {
 	@SubscribeEvent
 	public void handlers(PermissionGatherEvent.Handler event) {
 		event.addPermissionHandler(ID, nodes -> new Handler(guard, nodes));
+	}
+
+	/**
+	 * Warns when Forge took another permission handler than the one of Golem. Forge chooses the
+	 * handler right before this event, from the forge-server.toml in serverconfig of the world.
+	 *
+	 * @param event the event of Forge
+	 */
+	@SubscribeEvent
+	public void check(ServerStartingEvent event) {
+		guard.run("Permissions.check", () -> {
+			ResourceLocation active = PermissionAPI.getActivePermissionHandler();
+			if (ID.equals(active)) {
+				return;
+			}
+			MinecraftServer server = event.getServer();
+			Path file = server.getWorldPath(LevelResource.ROOT).resolve("serverconfig")
+					.resolve("forge-server.toml").normalize();
+			GolemBridge.LOG.warn("Forge answers the PermissionAPI with {} and not {}, so no plugin"
+					+ " of Golem decides a permission that a mod asks. The key permissionHandler"
+					+ " in the section server of {} chooses the handler",
+					active == null ? "no handler" : active, ID, file);
+		});
 	}
 
 	/** The handler: the plugins first, then the default resolver of the node. */
