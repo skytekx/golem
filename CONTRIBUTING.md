@@ -24,8 +24,9 @@ gone.
   stops it checks that `git status` is clean and that `git log @{u}..` is empty.
 
 The hook `tools/hooks/post-commit` pushes after every commit, and `tools/hooks/commit-msg` checks
-every message with the lint of section 3. Both are switched on with
-`git config core.hooksPath tools/hooks`.
+the message of every `git commit` with the lint of section 3. Both are switched on with
+`git config core.hooksPath tools/hooks`. Git runs no commit-msg hook for `git revert` and
+`git cherry-pick`, so they run with `--no-commit`, and a `git commit` after them writes the message.
 
 ## 2. Signed-off-by
 
@@ -67,7 +68,8 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
   `revert`. The subjects that git writes itself, `fixup!`, `squash!` and `amend!` of
   `git commit --fixup` and `Revert "..."` of `git revert`, are none of them and are refused. A
   correction of an earlier commit is a commit with a subject of its own until the branch is
-  cleaned, and a revert is a `revert(scope): summary`.
+  cleaned, and a revert is a `revert(scope): summary`, written with `git revert --no-commit` and a
+  `git commit`, since `git revert` commits without the hook of section 1.
 - The scope is the crate without its `golem-` prefix, such as `jvm` or `permissions`, the bridge
   mod as `bridge`, or a top level folder or topic, such as `tests`, `github`, `okf` or `license`.
 - An empty line follows, then a body wrapped at 72 columns that explains the problem first, then

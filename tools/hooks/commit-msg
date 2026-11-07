@@ -3,7 +3,10 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 #
 # The commit-msg hook of Golem. It refuses a commit whose message breaks the rules of
-# CONTRIBUTING.md, through the same commit lint that CI runs. Install it with:
+# CONTRIBUTING.md, through the same commit lint that CI runs. Git runs it for git commit, for the
+# reword of git rebase and for git merge, whose message the lint leaves out. git revert and git
+# cherry-pick commit without it, so a revert is written with git revert --no-commit and then git
+# commit. Install it with:
 #
 #     git config core.hooksPath tools/hooks
 
