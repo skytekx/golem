@@ -21,12 +21,16 @@
 //! }
 //! ```
 //!
-//! A player without `respawn` has none and one without `mainHand` holds nothing, and
-//! `"players": null` makes the game answer none for the players, as a game that cannot answer
-//! does. A dimension
-//! with `safe` answers that place to every search for a safe place, one with `"safe":
+//! The scripted game answers as the natives answer the game of the mod. A player whose game
+//! mode the game does not have is left out of the players, as the natives leave out a line that
+//! does not read, and a UUID matches in any case, as `UUID.fromString` of Java reads it. A
+//! player without `respawn` has none and one without `mainHand` holds nothing, and `"players":
+//! null` makes the game answer none for the players, as a game that cannot answer does. A
+//! dimension with `safe` answers that place to a search whose radius, held to 8 as the natives
+//! hold it, reaches the block of the place from the block of the target, one with `"safe":
 //! "unloaded"` answers that a chunk the search must read is not loaded, and one without answers
-//! that there is none. A script without `game` asks a game that answers nothing.
+//! that there is none. A target that is no finite number gets no answer, as from the natives. A
+//! script without `game` asks a game that answers nothing.
 
 use golem_bridge::{
     BlockLocation,
@@ -61,6 +65,9 @@ use crate::{
         read, //
     },
 };
+
+/// The radius that the natives hold a search for a safe place to, in blocks.
+const MAX_RADIUS: u32 = 8;
 
 pub const GAME_WIRE: Subcommand = (
     "game-wire",
@@ -231,7 +238,7 @@ impl ScriptedGame {
             .players
             .as_ref()?
             .iter()
-            .find(|player| player.uuid == uuid)
+            .find(|player| player.uuid.eq_ignore_ascii_case(uuid))
     }
 
     fn dimension(&self, id: &str) -> Option<&DimensionSpec> {
@@ -244,26 +251,22 @@ impl ScriptedGame {
 
 impl Game for ScriptedGame {
     fn players(&self) -> Option<Vec<OnlinePlayer>> {
-        self.spec
-            .players
-            .as_ref()?
-            .iter()
-            .map(|player| {
-                Some(OnlinePlayer {
-                    uuid: player.uuid.clone(),
-                    name: player.name.clone(),
-                    display_name: player
-                        .display_name
-                        .clone()
-                        .unwrap_or_else(|| player.name.clone()),
-                    list_name: player.list_name.clone(),
-                    ping_ms: player.ping,
-                    game_mode: GameMode::from_name(&player.game_mode)?,
-                    level: player.level,
-                    idle_ms: player.idle_ms,
-                })
+        let players = self.spec.players.as_ref()?.iter().filter_map(|player| {
+            Some(OnlinePlayer {
+                uuid: player.uuid.clone(),
+                name: player.name.clone(),
+                display_name: player
+                    .display_name
+                    .clone()
+                    .unwrap_or_else(|| player.name.clone()),
+                list_name: player.list_name.clone(),
+                ping_ms: player.ping,
+                game_mode: GameMode::from_name(&player.game_mode)?,
+                level: player.level,
+                idle_ms: player.idle_ms,
             })
-            .collect()
+        });
+        Some(players.collect())
     }
 
     fn location(&self, uuid: &str) -> Option<Location> {
@@ -307,17 +310,30 @@ impl Game for ScriptedGame {
         })
     }
 
-    fn safe_location(&self, target: &Location, _radius: u32) -> Option<SafePlace> {
+    fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace> {
+        if !target.is_finite() {
+            return None;
+        }
         let dimension = self.dimension(&target.dimension)?;
         Some(match &dimension.safe {
             None => SafePlace::Nowhere,
             Some(SafeSpec::Word(Unloaded::Unloaded)) => SafePlace::Unloaded,
-            Some(SafeSpec::Place(place)) => SafePlace::Found(Location {
-                x: place.x,
-                y: place.y,
-                z: place.z,
-                ..target.clone()
-            }),
+            Some(SafeSpec::Place(place)) => {
+                let reach = f64::from(radius.min(MAX_RADIUS));
+                let distance = (place.x.floor() - target.x.floor()).powi(2)
+                    + (place.y.floor() - target.y.floor()).powi(2)
+                    + (place.z.floor() - target.z.floor()).powi(2);
+                if distance <= reach * reach {
+                    SafePlace::Found(Location {
+                        x: place.x,
+                        y: place.y,
+                        z: place.z,
+                        ..target.clone()
+                    })
+                } else {
+                    SafePlace::Nowhere
+                }
+            }
         })
     }
 }
