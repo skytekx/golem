@@ -63,6 +63,15 @@ final class GameQueries implements Game {
 		Host.connect(new GameQueries(guard));
 	}
 
+	/**
+	 * Logs a line of the Rust of Golem with the logger of the bridge, at the level INFO, so it
+	 * stands in logs/latest.log beside the lines of the mod. Log4j takes a line on any thread.
+	 */
+	@Override
+	public void log(String line) {
+		GolemBridge.LOG.info("{}", line);
+	}
+
 	@Override
 	public String[] players() {
 		return guard.ask("Game.players", () -> {

@@ -2,11 +2,12 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The game as the Rust of Golem may ask it: the players online, their places and the places of
- * the worlds, the item in a hand and a safe place to stand.
+ * the worlds, the item in a hand and a safe place to stand, and the log of the server.
  *
- * The bridge mod implements this interface and hands it to Golem with Host.connect. Golem calls
+ * The bridge mod implements this interface and hands it to Golem with Host.connect. Golem asks
  * it through the JNI only while a native of the server thread runs, so every answer is read on
- * the thread that owns the game. okf/bridge.md is the contract for every method here.
+ * the thread that owns the game, and logs through it while any native runs. okf/bridge.md is the
+ * contract for every method here.
  */
 package com.skytekx.golem.host;
 
@@ -88,4 +89,12 @@ public interface Game {
 	 *     server has no such dimension or the target is no finite number
 	 */
 	String safeLocation(String dimension, double x, double y, double z, int radius);
+
+	/**
+	 * Logs a line of Golem on the log of the server, which logs/latest.log and the console show.
+	 * Golem calls it on the thread of any native, not on the server thread alone.
+	 *
+	 * @param line the line, without a prefix
+	 */
+	void log(String line);
 }

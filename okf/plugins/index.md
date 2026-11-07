@@ -244,8 +244,12 @@ Golem reads higher. In the idle of the modpack the two read 1.96 and 1.60 ms, se
 
 ## The log
 
-Every line of the bridge and the runtime goes to the standard error, which is the log of the
-server, behind the prefix `[golem]`.
+Every line that the bridge and the runtime log while a native runs, which is every line of a
+running server but those of the host, goes through `log` of the game that the mod connected to the
+logger `golem` of the server at the level `INFO`, so it stands in `logs/latest.log` and on the
+console, as [Bridge](../bridge.md#the-game) says. A line before the JVM starts, such as a command
+that the runtime refuses when `golem run` installs it, and a line of a tool without a JVM, such as
+`golem-devtool`, go to the standard error behind the prefix `[golem]`.
 
 | Line | When |
 | --- | --- |

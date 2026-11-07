@@ -8,11 +8,14 @@
  * Each native converts what the JVM hands it, calls its function of host.rs and converts the
  * answer back, so the logic lives in plain Rust that the notebooks reach without a JVM. A native
  * that calls the handler hands it the game that the mod connected with connect(), asked through
- * the JNIEnv of that native, or a game that answers nothing before the mod connected one. The
- * safe wrapper of jni 0.21 covers every call here, so this module holds no unsafe code.
+ * the JNIEnv of that native, or a game that answers nothing before the mod connected one. A line
+ * that Golem logs while a native runs goes through the method log of that game to the log of the
+ * server. The safe wrapper of jni 0.21 covers every call here, so this module holds no unsafe
+ * code.
  */
 
 use std::{
+    cell::Cell,
     ffi::c_void,
     panic::{
         self,
@@ -21,18 +24,20 @@ use std::{
     ptr,
     sync::{
         Mutex,
+        OnceLock,
         PoisonError, //
     }, //
 };
 
 use jni::{
-    JNIEnv, NativeMethod,
+    JNIEnv, JavaVM, NativeMethod,
     errors::Result,
     objects::{
         GlobalRef,
         JClass,
         JObject,
-        JString, //
+        JString,
+        JValue, //
     },
     sys::{
         JNI_FALSE,
@@ -64,6 +69,77 @@ use crate::{
 
 /// The object of the interface Game that the mod connected, which the natives ask.
 static GAME: Mutex<Option<GlobalRef>> = Mutex::new(None);
+
+/// The JVM of the natives, which gives a native that logs the `JNIEnv` of its thread.
+static VM: OnceLock<JavaVM> = OnceLock::new();
+
+thread_local! {
+    /// How many natives run on this thread, inside which the thread may call into the JVM.
+    static NATIVES: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Counts a native on its thread for as long as it lives.
+struct InNative;
+
+impl InNative {
+    fn enter() -> Self {
+        NATIVES.with(|natives| natives.set(natives.get().saturating_add(1)));
+        Self
+    }
+}
+
+impl Drop for InNative {
+    fn drop(&mut self) {
+        NATIVES.with(|natives| natives.set(natives.get().saturating_sub(1)));
+    }
+}
+
+/// Logs `line` through the method log of the game that the mod connected, and answers whether
+/// it did.
+///
+/// It does so only while a native runs on the thread, whose thread the JVM knows and keeps
+/// alive, and after the mod connected a game. An exception pending on the thread waits aside for
+/// the call and is thrown again after it. A call that throws is cleared and answers false, so
+/// the line goes to the standard error instead.
+pub(crate) fn log_through_game(line: &str) -> bool {
+    if NATIVES.with(Cell::get) == 0 {
+        return false;
+    }
+    let Some(vm) = VM.get() else {
+        return false;
+    };
+    let Some(game) = GAME.lock().unwrap_or_else(PoisonError::into_inner).clone() else {
+        return false;
+    };
+    let Ok(mut env) = vm.get_env() else {
+        return false;
+    };
+    let pending = if env.exception_check().unwrap_or(false) {
+        let throwable = env.exception_occurred().ok();
+        let _ = env.exception_clear();
+        throwable.filter(|throwable| !throwable.is_null())
+    } else {
+        None
+    };
+    let called = env
+        .with_local_frame(4, |env| -> Result<()> {
+            let text = env.new_string(line)?;
+            env.call_method(
+                game.as_obj(),
+                "log",
+                "(Ljava/lang/String;)V",
+                &[JValue::Object(&text)],
+            )?;
+            Ok(())
+        })
+        .is_ok();
+    clear_exception(&mut env);
+    if let Some(throwable) = pending {
+        let _ = env.throw(&throwable);
+        let _ = env.delete_local_ref(throwable);
+    }
+    called
+}
 
 /// How often each native failed in the JNI, by its name.
 static FAILURES: Throttle = Throttle::new();
@@ -181,6 +257,7 @@ fn answer<'local, T>(
     pass: fn(&mut JNIEnv<'local>) -> T,
     body: impl FnOnce(&mut JNIEnv<'local>) -> Result<T>,
 ) -> T {
+    let _inside = InNative::enter();
     match panic::catch_unwind(AssertUnwindSafe(|| body(env))) {
         Ok(Ok(value)) => return value,
         Ok(Err(error)) => {
@@ -276,15 +353,20 @@ extern "system" fn connect<'local>(
         } else {
             Some(env.new_global_ref(&game)?)
         };
+        if VM.get().is_none() {
+            let _ = VM.set(env.get_java_vm()?);
+        }
+        let connected = object.is_some();
+        // The game takes the line of the connection already.
+        *GAME.lock().unwrap_or_else(PoisonError::into_inner) = object;
         log(format_args!(
             "the mod connected {}",
-            if object.is_some() {
+            if connected {
                 "the game, which the plugins may ask on the server thread"
             } else {
                 "no game, so the plugins get no answer from the game"
             }
         ));
-        *GAME.lock().unwrap_or_else(PoisonError::into_inner) = object;
         Ok(())
     });
 }

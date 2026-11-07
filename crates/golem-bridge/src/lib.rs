@@ -287,14 +287,25 @@ pub fn ticking() -> bool {
     host::ticking()
 }
 
-/// Writes one line to the log of the server, the standard error, behind the prefix `[golem]`.
+/// Writes one line to the log of the server.
 ///
-/// It never panics, so a native method may log on its way out of a panic. A line that the
-/// standard error does not take is lost.
+/// While a native runs and once the mod connected the game, the line goes through the method
+/// `log` of the game to the logger `golem` of the server, so it stands in `logs/latest.log`
+/// beside the lines of the mod. Any other line, such as one before the JVM starts or on a thread
+/// of Golem itself, goes to the standard error behind the prefix `[golem]`. It never panics, so
+/// a native method may log on its way out of a panic. A line that neither takes is lost.
 pub fn log(message: std::fmt::Arguments<'_>) {
-    use std::io::Write as _;
+    use std::{
+        fmt::Write as _,
+        io::Write as _, //
+    };
 
-    let _ = writeln!(std::io::stderr().lock(), "[golem] {message}");
+    let mut line = String::new();
+    let _ = line.write_fmt(message);
+    if natives::log_through_game(&line) {
+        return;
+    }
+    let _ = writeln!(std::io::stderr().lock(), "[golem] {line}");
 }
 
 /// Counts the faults of each kind, so that a fault that repeats, such as on every tick, is

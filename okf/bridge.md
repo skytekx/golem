@@ -192,6 +192,7 @@ public interface Game {
 	String mainHand(String uuid);
 	String heights(String dimension);
 	String safeLocation(String dimension, double x, double y, double z, int radius);
+	void log(String line);
 }
 ```
 
@@ -208,6 +209,16 @@ display name that a mod made, has it replaced by a space.
 | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
 | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
 | `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block, or the one field `unloaded` when the search met a chunk that is not loaded | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
+
+`log(line)` is no question. Golem calls it for every line that it logs while a native runs, on the
+thread of that native, which may be any thread of the table of natives, and the mod logs the line
+with its logger `golem` at the level `INFO`. So the lines of the natives and the plugins, such as a
+panic of a plugin or that the bridge is connected, stand in `logs/latest.log` and on the console
+beside the lines of the mod. A Java exception that is pending on the thread waits aside for the
+call and is thrown again after it. A line that Golem logs outside a native, such as the lines of
+the host before the JVM starts, on a signal and at the end, a line before `connect`, and a line
+whose call throws go to the standard error behind the prefix `[golem]`, see
+[JVM host](jvm-host.md).
 
 The game mode is the name of the game, `survival`, `creative`, `adventure` or `spectator`. The
 permission level is the operator level of the profile from `getProfilePermissions`, which neither
@@ -451,7 +462,7 @@ jars against this page.
   `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
   public methods of `Host` are the 16 natives of the first Java block above, each with the
   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
-  `available()`, and those of `Game` are the 7 abstract methods of the block of
+  `available()`, and those of `Game` are the 8 abstract methods of the block of
   [The game](#the-game).
 - The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
   no `.license` file. It listens for every event of the table and calls every native but

@@ -171,10 +171,12 @@ Golem 0.1.0, the subcommands of /golem:
 ## Events
 
 On the first `ServerStarting` the core plugin logs one line, so the log of the server shows that
-the bridge reaches the Rust of Golem and which versions it runs.
+the bridge reaches the Rust of Golem and which versions it runs. The native runs then, so the line
+goes through the logger `golem` of the server, as [Plugins](index.md#the-log) says, and
+`logs/latest.log` holds it, after the time of the line:
 
 ```text
-[golem] the bridge is connected: Forge 47.4.18, Minecraft 1.20.1
+[Server thread/INFO] [golem/]: the bridge is connected: Forge 47.4.18, Minecraft 1.20.1
 ```
 
 A later `ServerStarting` logs nothing. Every event passes.
