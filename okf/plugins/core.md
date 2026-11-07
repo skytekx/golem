@@ -194,6 +194,7 @@ notebook `tests/notebooks/07_forge_boot.ipynb` runs them under `golem run` again
 against what the console set, a teleport onto a block of magma in the Nether that lands on the
 nearest obsidian, a teleport into solid obsidian that finds no place, a teleport to a chunk that
 was never generated, which answers that it is not loaded and generates nothing, and the name in
-the player list as the client sees it.
+the player list as the client sees it, also when a function of a data pack that the console or the
+player runs sets it, which runs the command at level 2 and shows no one a line of its answer.
 
 Related: [Plugins](index.md), [Bridge](../bridge.md), [Licensing](../../Documentation/licensing.md).
