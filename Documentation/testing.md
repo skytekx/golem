@@ -57,12 +57,12 @@ python3 -I tests/fetch.py --only modpack
 
 The fetch takes the repository of the server at the pinned commit without a work tree, and the jars
 of the pack and the libraries of Arclight from GitHub, Modrinth, Maven Central and the repository of
-Sponge. `du` measured the result at about 1.4 GB under `tests/.cache/modpack` and
-`tests/.cache/skytekx3-1201-server` on 2026-11-07 in the cloud container of the session. The four
-boots of the notebook run one after the other, since each held about 7.5 GiB of resident memory,
-and the whole notebook took 19 minutes in its run of 2026-11-06 in the same container, see
-[Modpack](../okf/modpack.md#running-it). The parameter `arclight = False` leaves out the boot under
-Arclight and the boot of golem on its world.
+Sponge. `du -sh` measured the result at 1.4 GiB on disk, 1.1 GiB under `tests/.cache/modpack` and
+311 MiB under `tests/.cache/skytekx3-1201-server`, on 2026-11-07 in the cloud container of the
+session. The four boots of the notebook run one after the other, since each held about 7.5 GiB of
+resident memory, and the whole notebook took 19 minutes in its run of 2026-11-06 in the same
+container, see [Modpack](../okf/modpack.md#running-it). The parameter `arclight = False` leaves out
+the boot under Arclight and the boot of golem on its world.
 
 Notebook 09 needs the module `sqlite3` of the Python of the harness with SQLite 3.37 or newer, since
 it writes rows into a copy of a store, whose tables are `STRICT`, and builds the files and logs of

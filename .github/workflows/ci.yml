@@ -233,9 +233,10 @@ jobs:
             tests/.cache/gradle-8.14.3
           key: fetch-${{ runner.os }}-${{ steps.pins.outputs.digest }}
 
-      # The pack of notebook 08 and the repository of the server it comes from, about 1.2 GB,
-      # keyed by the commit of the server that tests/fetch.py pins, so a new pin fetches the pack
-      # again. It is restored here and saved right after its download as well.
+      # The pack of notebook 08 and the repository of the server it comes from, whose size on disk
+      # Documentation/testing.md gives, keyed by the commit of the server that tests/fetch.py pins,
+      # so a new pin fetches the pack again. It is restored here and saved right after its download
+      # as well.
       - name: Read the pin of the modpack
         id: modpack
         run: |
