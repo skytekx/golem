@@ -117,7 +117,11 @@ names, one file per license named by its SPDX identifier, as REUSE specifies.
 
 `LICENSES/AGPL-3.0-only.txt` and `LICENSE` are the same bytes, the file `agpl-3.0.txt` of gnu.org
 unchanged. `LICENSE` stays at the root so that GitHub reads the license of the repository.
-`LICENSES/MIT.txt` is the LICENSE file of Aosabi at the commit Golem follows.
+`LICENSES/MIT.txt` is the text of the MIT license as `reuse download MIT` writes it, whose
+copyright line keeps the placeholder `<year> <copyright holders>`. It serves files of different
+holders, the code that the license lint takes from Aosabi and the port of LuckPerms, so it names
+none of them. Their copyright lines stand in NOTICE and in the `SPDX-FileCopyrightText` lines of
+each file.
 
 No text declares `AGPL-3.0-or-later`, so both lints refuse a file that names it. A license enters
 `LICENSES/` in the same commit as the first file that names it, and NOTICE names the project in
