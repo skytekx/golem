@@ -1,0 +1,286 @@
+From f26d51199b579ecaf7bca86e44441b98754ea950 Mon Sep 17 00:00:00 2001
+From: Florian Kleber <26285351+kleberbaum@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 07:48:07 +0000
+Subject: [PATCH 2/9] feat(plugin): hand the store to the plugins through the
+ context
+
+The ports of EssentialsX and LuckPerms keep their data in the store,
+but the runtime gives a plugin no way to reach it, so every port would
+need a handle of its own from the program, and nothing would make sure
+that the changes of the plugins reach the file before the JVM ends.
+
+The runtime now holds the store that the program gives it with
+Runtime::set_store and hands it to every call through Context::store,
+so a plugin reaches it the way it reaches the game. Once every plugin
+saw ServerStopped, the last event of the server thread, where a wait
+for the disk costs no tick, the runtime flushes the store, outside the
+budget of every plugin, so a stop that no close follows, such as a kill
+of a JVM that a thread of a mod keeps alive, loses no change.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016dYAZEa3eZnoeGd1c8FkBT
+Signed-off-by: Florian Kleber <opensource@skytekx.com>
+---
+ Cargo.lock                          |  1 +
+ crates/golem-plugin/Cargo.toml      |  3 +-
+ crates/golem-plugin/src/lib.rs      |  9 +++-
+ crates/golem-plugin/src/runtime.rs  | 14 ++++--
+ crates/golem-plugin/src/services.rs | 69 +++++++++++++++++++++++++++++
+ okf/plugins/index.md                | 10 ++++-
+ 6 files changed, 99 insertions(+), 7 deletions(-)
+ create mode 100644 crates/golem-plugin/src/services.rs
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 99e4313..e586bf4 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -142,6 +142,7 @@ name = "golem-plugin"
+ version = "0.1.0"
+ dependencies = [
+  "golem-bridge",
++ "golem-store",
+ ]
+ 
+ [[package]]
+diff --git a/crates/golem-plugin/Cargo.toml b/crates/golem-plugin/Cargo.toml
+index b3fdf77..fd5d3a1 100644
+--- a/crates/golem-plugin/Cargo.toml
++++ b/crates/golem-plugin/Cargo.toml
+@@ -2,7 +2,7 @@
+ # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+ #
+ # The plugin runtime of Golem: the trait of a plugin, the calls on the server thread with their
+-# time budget, and the core plugin with the command golem.
++# time budget, the store that it hands the plugins, and the core plugin with the command golem.
+ 
+ [package]
+ name = "golem-plugin"
+@@ -17,6 +17,7 @@ publish = false
+ 
+ [dependencies]
+ golem-bridge.workspace = true
++golem-store.workspace = true
+ 
+ [lints]
+ workspace = true
+diff --git a/crates/golem-plugin/src/lib.rs b/crates/golem-plugin/src/lib.rs
+index d167588..25dcba0 100644
+--- a/crates/golem-plugin/src/lib.rs
++++ b/crates/golem-plugin/src/lib.rs
+@@ -21,6 +21,7 @@
+ //! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
+ //! | `core_plugin` | [`CorePlugin`], the command golem, and [`Source`], the source that the AGPL asks Golem to offer |
+ //! | `operator` | The subcommands of /golem that ask the game, most of them for operators |
++//! | `services` | What the runtime hands every plugin beside the game: the store |
+ //!
+ //! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
+ //! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
+@@ -29,6 +30,7 @@
+ mod core_plugin;
+ mod operator;
+ mod runtime;
++mod services;
+ 
+ use golem_bridge::{
+     Action,
+@@ -80,6 +82,7 @@ pub struct Context<'a> {
+     actions: &'a Actions,
+     budgets: Option<&'a Budgets>,
+     game: &'a dyn Game,
++    services: Option<&'a services::Services>,
+ }
+ 
+ impl<'a> Context<'a> {
+@@ -94,19 +97,23 @@ impl<'a> Context<'a> {
+             actions,
+             budgets: None,
+             game,
++            services: None,
+         }
+     }
+ 
+-    /// A context of a call of the runtime, which also reads the budgets of its plugins.
++    /// A context of a call of the runtime, which also reads the budgets of its plugins and
++    /// hands them what the runtime holds for them, such as the store.
+     pub(crate) fn in_runtime(
+         actions: &'a Actions,
+         budgets: &'a Budgets,
+         game: &'a dyn Game,
++        services: &'a services::Services,
+     ) -> Self {
+         Self {
+             actions,
+             budgets: Some(budgets),
+             game,
++            services: Some(services),
+         }
+     }
+ 
+diff --git a/crates/golem-plugin/src/runtime.rs b/crates/golem-plugin/src/runtime.rs
+index 971608a..2570c3d 100644
+--- a/crates/golem-plugin/src/runtime.rs
++++ b/crates/golem-plugin/src/runtime.rs
+@@ -46,7 +46,8 @@ use golem_bridge::{
+ use crate::{
+     CommandSpec,
+     Context,
+-    Plugin, //
++    Plugin,
++    services::Services, //
+ };
+ 
+ /// A budget for one call that fits many plugins into one tick of 50 ms, which the whole game
+@@ -218,6 +219,8 @@ pub struct Runtime {
+     plugins: Vec<Slot>,
+     commands: Vec<Owner>,
+     budgets: Budgets,
++    /// What the runtime hands every plugin through the context, which `services.rs` sets.
++    pub(crate) services: Services,
+ }
+ 
+ impl Runtime {
+@@ -234,6 +237,7 @@ impl Runtime {
+                 limit: budget,
+                 table: Arc::default(),
+             },
++            services: Services::default(),
+         }
+     }
+ 
+@@ -326,10 +330,13 @@ impl Runtime {
+         body: impl FnOnce(&mut dyn Plugin, &mut Context<'_>) -> T,
+     ) -> Option<T> {
+         let Self {
+-            plugins, budgets, ..
++            plugins,
++            budgets,
++            services,
++            ..
+         } = self;
+         let slot = plugins.get_mut(index)?;
+-        let mut context = Context::in_runtime(actions, budgets, game);
++        let mut context = Context::in_runtime(actions, budgets, game, services);
+         let started = Instant::now();
+         let outcome = caught(|| body(slot.plugin.as_mut(), &mut context));
+         let elapsed = started.elapsed();
+@@ -365,6 +372,7 @@ impl Handler for Runtime {
+                 return Verdict::Cancel;
+             }
+         }
++        self.services.after_event(event);
+         Verdict::Pass
+     }
+ 
+diff --git a/crates/golem-plugin/src/services.rs b/crates/golem-plugin/src/services.rs
+new file mode 100644
+index 0000000..b7c6bfe
+--- /dev/null
++++ b/crates/golem-plugin/src/services.rs
+@@ -0,0 +1,69 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
++/*
++ * What the runtime of golem-plugin hands every plugin beside the game: the store of the plugins,
++ * which the program golem opens before the JVM starts and gives the runtime before it installs
++ * it. A plugin reaches it through the context of its call, so no plugin holds a handle of its own
++ * that could outlive the close of the program.
++ *
++ * The runtime flushes the store once every plugin saw ServerStopped, the last event of the server
++ * thread, where a wait for the disk costs no tick, so every change of the plugins is in the file
++ * before the JVM ends, also when nothing closes the store after it, such as a kill of a JVM whose
++ * threads keep it from ending. The wait counts in the budget of no plugin.
++ */
++
++use golem_bridge::{
++    Event,
++    log, //
++};
++use golem_store::Store;
++
++use crate::{
++    Context,
++    Runtime, //
++};
++
++/// What the runtime holds for its plugins.
++#[derive(Default)]
++pub(crate) struct Services {
++    /// The store of the plugins, once the program gave one.
++    pub store: Option<Store>,
++}
++
++impl Services {
++    /// Runs after every plugin saw `event`: flushes the store on `ServerStopped`.
++    pub fn after_event(&self, event: &Event) {
++        if !matches!(event, Event::ServerStopped) {
++            return;
++        }
++        if let Some(store) = &self.store
++            && let Err(error) = store.flush()
++        {
++            log(format_args!(
++                "the server stopped, but the store {} did not flush: {error}",
++                store.path().display()
++            ));
++        }
++    }
++}
++
++impl Runtime {
++    /// Gives the plugins the store, which every later call reaches through
++    /// [`Context::store`]. A second call replaces the store.
++    pub fn set_store(&mut self, store: Store) {
++        self.services.store = Some(store);
++    }
++}
++
++impl Context<'_> {
++    /// The store of the plugins, or `None` outside a runtime or in a runtime that the program
++    /// gave none.
++    ///
++    /// Every read answers from the cache of the store and every change queues one operation for
++    /// its writer, so a call of the server thread waits for no disk, as okf/store.md says. A
++    /// flush, a close, a check and a read through the writer wait for the disk and belong on
++    /// another thread or on `ServerStopped`.
++    pub fn store(&self) -> Option<&Store> {
++        self.services.and_then(|services| services.store.as_ref())
++    }
++}
+diff --git a/okf/plugins/index.md b/okf/plugins/index.md
+index 70a36b0..8a273a2 100644
+--- a/okf/plugins/index.md
++++ b/okf/plugins/index.md
+@@ -38,8 +38,9 @@ the log, since it would wait for itself.
+ 
+ ## Wiring
+ 
+-The program golem builds one runtime, adds its plugins and installs it before the JVM starts.
+-Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
++The program golem builds one runtime, gives it the store of the plugins, adds its plugins and
++installs it before the JVM starts, as [Store](../store.md#the-place-in-the-program-golem) says. Its
++budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
+ the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the git checkout of
+ Golem itself, with `-dirty` behind it when the files that make the binary differ from HEAD, as
+ [JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
+@@ -47,6 +48,7 @@ alone and names the commit unknown without it.
+ 
+ ```rust
+ let mut runtime = Runtime::new(budget);
++runtime.set_store(store.clone());
+ runtime.add(Box::new(CorePlugin::new(Source {
+     version: VERSION.to_owned(),
+     repository: REPOSITORY.to_owned(),
+@@ -185,6 +187,10 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
+ | `actions()` | The queue itself, for what the helpers do not cover |
+ | `game()` | The game, which answers on the server thread and answers none on any other thread |
+ | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
++| `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
++
++Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
++plugin, so every change of the plugins is in the file before the JVM ends.
+ 
+ A field of an action that holds U+001F, the separator of the wire form, has it replaced by a space,
+ and the first such replacement of the process is logged.
+-- 
+2.43.0
+

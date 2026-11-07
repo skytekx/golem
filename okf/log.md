@@ -247,3 +247,11 @@ Oldest first. Times are UTC.
     the plugins and the permissions say that no plugin checks a node of `golem-permissions` yet, and
     section 9 of CONTRIBUTING.md names the two addresses of others that a license or a rule
     requires. Notebook 10 holds each of these pages to the tree.
+- Notebook 08 judges the budget of a golem boot of the pack by the counts of `golem status`, after
+  a single call of golem-core over the budget, which the machine of CI caused by taking the thread
+  away, failed run 69. A panic still fails the boot at once.
+- The work moves to another agent. `HANDOVER.md` names the rules of the owner, the state, the
+  unfinished wiring of the store and the permissions and the unfinished gaps of the bridge, kept
+  as series of patches in `handover/`, the items of Aosabi that Golem needs, the branch of Aosabi
+  that adds an embedding entry, the feature list the owner asks for, the next steps and the
+  decisions still open with their defaults.

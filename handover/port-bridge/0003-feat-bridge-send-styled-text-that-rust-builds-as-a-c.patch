@@ -1,0 +1,1515 @@
+From 699bb0b811531b17b003f2f873edefa66d81fac3 Mon Sep 17 00:00:00 2001
+From: Florian Kleber <26285351+kleberbaum@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 08:26:40 +0000
+Subject: [PATCH 3/4] feat(bridge): send styled text that rust builds as a
+ component
+
+Every text of EssentialsX is coloured, and its texts are MiniMessage
+with colours, decorations and links. The actions message and broadcast
+carry plain text, so a port would have to write formatting codes into
+its lines, which also pass on whatever codes a player put into a name,
+and it could neither link a word nor show a line on a hover.
+
+A plugin now builds a golem_bridge::Text in Rust: the words of the
+plugin, what a player wrote or named, a translation, the colours and
+decorations of the game, a click, a hover, an insertion and the texts
+after it. The actions styledMessage and styledBroadcast carry its JSON,
+the form that Component.Serializer of Minecraft reads, which the plugin
+API names its text component, and the mod reads it as the game reads
+the text of tellraw. What a player wrote or named stays literal: it is
+a text of its own and loses every formatting code and control
+character, so no player colours the rest of a line or starts one. The
+JSON escapes every control character, so it never breaks the wire
+form, and the context of a plugin refuses a text that the game could
+not send a client or that nests deeper than 32. A styled broadcast
+leaves out the players it hides, as the AFK and suicide notices of
+EssentialsX leave out the players who ignore the sender.
+
+The subcommand text-json of the devtool prints the JSON of described
+texts for notebook 04, and the client of the harness reads the
+components of the system messages it gets, so notebook 05 checks the
+colour, the click and the hover that reach a player.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016dYAZEa3eZnoeGd1c8FkBT
+Signed-off-by: Florian Kleber <opensource@skytekx.com>
+---
+ Documentation/testing.md                      |   2 +-
+ .../com/skytekx/golem/bridge/Actions.java     |  63 +++
+ crates/golem-bridge/src/actions.rs            |  33 +-
+ crates/golem-bridge/src/lib.rs                |  10 +
+ crates/golem-bridge/src/text.rs               | 458 ++++++++++++++++++
+ crates/golem-devtool/src/bridge.rs            |  57 ++-
+ crates/golem-devtool/src/main.rs              |   2 +
+ crates/golem-devtool/src/text.rs              | 166 +++++++
+ crates/golem-plugin/src/lib.rs                |  52 ++
+ okf/bridge.md                                 |  57 +++
+ okf/plugins/index.md                          |   2 +
+ tests/harness/minecraft.py                    |  45 +-
+ tests/notebooks/04_plugins.ipynb              | 127 +++++
+ tests/notebooks/05_bridge_build.ipynb         |  42 +-
+ 14 files changed, 1108 insertions(+), 8 deletions(-)
+ create mode 100644 crates/golem-bridge/src/text.rs
+ create mode 100644 crates/golem-devtool/src/text.rs
+
+diff --git a/Documentation/testing.md b/Documentation/testing.md
+index 33075b7..25e944b 100644
+--- a/Documentation/testing.md
++++ b/Documentation/testing.md
+@@ -122,7 +122,7 @@ A fix or a feature adds or extends the notebook cell that proves it.
+ | `01_license_lint` | Does the license lint pass this tree, refuse every break of its nine rules, and agree with `reuse lint`? |
+ | `02_commit_lint` | Does the commit lint pass the history, refuse every break of its eight rules, judge a message as git stores it in a range and in the commit-msg hook, and agree with Commitizen, and do the hooks, `cz commit`, `cz bump` and the job of CI that checks the commits do what CONTRIBUTING.md says? |
+ | `03_launch_args` | Does the JVM host read the launch of a Forge server as the java launcher of Temurin 17 reads it, and does a program run in its embedded JVM as it runs under java? |
+-| `04_plugins` | Do the 18 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin with the tools of operators, the chain of plugins that decide a permission, a port that answers a permission as LuckPerms did through Arclight, the questions of the plugins to a scripted game, the queue with the ids and the reports of the teleports, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
++| `04_plugins` | Do the 18 natives of the bridge match `okf/bridge.md`, and do the plugin runtime, the core plugin with the tools of operators, the chain of plugins that decide a permission, a port that answers a permission as LuckPerms did through Arclight, the questions of the plugins to a scripted game, the queue with the ids and the reports of the teleports, the JSON of the styled texts, the tick statistics and calls from other threads answer as `okf/plugins/` says, without a JVM? |
+ | `05_bridge_build` | Does the Gradle build of `bridge/` give the host jar and the reobfuscated mod of `okf/bridge.md`, does the mod stay off with one warning on a stock Forge without the host jar or its natives, and with stand in natives does it call every native, answer every question of the game on the server thread and none from `serverStopped` on, and run every action, and does a fourth boot on a world whose `forge-server.toml` names `forge:default_handler` log one warning? |
+ | `06_permissions` | Does `golem-permissions` refuse every break of its format and decide every check by the rules of `okf/plugins/permissions.md` in their order, does the check of the server thread stay inside its bound in a configuration of 5000 players and allocate nothing, and does the seed grant the 39 nodes of the live group default and no admin command, and keep from the group admin the switches of EssentialsX that LuckPerms keeps from an operator, but the one that the group default grants? |
+ | `07_forge_boot` | Does `golem run` boot Forge with the bridge connected to the real natives, answer `golem` on the console and to a player, tell the sources of a command apart, read the game with the respawn point as Minecraft stores it, teleport and name a player through the tools of operators, hold the search for a safe place to each of its rules, answer through the JNI without Minecraft when a question waits, throws, does not read or names 2000 players, hold the thread of the signals to its rules without Minecraft, and stop on a signal with the worlds saved, with and without the bridge mod? |
+diff --git a/bridge/mod/src/main/java/com/skytekx/golem/bridge/Actions.java b/bridge/mod/src/main/java/com/skytekx/golem/bridge/Actions.java
+index 8de33b1..48935f3 100644
+--- a/bridge/mod/src/main/java/com/skytekx/golem/bridge/Actions.java
++++ b/bridge/mod/src/main/java/com/skytekx/golem/bridge/Actions.java
+@@ -63,6 +63,8 @@ final class Actions {
+ 		case "command" -> command(server, fields);
+ 		case "message" -> message(server, fields);
+ 		case "broadcast" -> broadcast(server, fields);
++		case "styledMessage" -> styledMessage(server, fields);
++		case "styledBroadcast" -> styledBroadcast(server, fields);
+ 		case "teleport" -> teleport(server, fields);
+ 		case "listName" -> listName(server, fields);
+ 		default -> skip(fields, "of a kind the bridge does not know");
+@@ -132,6 +134,67 @@ final class Actions {
+ 		}
+ 	}
+ 
++	/**
++	 * Sends a styled text to one player as a system message, if they are online. The text is the
++	 * JSON of a component that Golem wrote, which the game reads into a Component as it reads
++	 * the text of tellraw, and no link is added to it: a styled text links where its plugin set
++	 * a click.
++	 */
++	private void styledMessage(MinecraftServer server, String[] fields) {
++		if (!fits(fields, 3)) {
++			return;
++		}
++		ServerPlayer player = server.getPlayerList().getPlayer(UUID.fromString(fields[1]));
++		Component text = styled(fields[0], fields[2]);
++		if (player != null && text != null) {
++			player.sendSystemMessage(text);
++		}
++	}
++
++	/**
++	 * Sends a styled text to the console and to every player online but the hidden ones, whose
++	 * UUIDs the action joins by commas, as PlayerList.broadcastSystemMessage of the game sends a
++	 * system message to all. A part that is no UUID names nobody.
++	 */
++	private void styledBroadcast(MinecraftServer server, String[] fields) {
++		if (!fits(fields, 3)) {
++			return;
++		}
++		Component text = styled(fields[0], fields[2]);
++		if (text == null) {
++			return;
++		}
++		Set<UUID> hidden = new HashSet<>();
++		for (String part : fields[1].split(",")) {
++			try {
++				hidden.add(UUID.fromString(part));
++			} catch (IllegalArgumentException notUuid) {
++				// A part that is no UUID names nobody online.
++			}
++		}
++		server.sendSystemMessage(text);
++		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
++			if (!hidden.contains(player.getUUID())) {
++				player.sendSystemMessage(text);
++			}
++		}
++	}
++
++	/** Answers the component of the JSON of a styled text, or null after one warning. */
++	private Component styled(String kind, String json) {
++		Component text;
++		try {
++			text = Component.Serializer.fromJson(json);
++		} catch (RuntimeException notJson) {
++			text = null;
++		}
++		if (text == null) {
++			skip(kind + "/json", "Golem queued an action " + kind + " whose text does not read,"
++					+ " which the bridge skips");
++		}
++		return text;
++	}
++
+ 	/**
+ 	 * Hands a teleport to the teleports, which run it as the command tp does and report how it
+ 	 * ended, see {@link Teleports}.
+diff --git a/crates/golem-bridge/src/actions.rs b/crates/golem-bridge/src/actions.rs
+index 19e7560..3bc719f 100644
+--- a/crates/golem-bridge/src/actions.rs
++++ b/crates/golem-bridge/src/actions.rs
+@@ -43,6 +43,20 @@ pub enum Action {
+     },
+     /// Send a system message to every player and the console.
+     Broadcast(String),
++    /// Send a styled text to one player as a system message.
++    StyledMessage {
++        /// The UUID of the player.
++        uuid: String,
++        /// The JSON of a [`Text`](crate::Text), which `Component.Serializer` of the game reads.
++        json: String,
++    },
++    /// Send a styled text to every player but the hidden ones, and to the console.
++    StyledBroadcast {
++        /// The UUIDs of the players who do not get it, which never hold a comma.
++        hidden: Vec<String>,
++        /// The JSON of a [`Text`](crate::Text), which `Component.Serializer` of the game reads.
++        json: String,
++    },
+     /// Teleport a player to a location, also into another dimension, and report how it ended
+     /// with the events teleported and teleportFailed, which carry the id.
+     Teleport {
+@@ -89,6 +103,8 @@ impl Action {
+             Self::Command(_) => "command",
+             Self::Message { .. } => "message",
+             Self::Broadcast(_) => "broadcast",
++            Self::StyledMessage { .. } => "styledMessage",
++            Self::StyledBroadcast { .. } => "styledBroadcast",
+             Self::Teleport { .. } => "teleport",
+             Self::ListName { .. } => "listName",
+         }
+@@ -100,6 +116,8 @@ impl Action {
+             Self::Command(command) => vec![command.clone()],
+             Self::Message { uuid, text } => vec![uuid.clone(), text.clone()],
+             Self::Broadcast(text) => vec![text.clone()],
++            Self::StyledMessage { uuid, json } => vec![uuid.clone(), json.clone()],
++            Self::StyledBroadcast { hidden, json } => vec![hidden.join(","), json.clone()],
+             Self::Teleport {
+                 id,
+                 uuid,
+@@ -127,7 +145,8 @@ impl Action {
+     /// hold the separator, so a field that holds it has it replaced by a space, and the first
+     /// such replacement of the process is logged. A list name of `None` and an empty one are
+     /// both the empty field, which clears the name. The radius of a safe teleport is held to
+-    /// [`MAX_SAFE_RADIUS`], and a teleport without a search has the empty field.
++    /// [`MAX_SAFE_RADIUS`], and a teleport without a search has the empty field. The hidden
++    /// players of a styled broadcast are one field, their UUIDs joined by commas.
+     pub fn encode(&self) -> String {
+         let mut wire = String::from(self.kind());
+         for field in self.fields() {
+@@ -155,6 +174,18 @@ impl Action {
+                 text: (*text).to_owned(),
+             }),
+             ["broadcast", text] => Some(Self::Broadcast((*text).to_owned())),
++            ["styledMessage", uuid, json] => Some(Self::StyledMessage {
++                uuid: (*uuid).to_owned(),
++                json: (*json).to_owned(),
++            }),
++            ["styledBroadcast", hidden, json] => Some(Self::StyledBroadcast {
++                hidden: hidden
++                    .split(',')
++                    .filter(|uuid| !uuid.is_empty())
++                    .map(str::to_owned)
++                    .collect(),
++                json: (*json).to_owned(),
++            }),
+             ["teleport", id, uuid, dimension, x, y, z, yaw, pitch, safe] => Some(Self::Teleport {
+                 id: id.parse().ok()?,
+                 uuid: (*uuid).to_owned(),
+diff --git a/crates/golem-bridge/src/lib.rs b/crates/golem-bridge/src/lib.rs
+index bc3f4fc..9a2488b 100644
+--- a/crates/golem-bridge/src/lib.rs
++++ b/crates/golem-bridge/src/lib.rs
+@@ -30,6 +30,7 @@
+ //! | `actions` | [`Action`], [`Actions`], the queue, and the wire form of an action |
+ //! | `game` | [`Game`] and [`NoGame`], the places the game answers, and [`wire`], their wire form |
+ //! | `jni_game` | The game through the JNI, with the object the mod connected |
++//! | `text` | [`Text`], the styled text of the actions `styledMessage` and `styledBroadcast` |
+ //! | `ticks` | [`TickWindow`] and [`TickStats`], the statistics of the last 100 ticks |
+ //! | [`host`] | The global state and one plain function per native method |
+ //! | `natives` | The functions the JVM calls, thin wrappers over [`host`], and their registration |
+@@ -42,6 +43,7 @@ mod game;
+ pub mod host;
+ mod jni_game;
+ mod natives;
++mod text;
+ mod ticks;
+ 
+ pub use crate::{
+@@ -65,6 +67,14 @@ pub use crate::{
+         Spawn,
+         wire, //
+     },
++    text::{
++        Click,
++        Color,
++        MAX_DEPTH,
++        MAX_JSON,
++        Text,
++        strip_codes, //
++    },
+     ticks::{
+         MAX_TPS,
+         TickStats,
+diff --git a/crates/golem-bridge/src/text.rs b/crates/golem-bridge/src/text.rs
+new file mode 100644
+index 0000000..51821ae
+--- /dev/null
++++ b/crates/golem-bridge/src/text.rs
+@@ -0,0 +1,458 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
++/*
++ * The styled text of golem-bridge: a text component of the chat of Minecraft 1.20.1, with its
++ * colours, decorations and click and hover events, which a plugin builds in Rust and the mod turns
++ * into a Component with Component.Serializer.fromJson.
++ *
++ * A plugin builds a tree of texts. Its own words go in as they are, and whatever a player wrote
++ * or named, such as a name, a chat line or the name of a home, goes in through Text::player, which
++ * keeps it literal: it becomes a text node of its own, so no player can open or close a style,
++ * and it loses every formatting code and control character, so no player can colour the rest of
++ * a line or start a line of their own. The JSON is written here, with every character that JSON
++ * or the wire form of an action reserves escaped, so no text can break the action that carries it.
++ */
++
++//! Styled text for the actions `styledMessage` and `styledBroadcast`.
++
++use std::fmt::Write as _;
++
++/// The longest JSON of a text that the game sends a client, in UTF-16 units: the bound of
++/// `FriendlyByteBuf.writeComponent` of Minecraft 1.20.1 for the packet of a system message.
++pub const MAX_JSON: usize = 262_144;
++
++/// How deep texts may sit inside each other, through the texts after them, the arguments of a
++/// translation and the text of a hover, so no text costs a client a deep recursion.
++pub const MAX_DEPTH: usize = 32;
++
++/// A colour of a text: one of the 16 colours of the game by name, or any colour by its red,
++/// green and blue.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Color {
++    /// `black`, `§0`.
++    Black,
++    /// `dark_blue`, `§1`.
++    DarkBlue,
++    /// `dark_green`, `§2`.
++    DarkGreen,
++    /// `dark_aqua`, `§3`.
++    DarkAqua,
++    /// `dark_red`, `§4`.
++    DarkRed,
++    /// `dark_purple`, `§5`.
++    DarkPurple,
++    /// `gold`, `§6`.
++    Gold,
++    /// `gray`, `§7`.
++    Gray,
++    /// `dark_gray`, `§8`.
++    DarkGray,
++    /// `blue`, `§9`.
++    Blue,
++    /// `green`, `§a`.
++    Green,
++    /// `aqua`, `§b`.
++    Aqua,
++    /// `red`, `§c`.
++    Red,
++    /// `light_purple`, `§d`.
++    LightPurple,
++    /// `yellow`, `§e`.
++    Yellow,
++    /// `white`, `§f`.
++    White,
++    /// A colour by its red, green and blue, written `#rrggbb`.
++    Rgb(u8, u8, u8),
++}
++
++/// The colours of the game by name, in the order of their codes.
++const NAMED: [(Color, &str); 16] = [
++    (Color::Black, "black"),
++    (Color::DarkBlue, "dark_blue"),
++    (Color::DarkGreen, "dark_green"),
++    (Color::DarkAqua, "dark_aqua"),
++    (Color::DarkRed, "dark_red"),
++    (Color::DarkPurple, "dark_purple"),
++    (Color::Gold, "gold"),
++    (Color::Gray, "gray"),
++    (Color::DarkGray, "dark_gray"),
++    (Color::Blue, "blue"),
++    (Color::Green, "green"),
++    (Color::Aqua, "aqua"),
++    (Color::Red, "red"),
++    (Color::LightPurple, "light_purple"),
++    (Color::Yellow, "yellow"),
++    (Color::White, "white"),
++];
++
++impl Color {
++    /// Answers the colour as the JSON of the game writes it, such as `gold` or `#ffaa00`.
++    pub fn name(self) -> String {
++        match self {
++            Self::Rgb(red, green, blue) => format!("#{red:02x}{green:02x}{blue:02x}"),
++            named => NAMED
++                .iter()
++                .find(|(color, _)| *color == named)
++                .map_or_else(String::new, |(_, name)| (*name).to_owned()),
++        }
++    }
++
++    /// Answers the colour of a name of the game, such as `gold`, or of `#rrggbb` in any case,
++    /// as `TextColor.parseColor` of the game reads them.
++    pub fn from_name(name: &str) -> Option<Self> {
++        if let Some(hex) = name.strip_prefix('#') {
++            if hex.len() != 6 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
++                return None;
++            }
++            let value = u32::from_str_radix(hex, 16).ok()?;
++            let [_, red, green, blue] = value.to_be_bytes();
++            return Some(Self::Rgb(red, green, blue));
++        }
++        NAMED
++            .iter()
++            .find(|(_, known)| *known == name)
++            .map(|(color, _)| *color)
++    }
++}
++
++/// What a click on a text does in the client of Minecraft 1.20.1.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub enum Click {
++    /// Opens an address after the player confirms it, an address of `http` or `https` alone.
++    OpenUrl(String),
++    /// Runs a command as the player, which must start with a slash and take no signed argument,
++    /// such as the message of `msg`, or the client refuses it.
++    RunCommand(String),
++    /// Puts the text into the chat field of the player.
++    SuggestCommand(String),
++    /// Copies the text to the clipboard of the player.
++    CopyToClipboard(String),
++}
++
++impl Click {
++    /// Answers the action and the value of the click, as the JSON of the game names them.
++    fn parts(&self) -> (&'static str, &str) {
++        match self {
++            Self::OpenUrl(value) => ("open_url", value),
++            Self::RunCommand(value) => ("run_command", value),
++            Self::SuggestCommand(value) => ("suggest_command", value),
++            Self::CopyToClipboard(value) => ("copy_to_clipboard", value),
++        }
++    }
++}
++
++/// What a text shows.
++#[derive(Clone, Debug, PartialEq)]
++enum Content {
++    /// Text as it is.
++    Literal(String),
++    /// A key of the language of the client, such as `item.minecraft.diamond`, whose `%s` the
++    /// arguments fill.
++    Translate { key: String, with: Vec<Text> },
++}
++
++/// A styled text: what it shows, its style and the texts after it, which take its style where
++/// they set none of their own.
++///
++/// ```text
++/// Text::plain("Teleporting to ")
++///     .color(Color::Rgb(0xff, 0xaa, 0x00))
++///     .append(Text::player(home).color(Color::Rgb(0xff, 0x55, 0x55)))
++///     .append(Text::plain("."))
++/// ```
++#[derive(Clone, Debug, PartialEq)]
++pub struct Text {
++    content: Content,
++    color: Option<Color>,
++    bold: Option<bool>,
++    italic: Option<bool>,
++    underlined: Option<bool>,
++    strikethrough: Option<bool>,
++    obfuscated: Option<bool>,
++    click: Option<Click>,
++    hover: Option<Box<Text>>,
++    insertion: Option<String>,
++    extra: Vec<Text>,
++}
++
++impl Text {
++    fn of(content: Content) -> Self {
++        Self {
++            content,
++            color: None,
++            bold: None,
++            italic: None,
++            underlined: None,
++            strikethrough: None,
++            obfuscated: None,
++            click: None,
++            hover: None,
++            insertion: None,
++            extra: Vec::new(),
++        }
++    }
++
++    /// The words of a plugin, as they are, newlines included. A formatting code in them is the
++    /// choice of the plugin, so a text that a player wrote or named goes through
++    /// [`Text::player`] instead.
++    pub fn plain(text: impl Into<String>) -> Self {
++        Self::of(Content::Literal(text.into()))
++    }
++
++    /// What a player wrote or named, such as a name, a chat line or the name of a home, kept
++    /// literal: a text of its own, without the formatting codes and control characters that
++    /// [`strip_codes`] drops, so it opens or closes no style and starts no line of its own.
++    pub fn player(text: &str) -> Self {
++        Self::plain(strip_codes(text))
++    }
++
++    /// A key of the language of the client, which translates it, whose `%s` the arguments
++    /// fill in their order, such as `death.attack.generic` with the name of a player.
++    pub fn translate(key: impl Into<String>, with: Vec<Text>) -> Self {
++        Self::of(Content::Translate {
++            key: key.into(),
++            with,
++        })
++    }
++
++    /// Sets the colour.
++    #[must_use]
++    pub fn color(mut self, color: Color) -> Self {
++        self.color = Some(color);
++        self
++    }
++
++    /// Sets or clears the bold decoration.
++    #[must_use]
++    pub fn bold(mut self, on: bool) -> Self {
++        self.bold = Some(on);
++        self
++    }
++
++    /// Sets or clears the italic decoration.
++    #[must_use]
++    pub fn italic(mut self, on: bool) -> Self {
++        self.italic = Some(on);
++        self
++    }
++
++    /// Sets or clears the underline.
++    #[must_use]
++    pub fn underlined(mut self, on: bool) -> Self {
++        self.underlined = Some(on);
++        self
++    }
++
++    /// Sets or clears the line through the text.
++    #[must_use]
++    pub fn strikethrough(mut self, on: bool) -> Self {
++        self.strikethrough = Some(on);
++        self
++    }
++
++    /// Sets or clears the decoration that scrambles the letters.
++    #[must_use]
++    pub fn obfuscated(mut self, on: bool) -> Self {
++        self.obfuscated = Some(on);
++        self
++    }
++
++    /// Sets what a click does.
++    #[must_use]
++    pub fn click(mut self, click: Click) -> Self {
++        self.click = Some(click);
++        self
++    }
++
++    /// Sets the text that the client shows while the pointer rests on this one.
++    #[must_use]
++    pub fn hover(mut self, text: Text) -> Self {
++        self.hover = Some(Box::new(text));
++        self
++    }
++
++    /// Sets the text that a click with shift puts into the chat field of the player.
++    #[must_use]
++    pub fn insertion(mut self, text: impl Into<String>) -> Self {
++        self.insertion = Some(text.into());
++        self
++    }
++
++    /// Adds a text after this one and the texts after it, which takes the style of this one
++    /// where it sets none of its own.
++    #[must_use]
++    pub fn append(mut self, text: Text) -> Self {
++        self.extra.push(text);
++        self
++    }
++
++    /// Adds a text after this one and the texts after it, in place.
++    pub fn push(&mut self, text: Text) {
++        self.extra.push(text);
++    }
++
++    /// Answers how deep the texts sit inside this one, 1 for a text alone.
++    pub fn depth(&self) -> usize {
++        let inner = self
++            .extra
++            .iter()
++            .chain(self.hover.as_deref())
++            .chain(match &self.content {
++                Content::Translate { with, .. } => with.as_slice(),
++                Content::Literal(_) => &[],
++            })
++            .map(Text::depth)
++            .max()
++            .unwrap_or(0);
++        inner + 1
++    }
++
++    /// Answers the text without its style, as the console of the server shows it, with the key
++    /// of a translation and its arguments in brackets, since the language of the client is not
++    /// known here.
++    pub fn to_plain(&self) -> String {
++        let mut plain = String::new();
++        self.write_plain(&mut plain);
++        plain
++    }
++
++    fn write_plain(&self, out: &mut String) {
++        match &self.content {
++            Content::Literal(text) => out.push_str(text),
++            Content::Translate { key, with } => {
++                out.push_str(key);
++                if !with.is_empty() {
++                    out.push('[');
++                    for (index, argument) in with.iter().enumerate() {
++                        if index > 0 {
++                            out.push_str(", ");
++                        }
++                        argument.write_plain(out);
++                    }
++                    out.push(']');
++                }
++            }
++        }
++        for text in &self.extra {
++            text.write_plain(out);
++        }
++    }
++
++    /// Answers the text as the JSON of a component that `Component.Serializer` of Minecraft
++    /// 1.20.1 reads, with every key in the order of this type and every string escaped as JSON
++    /// asks, every control character among them, so the JSON holds no U+001F of the wire form.
++    pub fn to_json(&self) -> String {
++        let mut json = String::new();
++        self.write_json(&mut json);
++        json
++    }
++
++    fn write_json(&self, out: &mut String) {
++        out.push('{');
++        match &self.content {
++            Content::Literal(text) => {
++                out.push_str("\"text\":");
++                string(out, text);
++            }
++            Content::Translate { key, with } => {
++                out.push_str("\"translate\":");
++                string(out, key);
++                if !with.is_empty() {
++                    out.push_str(",\"with\":");
++                    list(out, with);
++                }
++            }
++        }
++        if let Some(color) = self.color {
++            out.push_str(",\"color\":");
++            string(out, &color.name());
++        }
++        for (key, value) in [
++            ("bold", self.bold),
++            ("italic", self.italic),
++            ("underlined", self.underlined),
++            ("strikethrough", self.strikethrough),
++            ("obfuscated", self.obfuscated),
++        ] {
++            if let Some(on) = value {
++                let _ = write!(out, ",\"{key}\":{on}");
++            }
++        }
++        if let Some(click) = &self.click {
++            let (action, value) = click.parts();
++            let _ = write!(out, ",\"clickEvent\":{{\"action\":\"{action}\",\"value\":");
++            string(out, value);
++            out.push('}');
++        }
++        if let Some(hover) = &self.hover {
++            out.push_str(",\"hoverEvent\":{\"action\":\"show_text\",\"contents\":");
++            hover.write_json(out);
++            out.push('}');
++        }
++        if let Some(insertion) = &self.insertion {
++            out.push_str(",\"insertion\":");
++            string(out, insertion);
++        }
++        if !self.extra.is_empty() {
++            out.push_str(",\"extra\":");
++            list(out, &self.extra);
++        }
++        out.push('}');
++    }
++}
++
++/// Writes a list of texts as a JSON array.
++fn list(out: &mut String, texts: &[Text]) {
++    out.push('[');
++    for (index, text) in texts.iter().enumerate() {
++        if index > 0 {
++            out.push(',');
++        }
++        text.write_json(out);
++    }
++    out.push(']');
++}
++
++/// Writes a string as JSON: the quote and the backslash escaped, every control character below
++/// U+0020 as `\n`, `\t` or `\u00XX`, and U+2028 and U+2029 as Gson writes them, so the JSON is as
++/// long as the one the game writes for the same text.
++fn string(out: &mut String, text: &str) {
++    out.push('"');
++    for c in text.chars() {
++        match c {
++            '"' => out.push_str("\\\""),
++            '\\' => out.push_str("\\\\"),
++            '\n' => out.push_str("\\n"),
++            '\t' => out.push_str("\\t"),
++            '\r' => out.push_str("\\r"),
++            '\u{8}' => out.push_str("\\b"),
++            '\u{c}' => out.push_str("\\f"),
++            c if u32::from(c) < 0x20 || c == '\u{2028}' || c == '\u{2029}' => {
++                let _ = write!(out, "\\u{:04x}", u32::from(c));
++            }
++            c => out.push(c),
++        }
++    }
++    out.push('"');
++}
++
++/// Answers text that a player wrote or named without what would make it more than text: every
++/// formatting code, the character U+00A7 with the character after it, as the client of
++/// Minecraft hides both when it draws a text, and every control character that the game refuses
++/// in a chat line, below U+0020 and U+007F, a newline among them.
++///
++/// The game itself refuses these characters in a chat line or a command of a player, so what a
++/// player typed passes unchanged, and what a mod or a file made, such as a display name with a
++/// colour code, reads as the client would draw it without its colour.
++pub fn strip_codes(text: &str) -> String {
++    let mut stripped = String::with_capacity(text.len());
++    let mut chars = text.chars();
++    while let Some(c) = chars.next() {
++        if c == '\u{a7}' {
++            chars.next();
++        } else if c >= ' ' && c != '\u{7f}' {
++            stripped.push(c);
++        }
++    }
++    stripped
++}
+diff --git a/crates/golem-devtool/src/bridge.rs b/crates/golem-devtool/src/bridge.rs
+index ae0eba5..e0e77ca 100644
+--- a/crates/golem-devtool/src/bridge.rs
++++ b/crates/golem-devtool/src/bridge.rs
+@@ -71,12 +71,15 @@ use std::{
+ use golem_bridge::{
+     Action,
+     Actions,
++    Click,
++    Color,
+     Event,
+     Game,
+     Handler,
+     Location,
+     NoGame,
+     Sender,
++    Text,
+     TickStats,
+     TickWindow,
+     Verdict,
+@@ -400,6 +403,15 @@ enum ActionSpec {
+     Broadcast {
+         text: String,
+     },
++    StyledMessage {
++        uuid: String,
++        json: String,
++    },
++    StyledBroadcast {
++        #[serde(default)]
++        hidden: Vec<String>,
++        json: String,
++    },
+     Teleport {
+         #[serde(default)]
+         id: u64,
+@@ -421,6 +433,8 @@ impl From<ActionSpec> for Action {
+             ActionSpec::Command { command } => Self::Command(command),
+             ActionSpec::Message { uuid, text } => Self::Message { uuid, text },
+             ActionSpec::Broadcast { text } => Self::Broadcast(text),
++            ActionSpec::StyledMessage { uuid, json } => Self::StyledMessage { uuid, json },
++            ActionSpec::StyledBroadcast { hidden, json } => Self::StyledBroadcast { hidden, json },
+             ActionSpec::Teleport {
+                 id,
+                 uuid,
+@@ -443,6 +457,12 @@ fn action_json(action: &Action) -> Value {
+         Action::Command(command) => json!({"kind": "command", "command": command}),
+         Action::Message { uuid, text } => json!({"kind": "message", "uuid": uuid, "text": text}),
+         Action::Broadcast(text) => json!({"kind": "broadcast", "text": text}),
++        Action::StyledMessage { uuid, json } => {
++            json!({"kind": "styledMessage", "uuid": uuid, "json": json})
++        }
++        Action::StyledBroadcast { hidden, json } => {
++            json!({"kind": "styledBroadcast", "hidden": hidden, "json": json})
++        }
+         Action::Teleport {
+             id,
+             uuid,
+@@ -1104,7 +1124,10 @@ impl Plugin for Reenter {
+ 
+ /// A test plugin that answers its commands with the helpers of the context for the actions on
+ /// players: `teleport <uuid>` to its place, `safe <uuid> <radius>` to the nearest safe place
+-/// within the radius of it, which answers the id, `nowhere <uuid>` to a place that is no number,
++/// within the radius of it, which answers the id, `text <uuid> <name>` and `shout <uuid> <name>`
++/// with the styled greeting of [`greeting`] to the player and to every player but them,
++/// `deep <uuid>` and `long <uuid>` with texts that the runtime refuses, as too deep and too
++/// long, `nowhere <uuid>` to a place that is no number,
+ /// `far <uuid>` to x 30000001, beyond the bounds of the world, `name <uuid> <text>` and
+ /// `clear <uuid>`.
+ struct Mover {
+@@ -1162,6 +1185,22 @@ impl Plugin for Mover {
+                 context.set_list_name(uuid, rest);
+                 "named".to_owned()
+             }
++            "text" => format!("sent {}", context.send_text(uuid, &greeting(rest))),
++            "shout" => format!(
++                "sent {}",
++                context.broadcast_text(&greeting(rest), &[uuid.to_owned()])
++            ),
++            "deep" => {
++                let mut deep = Text::plain("deep");
++                for _ in 0..golem_bridge::MAX_DEPTH {
++                    deep = Text::plain("deeper").hover(deep);
++                }
++                format!("sent {}", context.send_text(uuid, &deep))
++            }
++            "long" => {
++                let long = Text::plain("x".repeat(golem_bridge::MAX_JSON));
++                format!("sent {}", context.send_text(uuid, &long))
++            }
+             "clear" => {
+                 context.clear_list_name(uuid);
+                 "cleared".to_owned()
+@@ -1172,6 +1211,22 @@ impl Plugin for Mover {
+     }
+ }
+ 
++/// Answers the styled text of the plugin mover for what a player named, `name`: a greeting in
++/// gold whose name in red keeps the text of the player literal, opens a page on a click and
++/// shows a line on a hover.
++fn greeting(name: &str) -> Text {
++    Text::plain("Hello ")
++        .color(Color::Gold)
++        .append(
++            Text::player(name)
++                .color(Color::Rgb(0xff, 0x55, 0x55))
++                .bold(true)
++                .click(Click::OpenUrl("https://example.org/golem".to_owned()))
++                .hover(Text::plain("a player").italic(true)),
++        )
++        .append(Text::plain("!"))
++}
++
+ /// A handler that panics in every method, in place of the runtime, so a script can show that
+ /// a native answers its pass value whatever the handler does.
+ struct Panicking;
+diff --git a/crates/golem-devtool/src/main.rs b/crates/golem-devtool/src/main.rs
+index b94dd9e..e9b6e3d 100644
+--- a/crates/golem-devtool/src/main.rs
++++ b/crates/golem-devtool/src/main.rs
+@@ -16,6 +16,7 @@ mod game;
+ mod jvm;
+ mod permissions;
+ mod store;
++mod text;
+ 
+ /// A subcommand: its name, a line of help and the function that runs it on the arguments after
+ /// its name.
+@@ -32,6 +33,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
+     bridge::TICK_STATS,
+     bridge::NATIVES,
+     game::GAME_WIRE,
++    text::TEXT_JSON,
+     store::SCRIPT,
+     store::DESCRIBE,
+     store::BENCH,
+diff --git a/crates/golem-devtool/src/text.rs b/crates/golem-devtool/src/text.rs
+new file mode 100644
+index 0000000..60b1957
+--- /dev/null
++++ b/crates/golem-devtool/src/text.rs
+@@ -0,0 +1,166 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
++/*
++ * The subcommand text-json of the devtool: it builds styled texts of golem-bridge from a
++ * description in JSON, as a plugin builds them in Rust, and prints the JSON of the component that
++ * each text writes for the mod, so a notebook holds the builder to the form that the mod reads.
++ */
++
++//! The subcommand `text-json` and the description of a styled text that scripts use.
++//!
++//! A text is described as one object: what it shows, `{"plain": "..."}`, `{"player": "..."}` or
++//! `{"translate": "key", "with": [...]}`, and its style beside it: `color` as a name of the game
++//! or `#rrggbb`, `bold`, `italic`, `underlined`, `strikethrough` and `obfuscated` as booleans,
++//! `click` as `{"action": "open_url", "value": "..."}` with the actions `open_url`, `run_command`,
++//! `suggest_command` and `copy_to_clipboard`, `hover` as a text, `insertion` and `extra`, a list
++//! of texts after it. An entry `{"strip": "..."}` answers the text without its codes, as
++//! `strip_codes` makes it.
++
++use golem_bridge::{
++    Click,
++    Color,
++    MAX_DEPTH,
++    MAX_JSON,
++    Text,
++    strip_codes, //
++};
++use serde::Deserialize;
++use serde_json::{
++    Value,
++    json, //
++};
++
++use crate::{
++    Subcommand,
++    bridge::{
++        finish,
++        read, //
++    },
++};
++
++pub const TEXT_JSON: Subcommand = (
++    "text-json",
++    "<texts.json> the JSON of styled texts, as the mod reads it",
++    text_json,
++);
++
++/// A styled text as a script describes it.
++#[derive(Clone, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++pub struct TextSpec {
++    plain: Option<String>,
++    player: Option<String>,
++    translate: Option<String>,
++    #[serde(default)]
++    with: Vec<TextSpec>,
++    color: Option<String>,
++    bold: Option<bool>,
++    italic: Option<bool>,
++    underlined: Option<bool>,
++    strikethrough: Option<bool>,
++    obfuscated: Option<bool>,
++    click: Option<ClickSpec>,
++    hover: Option<Box<TextSpec>>,
++    insertion: Option<String>,
++    #[serde(default)]
++    extra: Vec<TextSpec>,
++}
++
++/// A click of a text as a script describes it.
++#[derive(Clone, Deserialize)]
++#[serde(deny_unknown_fields)]
++struct ClickSpec {
++    action: String,
++    value: String,
++}
++
++impl TextSpec {
++    /// Builds the text through the builder of golem-bridge, or answers why it cannot.
++    pub fn build(&self) -> Result<Text, String> {
++        let mut text = match (&self.plain, &self.player, &self.translate) {
++            (Some(plain), None, None) => Text::plain(plain.clone()),
++            (None, Some(player), None) => Text::player(player),
++            (None, None, Some(key)) => Text::translate(
++                key.clone(),
++                self.with
++                    .iter()
++                    .map(TextSpec::build)
++                    .collect::<Result<_, _>>()?,
++            ),
++            _ => return Err("a text needs one of plain, player and translate".to_owned()),
++        };
++        if let Some(color) = &self.color {
++            text = text.color(Color::from_name(color).ok_or(format!("no colour {color}"))?);
++        }
++        for (on, set) in [
++            (self.bold, Text::bold as fn(Text, bool) -> Text),
++            (self.italic, Text::italic),
++            (self.underlined, Text::underlined),
++            (self.strikethrough, Text::strikethrough),
++            (self.obfuscated, Text::obfuscated),
++        ] {
++            if let Some(on) = on {
++                text = set(text, on);
++            }
++        }
++        if let Some(click) = &self.click {
++            let value = click.value.clone();
++            text = text.click(match click.action.as_str() {
++                "open_url" => Click::OpenUrl(value),
++                "run_command" => Click::RunCommand(value),
++                "suggest_command" => Click::SuggestCommand(value),
++                "copy_to_clipboard" => Click::CopyToClipboard(value),
++                other => return Err(format!("no click {other}")),
++            });
++        }
++        if let Some(hover) = &self.hover {
++            text = text.hover(hover.build()?);
++        }
++        if let Some(insertion) = &self.insertion {
++            text = text.insertion(insertion.clone());
++        }
++        for extra in &self.extra {
++            text = text.append(extra.build()?);
++        }
++        Ok(text)
++    }
++}
++
++/// An entry of the input of text-json: a text to write, or a text to strip.
++#[derive(Deserialize)]
++#[serde(untagged)]
++enum Entry {
++    Strip { strip: String },
++    Text(Box<TextSpec>),
++}
++
++fn text_json(arguments: &[String]) -> i32 {
++    finish(
++        "text-json",
++        read::<Vec<Entry>>("text-json", arguments).and_then(|entries| {
++            let rows: Result<Vec<Value>, String> = entries.iter().map(row).collect();
++            rows.map(|rows| json!({"maxJson": MAX_JSON, "maxDepth": MAX_DEPTH, "texts": rows}))
++        }),
++    )
++}
++
++/// Answers the JSON of one text, the JSON read back, its plain text, its depth and its length
++/// in UTF-16 units, or the text without its codes.
++fn row(entry: &Entry) -> Result<Value, String> {
++    match entry {
++        Entry::Strip { strip } => Ok(json!({"stripped": strip_codes(strip)})),
++        Entry::Text(spec) => {
++            let text = spec.build()?;
++            let written = text.to_json();
++            let parsed: Value = serde_json::from_str(&written)
++                .map_err(|error| format!("the JSON {written} does not read: {error}"))?;
++            Ok(json!({
++                "json": written,
++                "parsed": parsed,
++                "plain": text.to_plain(),
++                "depth": text.depth(),
++                "utf16": written.encode_utf16().count(),
++            }))
++        }
++    }
++}
+diff --git a/crates/golem-plugin/src/lib.rs b/crates/golem-plugin/src/lib.rs
+index 02e4557..1c24d17 100644
+--- a/crates/golem-plugin/src/lib.rs
++++ b/crates/golem-plugin/src/lib.rs
+@@ -36,9 +36,12 @@ use golem_bridge::{
+     Event,
+     Game,
+     Location,
++    MAX_DEPTH,
++    MAX_JSON,
+     MAX_SAFE_RADIUS,
+     NoGame,
+     Sender,
++    Text,
+     Verdict,
+     log,
+     teleport_id, //
+@@ -143,6 +146,35 @@ impl<'a> Context<'a> {
+         self.actions.push(Action::Broadcast(text.to_owned()));
+     }
+ 
++    /// Queues a styled text to the player with `uuid` as a system message, which the mod sends if
++    /// they are online, and answers whether it queued it.
++    ///
++    /// A text whose JSON is longer than the game sends a client, [`MAX_JSON`], or whose texts sit
++    /// deeper inside each other than [`MAX_DEPTH`], is refused with a line on the log.
++    pub fn send_text(&self, uuid: &str, text: &Text) -> bool {
++        let Some(json) = text_json(text) else {
++            return false;
++        };
++        self.actions.push(Action::StyledMessage {
++            uuid: uuid.to_owned(),
++            json,
++        });
++        true
++    }
++
++    /// Queues a styled text to every player but those whose UUIDs `hidden` names, and to the
++    /// console, and answers whether it queued it, refused as [`Context::send_text`] refuses.
++    pub fn broadcast_text(&self, text: &Text, hidden: &[String]) -> bool {
++        let Some(json) = text_json(text) else {
++            return false;
++        };
++        self.actions.push(Action::StyledBroadcast {
++            hidden: hidden.to_vec(),
++            json,
++        });
++        true
++    }
++
+     /// Queues a command that the mod runs as the console. A leading slash is dropped, since the
+     /// console reads a command without it.
+     pub fn run_command(&self, command: &str) {
+@@ -219,6 +251,26 @@ impl<'a> Context<'a> {
+     }
+ }
+ 
++/// Answers the JSON of a styled text for an action, or logs why the runtime refuses it.
++fn text_json(text: &Text) -> Option<String> {
++    let depth = text.depth();
++    if depth > MAX_DEPTH {
++        log(format_args!(
++            "a plugin asked to send a text {depth} deep, deeper than {MAX_DEPTH}, so the runtime refuses it"
++        ));
++        return None;
++    }
++    let json = text.to_json();
++    let length = json.encode_utf16().count();
++    if length > MAX_JSON {
++        log(format_args!(
++            "a plugin asked to send a text whose JSON holds {length} UTF-16 units, more than the {MAX_JSON} that the game sends a client, so the runtime refuses it"
++        ));
++        return None;
++    }
++    Some(json)
++}
++
+ /// A Golem plugin.
+ pub trait Plugin: Send {
+     /// The name, such as golem-essentials.
+diff --git a/okf/bridge.md b/okf/bridge.md
+index 3cd0415..b542856 100644
+--- a/okf/bridge.md
++++ b/okf/bridge.md
+@@ -345,6 +345,8 @@ separator, which no field may hold. The first field is the kind.
+ | `command` | The command without its slash | Runs it as the console, with the level and the name of the console, whose answer reaches the console and the log of the server but no operator in the game, see below |
+ | `message` | The UUID of a player, the text | Sends the text as a system message to that player, if they are online |
+ | `broadcast` | The text | Sends the text as a system message to every player and the console |
++| `styledMessage` | The UUID of a player, the JSON of a styled text | Sends the text as a system message to that player, if they are online, see [Styled text](#styled-text) |
++| `styledBroadcast` | The UUIDs of the players who do not get it, joined by commas, the JSON of a styled text | Sends the text as a system message to every other player and to the console |
+ | `teleport` | The id, the UUID of a player, the dimension, `x`, `y`, `z`, `yaw`, `pitch` and the radius of the search for a safe place, empty for none | Teleports the player there, or to the nearest safe place within the radius once the chunks of the search are loaded, also into another dimension, and reports how it ended, see [The end of a teleport](#the-end-of-a-teleport) |
+ | `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
+ 
+@@ -381,6 +383,61 @@ does not parse, is logged and the next action runs. The host stops the server wi
+ `command save-all flush` and `command stop`, so the stop path is the same as an operator's at the
+ console.
+ 
++### Styled text
++
++The plain `message` and `broadcast` carry text as it is, which the mod turns into a component with
++`ForgeHooks.newChatWithLinks`, so a colour needs a formatting code with `§` in the text. A styled
++text carries the JSON of a text component of Minecraft 1.20.1, the form that
++`Component.Serializer` reads, which [Plugin API](api.md#916-chat-components-and-messages) names
++the form of a text component of the API. A plugin builds it in Rust with `golem_bridge::Text`, and
++the mod reads it with `Component.Serializer.fromJson`, as the game reads the text of `tellraw`.
++
++| Part of a text | In Rust | In the JSON |
++| --- | --- | --- |
++| The words of a plugin, newlines included | `Text::plain(text)` | `text` |
++| What a player wrote or named, kept literal | `Text::player(text)` | `text`, without formatting codes and control characters |
++| A key of the language of the client with its arguments | `Text::translate(key, with)` | `translate` and `with` |
++| One of the 16 colours of the game or any colour | `color(Color::Gold)`, `color(Color::Rgb(0xff, 0xaa, 0x00))` | `color` as `gold` or `#ffaa00` |
++| The decorations | `bold`, `italic`, `underlined`, `strikethrough`, `obfuscated` | The keys of the same names |
++| A click | `click(Click::OpenUrl(...))`, `RunCommand`, `SuggestCommand`, `CopyToClipboard` | `clickEvent` with `open_url`, `run_command`, `suggest_command` or `copy_to_clipboard` |
++| A hover | `hover(text)` | `hoverEvent` with `show_text` and `contents` |
++| Text for a click with shift | `insertion(text)` | `insertion` |
++| The texts after it, which take its style where they set none | `append(text)` | `extra` |
++
++No player can inject formatting. What a player wrote or named, such as a name, a chat line or the
++name of a home, enters a text through `Text::player` as a text of its own, so it can neither close
++the style around it nor open one, and `strip_codes` takes out of it every `§` with the character
++after it, as the client of Minecraft hides both when it draws a text, and every control
++character that the game refuses in a chat line, below U+0020 and U+007F, a newline among them, so
++no player starts a line of their own. The game itself refuses these characters in what a player
++types, so a chat line or an argument of a command passes unchanged, and a display name that a mod
++coloured reads as the client draws it without its colour. The JSON escapes the quote, the
++backslash, every control character and U+2028 and U+2029, so it holds no U+001F of the wire form
++and is as long as the JSON that the game writes for the same text. The mod adds no link to a
++styled text, so a styled text links where its plugin set a click, and a player cannot make one.
++
++The context of a plugin refuses with a line on the log a text whose JSON holds more than
++262144 UTF-16 units, `MAX_JSON`, the bound of the packet of a system message, which the game would
++otherwise drop on its way to the client, and a text whose texts sit more than 32 deep inside each
++other, `MAX_DEPTH`, through `extra`, `with` and the hover, so no text costs a client a deep
++recursion. The mod logs once and skips a styled action whose JSON does not read, and reads a part
++of the hidden players that is no UUID as nobody. The client of Minecraft 1.20.1 opens an address
++of `http` and `https` alone and only after the player confirms it, and runs a command of a click
++only when it starts with a slash and takes no signed argument, such as the message of `msg`.
++
++The texts of EssentialsX 2.22.0 are MiniMessage in `messages.properties`, with the colours
++`<primary>` and `<secondary>` of `message-colors`, `#ffaa00` and `#ff5555` live, the 16 colours of
++the game, `<reset>`, the decorations `<b>`, `<i>` and `<st>`, the click `<click:open_url:"{0}">`
++and newlines, and the arguments `{0}` to `{n}` of `MessageFormat`. The port parses each template
++once into a tree of `Text`: a run of words becomes `Text::plain` with the style of the tags open
++around it, a tag of a colour or a decoration sets the style of the runs inside it and `<reset>`
++closes every tag, `<click:...>` becomes a `Click` and `<hover:show_text:...>` a hover, and an
++argument becomes a text of its own, `Text::player` for what a player wrote or named and a text
++that the port built for the rest, such as a link, so no argument is ever parsed as MiniMessage, as
++EssentialsX escapes its arguments. The value of a click that holds an argument takes the argument
++as plain text, which the JSON escapes. The parser belongs to the port, not to the bridge, see
++[EssentialsX bridge needs](plugins/essentials/bridge-needs.md).
++
+ ### The end of a teleport
+ 
+ Every teleport carries an id, which `teleport_id` of `golem-bridge` hands out once per process
+diff --git a/okf/plugins/index.md b/okf/plugins/index.md
+index 3cc8150..021f74b 100644
+--- a/okf/plugins/index.md
++++ b/okf/plugins/index.md
+@@ -184,6 +184,8 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
+ | --- | --- |
+ | `send_message(uuid, text)` | `message`, a system message to one player if they are online |
+ | `broadcast(text)` | `broadcast`, a system message to every player and the console |
++| `send_text(uuid, text)` | `styledMessage`, the `Text` of [Bridge](../bridge.md#styled-text) as a system message to one player if they are online, refused with a line on the log above `MAX_JSON` or `MAX_DEPTH`, and answers whether it queued it |
++| `broadcast_text(text, hidden)` | `styledBroadcast`, the `Text` to every player but the UUIDs of `hidden` and to the console, refused as `send_text` refuses |
+ | `run_command(command)` | `command`, run as the console, with a leading slash dropped, whose answer reaches the log of the server and no operator in the game |
+ | `teleport(uuid, location)` | `teleport`, unless a coordinate or an angle is no finite number or the block lies outside the bounds of the world that `tp` takes, which is logged and refused, and answers whether it queued one |
+ | `queue_teleport(uuid, location, safe_radius)` | `teleport` with the next id of `teleport_id` and the radius of the search for a safe place, held to 8, or `None` for the place as it is, refused as `teleport` refuses, and answers the id that the events `Teleported` and `TeleportFailed` carry |
+diff --git a/tests/harness/minecraft.py b/tests/harness/minecraft.py
+index b7e0643..07eadb6 100644
+--- a/tests/harness/minecraft.py
++++ b/tests/harness/minecraft.py
+@@ -13,8 +13,10 @@
+ The client speaks protocol 763 in offline mode: the handshake, the login with the plugin
+ requests of Forge answered as a vanilla client would, the keep alive, chat and commands without
+ signatures, the respawn and the close. A thread reads its packets as they come and records every
+-system chat message as raw text in `messages`, the text of every chat message of a player in
+-`chats`, every place the server puts the player in
++system chat message as raw text in `messages` and as its component, read from JSON, in
++`components`, which `plain` turns into the text a player reads and `parts` into its texts with
++their styles, the text of every chat message of a player in `chats`, every place the server puts
++the player in
+ `positions`, the dimension of every respawn or change of dimension in `dimensions` and the name
+ of every player in the player list in `list_names`. It confirms every teleport, as a vanilla
+ client does. It is no game client: it sends no movement and loads no chunk, which a server in
+@@ -24,6 +26,7 @@ offline mode on localhost accepts.
+ from __future__ import annotations
+ 
+ import hashlib
++import json
+ import socket
+ import struct
+ import threading
+@@ -109,6 +112,39 @@ def parse_player_info(payload: bytes) -> list:
+     return named
+ 
+ 
++def plain(component) -> str:
++    """The text that a component shows, with the key of a translation and its arguments in
++    brackets, as the language of a client is not known here."""
++    if isinstance(component, str):
++        return component
++    if isinstance(component, list):
++        return "".join(plain(part) for part in component)
++    if "translate" in component:
++        text = component["translate"]
++        if component.get("with"):
++            text += "[" + ", ".join(plain(argument) for argument in component["with"]) + "]"
++    else:
++        text = component.get("text", "")
++    return text + "".join(plain(part) for part in component.get("extra", []))
++
++
++def parts(component, style=None) -> list:
++    """The texts of a component in their order, each as a dictionary of its text and the style it
++    shows with, which it takes from the texts it sits in where it sets none of its own, without
++    the texts of its hover."""
++    style = dict(style or {})
++    if isinstance(component, str):
++        return [dict(style, text=component)]
++    if isinstance(component, list):
++        return [part for item in component for part in parts(item, style)]
++    style.update({key: value for key, value in component.items()
++                  if key not in ("text", "translate", "with", "extra")})
++    found = [dict(style, text=component.get("text", component.get("translate", "")))]
++    for part in component.get("extra", []):
++        found += parts(part, style)
++    return found
++
++
+ class Client:
+     """A player in offline mode, whose packets a thread reads as they come."""
+ 
+@@ -118,6 +154,7 @@ class Client:
+         self.stream = self.socket.makefile("rb")
+         self.threshold, self.uuid = -1, None
+         self.lock, self.messages, self.play = threading.Lock(), [], threading.Event()
++        self.components = []
+         self.chats, self.positions, self.dimensions, self.list_names = [], [], [], {}
+         self.closed = threading.Event()
+ 
+@@ -174,6 +211,10 @@ class Client:
+                     self.play.set()
+                 elif packet == 0x64:
+                     self.messages.append(payload.decode("utf-8", "replace"))
++                    try:
++                        self.components.append(json.loads(parse_string(payload)[0]))
++                    except ValueError:
++                        self.components.append(None)
+                 elif packet == 0x35:
+                     _, offset = parse_varint(payload, 16)
+                     signed, offset = payload[offset], offset + 1
+diff --git a/tests/notebooks/04_plugins.ipynb b/tests/notebooks/04_plugins.ipynb
+index 5e087e0..7cc7054 100644
+--- a/tests/notebooks/04_plugins.ipynb
++++ b/tests/notebooks/04_plugins.ipynb
+@@ -814,6 +814,133 @@
+    "execution_count": null,
+    "outputs": []
+   },
++  {
++   "cell_type": "markdown",
++   "id": "84fa81d2",
++   "metadata": {},
++   "source": [
++    "## Styled text\n",
++    "\n",
++    "A plugin builds a styled text with `golem_bridge::Text`, and the action carries its JSON, which\n",
++    "`Component.Serializer` of the game reads. `golem-devtool text-json` builds texts from a description\n",
++    "and prints the JSON they write, which must be exactly the JSON of `okf/bridge.md`: the words of a\n",
++    "plugin as they are, newlines included, a colour by name or as `#rrggbb`, the five decorations, the\n",
++    "four clicks, a hover with its own text, an insertion, a translation with its arguments and the texts\n",
++    "after a text in `extra`. What a player wrote or named loses every `§` with the character after it\n",
++    "and every control character, a newline and U+001F among them, and stays a text of its own, so a\n",
++    "player can neither colour the rest of a line nor start one. The JSON escapes the quote, the\n",
++    "backslash, every control character and U+2028, so it holds no U+001F, reads back as JSON, and counts\n",
++    "its length in UTF-16 units. A colour that is neither a name of the game nor six hexadecimal digits\n",
++    "reads as none."
++   ]
++  },
++  {
++   "cell_type": "code",
++   "id": "1c9e4a12",
++   "metadata": {},
++   "source": [
++    "US = \"\\x1f\"\n",
++    "texts = [\n",
++    "    {\"plain\": \"Teleporting to \", \"color\": \"#ffaa00\", \"extra\": [\n",
++    "        {\"player\": \"home\", \"color\": \"#ff5555\"}, {\"plain\": \".\"}]},\n",
++    "    {\"player\": \"\\u00a7cred\\u00a7l bold\\nline\" + US + \"end\\u007f\\u00a7\"},\n",
++    "    {\"plain\": \"two\\nlines \\\"quoted\\\" back\\\\slash\" + US + \" tab\\t\\u2028\"},\n",
++    "    {\"plain\": \"all\", \"bold\": True, \"italic\": False, \"underlined\": True, \"strikethrough\": False, \"obfuscated\": True,\n",
++    "     \"color\": \"dark_purple\"},\n",
++    "    {\"plain\": \"open\", \"click\": {\"action\": \"open_url\", \"value\": \"https://example.org/golem\"}},\n",
++    "    {\"plain\": \"run\", \"click\": {\"action\": \"run_command\", \"value\": \"/golem source\"}},\n",
++    "    {\"plain\": \"suggest\", \"click\": {\"action\": \"suggest_command\", \"value\": \"/msg \"}},\n",
++    "    {\"plain\": \"copy\", \"click\": {\"action\": \"copy_to_clipboard\", \"value\": \"4000 128 4000\"}},\n",
++    "    {\"plain\": \"hover\", \"hover\": {\"plain\": \"the text of the hover\", \"color\": \"gray\"}, \"insertion\": \"Alex\"},\n",
++    "    {\"translate\": \"death.attack.generic\", \"with\": [{\"player\": \"Alex\"}], \"color\": \"red\"},\n",
++    "    {\"plain\": \"\\u00e4\\u00f6\\u00fc \\u2603 \\U0001f600\"},\n",
++    "    {\"strip\": \"\\u00a7\\u00a7a\\u00a7x\\u00a7\"},\n",
++    "    {\"strip\": \"plain words stay\"},\n",
++    "]\n",
++    "rows, log = devtool(\"text-json\", write(\"texts.json\", texts))\n",
++    "out = rows[\"texts\"]\n",
++    "for row in out:\n",
++    "    print(row)\n",
++    "assert (rows[\"maxJson\"], rows[\"maxDepth\"]) == (262144, 32), rows\n",
++    "assert out[0][\"json\"] == ('{\"text\":\"Teleporting to \",\"color\":\"#ffaa00\",\"extra\":[{\"text\":\"home\",\"color\":\"#ff5555\"},'\n",
++    "                          '{\"text\":\".\"}]}'), out[0]\n",
++    "assert out[0][\"plain\"] == \"Teleporting to home.\" and out[0][\"depth\"] == 2, out[0]\n",
++    "assert out[1][\"json\"] == '{\"text\":\"red boldlineend\"}', \"the text of a player keeps a code: %s\" % out[1]\n",
++    "assert out[2][\"json\"] == '{\"text\":\"two\\\\nlines \\\\\"quoted\\\\\" back\\\\\\\\slash\\\\u001f tab\\\\t\\\\u2028\"}', out[2]\n",
++    "assert US not in out[2][\"json\"] and out[2][\"parsed\"][\"text\"] == texts[2][\"plain\"], out[2]\n",
++    "assert out[3][\"json\"] == ('{\"text\":\"all\",\"color\":\"dark_purple\",\"bold\":true,\"italic\":false,\"underlined\":true,'\n",
++    "                          '\"strikethrough\":false,\"obfuscated\":true}'), out[3]\n",
++    "assert [row[\"parsed\"][\"clickEvent\"] for row in out[4:8]] == [\n",
++    "    {\"action\": \"open_url\", \"value\": \"https://example.org/golem\"}, {\"action\": \"run_command\", \"value\": \"/golem source\"},\n",
++    "    {\"action\": \"suggest_command\", \"value\": \"/msg \"}, {\"action\": \"copy_to_clipboard\", \"value\": \"4000 128 4000\"}], out[4:8]\n",
++    "assert out[8][\"json\"] == ('{\"text\":\"hover\",\"hoverEvent\":{\"action\":\"show_text\",\"contents\":{\"text\":\"the text of the '\n",
++    "                          'hover\",\"color\":\"gray\"}},\"insertion\":\"Alex\"}'), out[8]\n",
++    "assert out[8][\"depth\"] == 2 and out[8][\"plain\"] == \"hover\", out[8]\n",
++    "assert out[9][\"json\"] == '{\"translate\":\"death.attack.generic\",\"with\":[{\"text\":\"Alex\"}],\"color\":\"red\"}', out[9]\n",
++    "assert out[9][\"plain\"] == \"death.attack.generic[Alex]\", out[9]\n",
++    "assert out[10][\"parsed\"][\"text\"] == \"\\u00e4\\u00f6\\u00fc \\u2603 \\U0001f600\" and out[10][\"utf16\"] == len(out[10][\"json\"]) + 1, out[10]\n",
++    "assert out[11] == {\"stripped\": \"a\"} and out[12] == {\"stripped\": \"plain words stay\"}, out[11:]\n",
++    "assert log == [], log\n",
++    "for bad in ({\"plain\": \"x\", \"color\": \"#ffaa0\"}, {\"plain\": \"x\", \"color\": \"orange\"}, {\"plain\": \"x\", \"color\": \"#gg0000\"}):\n",
++    "    result = run([DEVTOOL, \"text-json\", write(\"bad-color.json\", [bad])], cwd=P.root)\n",
++    "    assert result.returncode == 1 and \"no colour\" in result.stderr, (bad, result.stderr)"
++   ],
++   "execution_count": null,
++   "outputs": []
++  },
++  {
++   "cell_type": "markdown",
++   "id": "dfd0e9d2",
++   "metadata": {},
++   "source": [
++    "The plugin mover sends a styled greeting through the helpers of the context, whose name of a player\n",
++    "keeps its text literal, to one player and to every player but one, and the context refuses a text\n",
++    "nested deeper than 32 and one whose JSON is longer than the game sends a client, each with a line\n",
++    "on the log. The wire form carries the UUID or the hidden players joined by commas, and the JSON as\n",
++    "one field."
++   ]
++  },
++  {
++   "cell_type": "code",
++   "id": "de1376ee",
++   "metadata": {},
++   "source": [
++    "steps, log = script(\"styled\", {\n",
++    "    \"budgetMs\": 200,\n",
++    "    \"plugins\": [{\"kind\": \"mover\", \"name\": \"mover\", \"commands\": [\"move\"], \"to\": NETHER}],\n",
++    "    \"steps\": [\n",
++    "        {\"op\": \"command\", \"name\": \"move\", \"arguments\": \"text \" + ALEX[\"uuid\"] + \" \\u00a7kSam\\n\"},\n",
++    "        {\"op\": \"command\", \"name\": \"move\", \"arguments\": \"shout \" + SAM[\"uuid\"] + \" Alex\"},\n",
++    "        {\"op\": \"command\", \"name\": \"move\", \"arguments\": \"deep \" + ALEX[\"uuid\"]},\n",
++    "        {\"op\": \"command\", \"name\": \"move\", \"arguments\": \"long \" + ALEX[\"uuid\"]},\n",
++    "        {\"op\": \"drain\"},\n",
++    "    ],\n",
++    "})\n",
++    "assert [step[\"answer\"] for step in steps[:4]] == [[\"sent true\"], [\"sent true\"], [\"sent false\"], [\"sent false\"]], steps\n",
++    "greeting = ('{\"text\":\"Hello \",\"color\":\"gold\",\"extra\":[{\"text\":\"%s\",\"color\":\"#ff5555\",\"bold\":true,\"clickEvent\":'\n",
++    "            '{\"action\":\"open_url\",\"value\":\"https://example.org/golem\"},\"hoverEvent\":{\"action\":\"show_text\",\"contents\":'\n",
++    "            '{\"text\":\"a player\",\"italic\":true}}},{\"text\":\"!\"}]}')\n",
++    "assert steps[4][\"decoded\"] == [\n",
++    "    {\"kind\": \"styledMessage\", \"uuid\": ALEX[\"uuid\"], \"json\": greeting % \"Sam\"},\n",
++    "    {\"kind\": \"styledBroadcast\", \"hidden\": [SAM[\"uuid\"]], \"json\": greeting % \"Alex\"},\n",
++    "], steps[4][\"decoded\"]\n",
++    "assert steps[4][\"answer\"][1] == US.join([\"styledBroadcast\", SAM[\"uuid\"], greeting % \"Alex\"]), steps[4][\"answer\"][1]\n",
++    "print(log)\n",
++    "assert log == [\"a plugin asked to send a text 33 deep, deeper than 32, so the runtime refuses it\",\n",
++    "               \"a plugin asked to send a text whose JSON holds 262155 UTF-16 units, more than the 262144 that the game \"\n",
++    "               \"sends a client, so the runtime refuses it\"], log\n",
++    "rows, _ = devtool(\"actions-encode\", write(\"styled-actions.json\", [\n",
++    "    {\"kind\": \"styledBroadcast\", \"hidden\": [ALEX[\"uuid\"], SAM[\"uuid\"]], \"json\": '{\"text\":\"x\"}'},\n",
++    "    {\"kind\": \"styledBroadcast\", \"json\": '{\"text\":\"x\"}'},\n",
++    "    {\"wire\": US.join([\"styledMessage\", ALEX[\"uuid\"]])},\n",
++    "]))\n",
++    "assert rows[0][\"fields\"] == [\"styledBroadcast\", ALEX[\"uuid\"] + \",\" + SAM[\"uuid\"], '{\"text\":\"x\"}'], rows[0]\n",
++    "assert rows[0][\"reencoded\"] == rows[0][\"wire\"] and rows[1][\"fields\"][1] == \"\" and rows[1][\"decoded\"][\"hidden\"] == [], rows\n",
++    "assert rows[2][\"decoded\"] is None, rows[2]"
++   ],
++   "execution_count": null,
++   "outputs": []
++  },
+   {
+    "cell_type": "markdown",
+    "id": "6a3e0c10",
+diff --git a/tests/notebooks/05_bridge_build.ipynb b/tests/notebooks/05_bridge_build.ipynb
+index d2d195c..02b91c2 100644
+--- a/tests/notebooks/05_bridge_build.ipynb
++++ b/tests/notebooks/05_bridge_build.ipynb
+@@ -776,7 +776,9 @@
+     "portal does, through `changeDimension` of the player. A chat message that starts with `cancel` is\n",
+     "cancelled. After `golemstub slow` the native `tick` sleeps 200 ms on the next tick and traces the\n",
+     "duration of the tick after it. The natives `teleported` and `teleportFailed` trace their id, the\n",
+-    "UUID and the places or the reason."
++    "UUID and the places or the reason. `golemstub styled <uuid>` sends the player a styled text with a\n",
++    "colour, a click and a hover, a styled broadcast to every player but the one of the UUID and a\n",
++    "styled broadcast whose JSON does not read, and then a plain broadcast."
+    ]
+   },
+   {
+@@ -1301,6 +1303,18 @@
+     "\t\tpermit = -1;\n",
+     "\t} else if (strcmp(word, \"slow\") == 0) {\n",
+     "\t\tslow = 1;\n",
++    "\t} else if (strncmp(word, \"styled \", 7) == 0) {\n",
++    "\t\tsnprintf(action, sizeof(action), \"styledMessage\" US \"%s\" US\n",
++    "\t\t\t \"{\\\"text\\\":\\\"stub: styled \\\",\\\"color\\\":\\\"#ffaa00\\\",\\\"extra\\\":[{\\\"text\\\":\"\n",
++    "\t\t\t \"\\\"link\\\",\\\"color\\\":\\\"red\\\",\\\"bold\\\":true,\\\"clickEvent\\\":{\\\"action\\\":\"\n",
++    "\t\t\t \"\\\"open_url\\\",\\\"value\\\":\\\"https://example.org/golem\\\"},\\\"hoverEvent\\\":\"\n",
++    "\t\t\t \"{\\\"action\\\":\\\"show_text\\\",\\\"contents\\\":{\\\"text\\\":\\\"a hover\\\"}}}]}\", uuid);\n",
++    "\t\tpush(action);\n",
++    "\t\tsnprintf(action, sizeof(action), \"styledBroadcast\" US \"%s,not-a-uuid\" US\n",
++    "\t\t\t \"{\\\"text\\\":\\\"stub: styled to all but one\\\",\\\"italic\\\":true}\", word + 7);\n",
++    "\t\tpush(action);\n",
++    "\t\tpush(\"styledBroadcast\" US \"\" US \"{not json\");\n",
++    "\t\tpush(\"broadcast\" US \"stub: the styled end\");\n",
+     "\t} else if (strcmp(word, \"away\") == 0) {\n",
+     "\t\tsnprintf(action, sizeof(action), \"teleport\" US \"7\" US \"%s\" US \"minecraft:overworld\"\n",
+     "\t\t\t US \"20000.5\" US \"100\" US \"20000.5\" US \"0\" US \"0\" US \"8\", uuid);\n",
+@@ -1595,6 +1609,9 @@
+     "    if found:\n",
+     "        hidden[found.group(1)] = (found.group(2), found.group(3))\n",
+     "print(\"the players while Tester has no game mode and after:\", hidden)\n",
++    "ALEX = offline_uuid(\"Alex\")\n",
++    "player.command(\"golemstub styled \" + ALEX)\n",
++    "assert player.heard(\"stub: the styled end\") and other.heard(\"stub: the styled end\"), (player.messages, other.messages)\n",
+     "player.command(\"golemstub move\")\n",
+     "on.expect(\"Golem queued a teleport to a place that is no finite number\")\n",
+     "# The teleports onto the roof of the Nether and above the Overworld wait for their chunks.\n",
+@@ -1728,7 +1745,7 @@
+     "    [\"seed\", TESTER, \"Tester\", \"0\", \"now\"], [\"teleport\", \"null\", \"null\", \"4\", \"somewhere\"],\n",
+     "    [\"golemstub\", TESTER, \"Tester\", \"0\", \"leave\"], [\"golemstub\", TESTER, \"Tester\", \"0\", \"where\"],\n",
+     "    *([\"golemstub\", \"null\", \"null\", \"4\", \"near \" + near] for near in NEAR),\n",
+-    "    [\"golemstub\", TESTER, \"Tester\", \"0\", \"hide\"],\n",
++    "    [\"golemstub\", TESTER, \"Tester\", \"0\", \"hide\"], [\"golemstub\", TESTER, \"Tester\", \"0\", \"styled \" + ALEX],\n",
+     "    [\"golemstub\", TESTER, \"Tester\", \"0\", \"move\"], [\"golemstub\", TESTER, \"Tester\", \"0\", \"unname\"],\n",
+     "    [\"golemstub\", TESTER, \"Tester\", \"0\", \"away\"],\n",
+     "    [\"golemstub\", \"null\", \"null\", \"4\", \"queue\"], [\"golemstub\", \"null\", \"null\", \"4\", \"slow\"],\n",
+@@ -1788,7 +1805,10 @@
+     "command as the console, the broadcast to the player and the console, the message to the player\n",
+     "alone, with its link to a page opening on a click, the teleport into the Nether, which the game and\n",
+     "the client both show, the teleport onto the roof of the Nether, where the game and the client show\n",
+-    "the player last, and the name in the player list, which the client saw set and cleared. The\n",
++    "the player last, the styled text to the player, whose component kept its colour, its link with\n",
++    "the click and the hover and its bold, the styled broadcast to the player and the console but not\n",
++    "to the second player, whom it hid, and the name in the player list, which the client saw set and\n",
++    "cleared. The styled broadcast whose JSON does not read was logged once and skipped. The\n",
+     "teleports into a dimension the server does not have, to a place that is no number and to one whose\n",
+     "number does not read were logged once each and skipped, and so was the teleport whose id does not\n",
+     "read, which no report names. The unknown kind and the command without its\n",
+@@ -1850,6 +1870,21 @@
+     "assert player.dimensions[-1] == \"minecraft:the_nether\", player.dimensions\n",
+     "assert (0.5, 200.0, -7.25, 45.0, 10.0) in player.positions, player.positions\n",
+     "assert player.positions[-1] == (4000.5, 128.0, 4000.5, 0.0, 0.0), player.positions[-1]\n",
++    "from harness.minecraft import parts, plain\n",
++    "styled = [component for component in player.components if component and plain(component) == \"stub: styled link\"]\n",
++    "assert len(styled) == 1, [plain(component) for component in player.components if component]\n",
++    "first, link = parts(styled[0])\n",
++    "print(\"the styled text as the client read it:\", first, link)\n",
++    "assert first[\"text\"] == \"stub: styled \" and first[\"color\"].lower() == \"#ffaa00\", first\n",
++    "assert link[\"text\"] == \"link\" and link[\"color\"] == \"red\" and link[\"bold\"] is True, link\n",
++    "assert link[\"clickEvent\"] == {\"action\": \"open_url\", \"value\": \"https://example.org/golem\"}, link\n",
++    "assert plain(link[\"hoverEvent\"][\"contents\"]) == \"a hover\" and link[\"hoverEvent\"][\"action\"] == \"show_text\", link\n",
++    "everyone = [component for component in player.components if component and plain(component) == \"stub: styled to all but one\"]\n",
++    "assert len(everyone) == 1 and parts(everyone[0])[0].get(\"italic\") is True, everyone\n",
++    "assert not [component for component in other.components\n",
++    "            if component and plain(component).startswith(\"stub: styled\")], other.messages\n",
++    "assert \"]: stub: styled to all but one\" in on.latest, \"the console did not get the styled broadcast\"\n",
++    "assert \"stub: styled link\" not in on.latest, \"the styled message to one player reached the console\"\n",
+     "print(\"the client saw the dimensions %s and %d places, and the list names set and cleared\" % (\n",
+     "    player.dimensions, len(player.positions)))\n",
+     "assert on.latest.index(\"Saved the game\") < on.latest.index(\"Stopping the server\"), \"no save-all flush first\"\n",
+@@ -1864,6 +1899,7 @@
+     "                    \"Golem queued an action explode of a kind the bridge does not know, which the bridge skips\",\n",
+     "                    \"Golem queued an action command with 0 fields instead of 1, which the bridge skips\",\n",
+     "                    \"Golem queued a teleport whose id does not read, so the bridge skips it and reports nothing\",\n",
++    "                    \"Golem queued an action styledBroadcast whose text does not read, which the bridge skips\",\n",
+     "                    \"Golem queued a teleport into the dimension golem:nowhere, which the server does not have, so the \"\n",
+     "                    \"bridge skips it\",\n",
+     "                    \"Golem queued a teleport to a place that is no finite number, so the bridge skips it\",\n",
+-- 
+2.43.0
+

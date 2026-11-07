@@ -1,0 +1,1711 @@
+From ca30d086d19e91cc6e6c79fba2e8214a19183003 Mon Sep 17 00:00:00 2001
+From: Florian Kleber <26285351+kleberbaum@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 08:34:04 +0000
+Subject: [PATCH 4/4] wip(bridge): answer the small queries of the port and the
+ quit position
+
+Unfinished work of the agent that closed the bridge gaps of the port of
+EssentialsX, stopped at the hand over in the middle of item 4 and 5 of
+okf/plugins/essentials/bridge-needs.md. It does not build or pass its
+notebooks for certain: finish it, split it and run 04, 05 and 07.
+
+Signed-off-by: Florian Kleber <opensource@skytekx.com>
+---
+ .../java/com/skytekx/golem/host/Game.java     |  52 +++-
+ .../com/skytekx/golem/bridge/GameQueries.java |  89 +++++-
+ .../skytekx/golem/bridge/RespawnPlaces.java   | 100 +++++++
+ crates/golem-bridge/src/game.rs               | 210 +++++++++++++-
+ crates/golem-bridge/src/host.rs               |  38 ++-
+ crates/golem-bridge/src/jni_game.rs           | 101 +++++--
+ crates/golem-bridge/src/lib.rs                |   5 +
+ crates/golem-devtool/src/game.rs              | 259 ++++++++++++++++--
+ crates/golem-plugin/src/operator.rs           |   2 +-
+ okf/bridge.md                                 |  34 ++-
+ okf/plugins/index.md                          |  10 +-
+ tests/notebooks/04_plugins.ipynb              |  82 +++++-
+ tests/notebooks/05_bridge_build.ipynb         | 102 ++++++-
+ tests/notebooks/07_forge_boot.ipynb           |  21 ++
+ 14 files changed, 1009 insertions(+), 96 deletions(-)
+ create mode 100644 bridge/mod/src/main/java/com/skytekx/golem/bridge/RespawnPlaces.java
+
+diff --git a/bridge/host/src/main/java/com/skytekx/golem/host/Game.java b/bridge/host/src/main/java/com/skytekx/golem/host/Game.java
+index ee62421..aeb707b 100644
+--- a/bridge/host/src/main/java/com/skytekx/golem/host/Game.java
++++ b/bridge/host/src/main/java/com/skytekx/golem/host/Game.java
+@@ -40,9 +40,9 @@ public interface Game {
+ 
+ 	/**
+ 	 * Answers the respawn point that a player holds, which a bed, a respawn anchor or the command
+-	 * spawnpoint set: the dimension and x, y and z of the block, as Minecraft stores it.
+-	 * Minecraft checks the block only when the player respawns, so the point may name a bed that
+-	 * is gone.
++	 * spawnpoint set: the dimension and x, y and z of the block, the angle and whether the
++	 * command spawnpoint forced it, as Minecraft stores it. Minecraft checks the block only when
++	 * the player respawns, so the point may name a bed that is gone.
+ 	 *
+ 	 * @param uuid the UUID of the player in its usual form with dashes
+ 	 * @return the point, the empty string when the player has none, or null when the player is
+@@ -50,6 +50,18 @@ public interface Game {
+ 	 */
+ 	String respawn(String uuid);
+ 
++	/**
++	 * Answers where a player would respawn now, as Minecraft resolves the respawn point for a
++	 * player who lives, without the charge of an anchor: the dimension, x, y and z of the feet
++	 * and the yaw. The question reads loaded chunks alone and loads none.
++	 *
++	 * @param uuid the UUID of the player in its usual form with dashes
++	 * @return the place, the empty string when the player holds no point or the point holds no
++	 *     respawn now, the word unloaded when a chunk around the point is not loaded, or null
++	 *     when the player is not online
++	 */
++	String respawnPlace(String uuid);
++
+ 	/**
+ 	 * Answers the shared spawn of a dimension: x, y and z of the block and the angle.
+ 	 *
+@@ -66,6 +78,16 @@ public interface Game {
+ 	 */
+ 	String mainHand(String uuid);
+ 
++	/**
++	 * Answers every stack of the inventory of a player, each as its slot, the registry id of the
++	 * item, the count, the damage and whether the item places a block, in the order of the slots,
++	 * the armor and the off hand included, empty slots left out.
++	 *
++	 * @param uuid the UUID of the player in its usual form with dashes
++	 * @return one answer per stack, or null when the player is not online
++	 */
++	String[] inventory(String uuid);
++
+ 	/**
+ 	 * Answers the heights of a dimension: the lowest y of a block and the y above the highest.
+ 	 *
+@@ -74,6 +96,30 @@ public interface Game {
+ 	 */
+ 	String heights(String dimension);
+ 
++	/**
++	 * Answers every dimension of the server, the Overworld first, each as its id, the id of its
++	 * dimension type, the lowest y of a block, the y above the highest, the logical height, the
++	 * sea level and the time of day.
++	 *
++	 * @return one answer per dimension, or null
++	 */
++	String[] dimensions();
++
++	/**
++	 * Answers whether a player may fly and whether they fly now.
++	 *
++	 * @param uuid the UUID of the player in its usual form with dashes
++	 * @return the two fields, true or false, or null when the player is not online
++	 */
++	String flight(String uuid);
++
++	/**
++	 * Answers how many players the server takes at most.
++	 *
++	 * @return the number, or null
++	 */
++	String maxPlayers();
++
+ 	/**
+ 	 * Answers the nearest place near a target where a player stands safely: x, y and z of the
+ 	 * feet, in the middle of the block. The search reads the blocks of loaded chunks alone and
+diff --git a/bridge/mod/src/main/java/com/skytekx/golem/bridge/GameQueries.java b/bridge/mod/src/main/java/com/skytekx/golem/bridge/GameQueries.java
+index c3787e1..c9836dc 100644
+--- a/bridge/mod/src/main/java/com/skytekx/golem/bridge/GameQueries.java
++++ b/bridge/mod/src/main/java/com/skytekx/golem/bridge/GameQueries.java
+@@ -29,6 +29,8 @@ import net.minecraft.resources.ResourceLocation;
+ import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.world.entity.player.Inventory;
++import net.minecraft.world.item.BlockItem;
+ import net.minecraft.world.item.ItemStack;
+ import net.minecraftforge.registries.ForgeRegistries;
+ import net.minecraftforge.server.ServerLifecycleHooks;
+@@ -38,8 +40,11 @@ final class GameQueries implements Game {
+ 	/** The unit separator between the fields of an answer. */
+ 	private static final String SEPARATOR = "\u001F";
+ 
+-	/** The answer of safeLocation when the search met a chunk that is not loaded. */
+-	private static final String UNLOADED = "unloaded";
++	/**
++	 * The answer of safeLocation when the search met a chunk that is not loaded, and of
++	 * respawnPlace when a chunk around the point is not loaded.
++	 */
++	static final String UNLOADED = "unloaded";
+ 
+ 	/** Whether ServerStoppedEvent fired, after which the levels of the server are closed. */
+ 	private static volatile boolean stopped;
+@@ -120,10 +125,82 @@ final class GameQueries implements Game {
+ 			}
+ 			return join(player.getRespawnDimension().location().toString(),
+ 					Integer.toString(block.getX()), Integer.toString(block.getY()),
+-					Integer.toString(block.getZ()));
++					Integer.toString(block.getZ()), Float.toString(player.getRespawnAngle()),
++					Boolean.toString(player.isRespawnForced()));
++		});
++	}
++
++	@Override
++	public String respawnPlace(String uuid) {
++		return ofPlayer("Game.respawnPlace", uuid, player -> {
++			return RespawnPlaces.find(player.server, player);
+ 		});
+ 	}
+ 
++	@Override
++	public String flight(String uuid) {
++		return ofPlayer("Game.flight", uuid, player -> join(
++				Boolean.toString(player.getAbilities().mayfly),
++				Boolean.toString(player.getAbilities().flying)));
++	}
++
++	@Override
++	public String[] inventory(String uuid) {
++		return guard.ask("Game.inventory", () -> {
++			MinecraftServer server = server();
++			UUID id = uuid(uuid);
++			ServerPlayer player = server == null || id == null ? null
++					: server.getPlayerList().getPlayer(id);
++			if (player == null) {
++				return null;
++			}
++			Inventory inventory = player.getInventory();
++			List<String> stacks = new ArrayList<>();
++			for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
++				ItemStack stack = inventory.getItem(slot);
++				ResourceLocation item = ForgeRegistries.ITEMS.getKey(stack.getItem());
++				if (!stack.isEmpty() && item != null) {
++					stacks.add(join(Integer.toString(slot), item.toString(),
++							Integer.toString(stack.getCount()),
++							Integer.toString(stack.getDamageValue()),
++							Boolean.toString(stack.getItem() instanceof BlockItem)));
++				}
++			}
++			return stacks.toArray(new String[0]);
++		}, null);
++	}
++
++	@Override
++	public String[] dimensions() {
++		return guard.ask("Game.dimensions", () -> {
++			MinecraftServer server = server();
++			if (server == null) {
++				return null;
++			}
++			List<String> answer = new ArrayList<>();
++			// The sea level is the one of the generator, since Level.getSeaLevel answers 63
++			// for every dimension of Minecraft 1.20.1.
++			for (ServerLevel level : server.getAllLevels()) {
++				answer.add(join(dimension(level), level.dimensionTypeId().location().toString(),
++						Integer.toString(level.getMinBuildHeight()),
++						Integer.toString(level.getMaxBuildHeight()),
++						Integer.toString(level.getLogicalHeight()),
++						Integer.toString(level.getChunkSource().getGenerator().getSeaLevel()),
++						Long.toString(level.getDayTime())));
++			}
++			return answer.toArray(new String[0]);
++		}, null);
++	}
++
++	@Override
++	public String maxPlayers() {
++		return guard.ask("Game.maxPlayers", () -> {
++			MinecraftServer server = server();
++			return server == null ? null
++					: Integer.toString(server.getPlayerList().getMaxPlayers());
++		}, null);
++	}
++
+ 	@Override
+ 	public String spawn(String dimension) {
+ 		return ofLevel("Game.spawn", dimension, level -> {
+@@ -248,7 +325,11 @@ final class GameQueries implements Game {
+ 		}
+ 	}
+ 
+-	private static String join(String... fields) {
++	/**
++	 * Answers the fields joined by the unit separator, each with the separator it holds replaced
++	 * by a space.
++	 */
++	static String join(String... fields) {
+ 		StringBuilder answer = new StringBuilder();
+ 		for (int index = 0; index < fields.length; index++) {
+ 			if (index > 0) {
+diff --git a/bridge/mod/src/main/java/com/skytekx/golem/bridge/RespawnPlaces.java b/bridge/mod/src/main/java/com/skytekx/golem/bridge/RespawnPlaces.java
+new file mode 100644
+index 0000000..579ffae
+--- /dev/null
++++ b/bridge/mod/src/main/java/com/skytekx/golem/bridge/RespawnPlaces.java
+@@ -0,0 +1,100 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
++/*
++ * Where a player would respawn now, as PlayerList.respawn of Minecraft 1.20.1 resolves the
++ * respawn point that the player holds, for the question respawnPlace of the game.
++ *
++ * The game checks the point only when the player respawns: a bed must stand there with room
++ * beside it, an anchor must hold a charge, and a point that the command spawnpoint forced needs
++ * room for the player alone. The question asks the same method of the game, for a player who
++ * lives, so no charge of an anchor is used, turns the player towards a bed or an anchor as a
++ * respawn does, and lifts them out of whatever they would stand in, as the game does after it.
++ * It reads loaded chunks alone, so a point whose chunks around it are not loaded answers that,
++ * and the question never loads a chunk.
++ */
++package com.skytekx.golem.bridge;
++
++import java.util.Optional;
++import net.minecraft.core.BlockPos;
++import net.minecraft.server.MinecraftServer;
++import net.minecraft.server.level.ServerChunkCache;
++import net.minecraft.server.level.ServerLevel;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.tags.BlockTags;
++import net.minecraft.util.Mth;
++import net.minecraft.world.entity.EntityType;
++import net.minecraft.world.entity.player.Player;
++import net.minecraft.world.level.block.Blocks;
++import net.minecraft.world.level.block.state.BlockState;
++import net.minecraft.world.phys.AABB;
++import net.minecraft.world.phys.Vec3;
++
++/** Resolves the respawn point of a player as a respawn would, without a respawn. */
++final class RespawnPlaces {
++	/**
++	 * How far from the block of the point the game reads blocks to resolve it: the other half of
++	 * a bed, the places beside both halves where the player stands up, and the space of the
++	 * player there.
++	 */
++	private static final int REACH = 3;
++
++	private RespawnPlaces() {
++	}
++
++	/**
++	 * Answers where the player would respawn now, in the form of the answer of respawnPlace.
++	 *
++	 * @param server the server of the player
++	 * @param player the player
++	 * @return the dimension, x, y, z and the yaw, the empty string for none, or unloaded
++	 */
++	static String find(MinecraftServer server, ServerPlayer player) {
++		BlockPos point = player.getRespawnPosition();
++		if (point == null) {
++			return "";
++		}
++		ServerLevel level = server.getLevel(player.getRespawnDimension());
++		if (level == null) {
++			return "";
++		}
++		if (!loaded(level, point)) {
++			return GameQueries.UNLOADED;
++		}
++		float angle = player.getRespawnAngle();
++		Optional<Vec3> found = Player.findRespawnPositionAndUseSpawnBlock(level, point, angle,
++				player.isRespawnForced(), true);
++		if (found.isEmpty()) {
++			return "";
++		}
++		Vec3 feet = found.get();
++		BlockState state = level.getBlockState(point);
++		float yaw = angle;
++		if (state.is(BlockTags.BEDS) || state.is(Blocks.RESPAWN_ANCHOR)) {
++			Vec3 facing = Vec3.atBottomCenterOf(point).subtract(feet).normalize();
++			yaw = (float) Mth.wrapDegrees(Mth.atan2(facing.z, facing.x)
++					* (double) (180.0F / (float) Math.PI) - 90.0D);
++		}
++		double y = feet.y;
++		AABB box = EntityType.PLAYER.getDimensions().makeBoundingBox(feet.x, y, feet.z);
++		while (!level.noCollision(box) && y < level.getMaxBuildHeight()) {
++			y += 1.0D;
++			box = box.move(0.0D, 1.0D, 0.0D);
++		}
++		return GameQueries.join(level.dimension().location().toString(),
++				Double.toString(feet.x), Double.toString(y), Double.toString(feet.z),
++				Float.toString(yaw));
++	}
++
++	/** Answers whether every chunk within the reach of the point is loaded. */
++	private static boolean loaded(ServerLevel level, BlockPos point) {
++		ServerChunkCache chunks = level.getChunkSource();
++		for (int x = (point.getX() - REACH) >> 4; x <= (point.getX() + REACH) >> 4; x++) {
++			for (int z = (point.getZ() - REACH) >> 4; z <= (point.getZ() + REACH) >> 4; z++) {
++				if (chunks.getChunkNow(x, z) == null) {
++					return false;
++				}
++			}
++		}
++		return true;
++	}
++}
+diff --git a/crates/golem-bridge/src/game.rs b/crates/golem-bridge/src/game.rs
+index 0e2341d..a8e8041 100644
+--- a/crates/golem-bridge/src/game.rs
++++ b/crates/golem-bridge/src/game.rs
+@@ -89,6 +89,75 @@ impl fmt::Display for BlockLocation {
+     }
+ }
+ 
++/// The respawn point that a player holds, as Minecraft stores it.
++#[derive(Clone, Debug, PartialEq)]
++pub struct RespawnPoint {
++    /// The block of the point: a bed, a respawn anchor or the block that `/spawnpoint` named.
++    pub block: BlockLocation,
++    /// The angle the player faces after a respawn there that no bed or anchor turns, in degrees.
++    pub angle: f32,
++    /// Whether `/spawnpoint` set the point, which then needs no bed or anchor, only room for
++    /// the player.
++    pub forced: bool,
++}
++
++/// Where a player would respawn now, as vanilla resolves the respawn point for a player who
++/// lives, without the charge of an anchor that a respawn after a death uses.
++#[derive(Clone, Debug, PartialEq)]
++pub enum RespawnPlace {
++    /// The place of the feet and the yaw, which faces a bed or an anchor, with the pitch 0.
++    At(Location),
++    /// The player holds no point, or the point holds no respawn now, such as a bed that is gone
++    /// or blocked or an anchor without a charge, so vanilla respawns them at the world spawn.
++    Nowhere,
++    /// A chunk around the point is not loaded, and a question loads no chunk.
++    Unloaded,
++}
++
++/// Whether a player may fly and flies.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Flight {
++    /// Whether the player may fly, as in creative, in spectator or by a mod.
++    pub allowed: bool,
++    /// Whether the player flies now.
++    pub flying: bool,
++}
++
++/// A stack of items in the inventory of a player.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct Stack {
++    /// The slot: 0 to 8 the hotbar, 9 to 35 the rest of the inventory, 36 to 39 the armor from
++    /// the boots to the helmet and 40 the off hand, as the game and Bukkit number them.
++    pub slot: u32,
++    /// The registry id of the item, such as minecraft:diamond.
++    pub id: String,
++    /// How many items the stack holds.
++    pub count: u32,
++    /// The damage of the item, 0 for an item without durability.
++    pub damage: u32,
++    /// Whether the item places a block.
++    pub block: bool,
++}
++
++/// A dimension of the server, a level of the game.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct Dimension {
++    /// The id, such as `minecraft:the_nether`.
++    pub id: String,
++    /// The id of its dimension type, such as `minecraft:the_nether`, which a dimension of a mod may
++    /// share with one of the game.
++    pub kind: String,
++    /// The heights of its blocks.
++    pub heights: Heights,
++    /// The logical height of its dimension type, how many blocks above the lowest a portal or a
++    /// chorus fruit may bring a player, such as 128 in the Nether.
++    pub logical_height: i32,
++    /// The sea level of its generator, such as 63 in the Overworld and 32 in the Nether.
++    pub sea_level: i32,
++    /// The time of day in ticks since the world began, which a day of 24000 ticks repeats.
++    pub day_time: i64,
++}
++
+ /// The shared spawn of a dimension.
+ #[derive(Clone, Debug, PartialEq)]
+ pub struct Spawn {
+@@ -202,8 +271,8 @@ pub trait Game {
+     /// Answers the respawn point that the player with `uuid` holds, which a bed, a respawn
+     /// anchor or `/spawnpoint` set, as Minecraft stores it, or `Some(None)` when they have none.
+     /// Minecraft checks the block only when the player respawns, so the point may name a bed
+-    /// that is gone.
+-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>>;
++    /// that is gone, which [`Game::respawn_place`] tells.
++    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>>;
+ 
+     /// Answers the shared spawn of a dimension.
+     fn spawn(&self, dimension: &str) -> Option<Spawn>;
+@@ -222,6 +291,38 @@ pub trait Game {
+     /// answers [`SafePlace::Unloaded`].
+     fn safe_location(&self, target: &Location, radius: u32) -> Option<SafePlace>;
+ 
++    /// Answers where the player with `uuid` would respawn now, as vanilla resolves the point,
++    /// without the charge of an anchor. The default answers none, as a game that cannot tell.
++    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
++        let _ = uuid;
++        None
++    }
++
++    /// Answers whether the player with `uuid` may fly and flies. The default answers none.
++    fn flight(&self, uuid: &str) -> Option<Flight> {
++        let _ = uuid;
++        None
++    }
++
++    /// Answers every stack of the inventory of the player with `uuid`, the armor and the off
++    /// hand included, in the order of their slots, empty slots left out. The default answers
++    /// none.
++    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
++        let _ = uuid;
++        None
++    }
++
++    /// Answers every dimension of the server, the Overworld first. The default answers none.
++    fn dimensions(&self) -> Option<Vec<Dimension>> {
++        None
++    }
++
++    /// Answers how many players the server takes at most, `max-players` of
++    /// `server.properties`. The default answers none.
++    fn max_players(&self) -> Option<u32> {
++        None
++    }
++
+     /// Answers the player online whose name or UUID is `who`, in any case, or `Some(None)` when
+     /// nobody online has it.
+     fn player(&self, who: &str) -> Option<Option<OnlinePlayer>> {
+@@ -245,7 +346,7 @@ impl Game for NoGame {
+         None
+     }
+ 
+-    fn respawn(&self, _uuid: &str) -> Option<Option<BlockLocation>> {
++    fn respawn(&self, _uuid: &str) -> Option<Option<RespawnPoint>> {
+         None
+     }
+ 
+@@ -283,17 +384,23 @@ pub mod wire {
+ 
+     use crate::{
+         BlockLocation,
++        Dimension,
++        Flight,
+         GameMode,
+         Heights,
+         Item,
+         Location,
+         OnlinePlayer,
++        RespawnPlace,
++        RespawnPoint,
+         SEPARATOR,
+         SafePlace,
+-        Spawn, //
++        Spawn,
++        Stack, //
+     };
+ 
+-    /// The answer of `safeLocation` when the search met a chunk that is not loaded.
++    /// The answer of `safeLocation` when the search met a chunk that is not loaded, and of
++    /// `respawnPlace` when a chunk around the point is not loaded.
+     pub const UNLOADED: &str = "unloaded";
+ 
+     /// Whether an operator level outside 0 to 4 was already logged.
+@@ -373,22 +480,103 @@ pub mod wire {
+         })
+     }
+ 
++    /// Reads a boolean as Java writes it, `true` or `false`.
++    fn boolean(field: &str) -> Option<bool> {
++        match field {
++            "true" => Some(true),
++            "false" => Some(false),
++            _ => None,
++        }
++    }
++
+     /// Reads the answer of `respawn`.
+-    pub fn respawn(answer: &str) -> Option<Option<BlockLocation>> {
++    pub fn respawn(answer: &str) -> Option<Option<RespawnPoint>> {
+         if answer.is_empty() {
+             return Some(None);
+         }
+-        let [dimension, x, y, z] = fields(answer)[..] else {
++        let [dimension, x, y, z, point_angle, forced] = fields(answer)[..] else {
++            return None;
++        };
++        Some(Some(RespawnPoint {
++            block: BlockLocation {
++                dimension: dimension.to_owned(),
++                x: x.parse().ok()?,
++                y: y.parse().ok()?,
++                z: z.parse().ok()?,
++            },
++            angle: angle(point_angle)?,
++            forced: boolean(forced)?,
++        }))
++    }
++
++    /// Reads the answer of `respawnPlace`.
++    pub fn respawn_place(answer: &str) -> Option<RespawnPlace> {
++        match answer {
++            "" => return Some(RespawnPlace::Nowhere),
++            UNLOADED => return Some(RespawnPlace::Unloaded),
++            _ => {}
++        }
++        let [dimension, x, y, z, yaw] = fields(answer)[..] else {
+             return None;
+         };
+-        Some(Some(BlockLocation {
++        Some(RespawnPlace::At(Location {
+             dimension: dimension.to_owned(),
+-            x: x.parse().ok()?,
+-            y: y.parse().ok()?,
+-            z: z.parse().ok()?,
++            x: coordinate(x)?,
++            y: coordinate(y)?,
++            z: coordinate(z)?,
++            yaw: angle(yaw)?,
++            pitch: 0.0,
+         }))
+     }
+ 
++    /// Reads the answer of `flight`.
++    pub fn flight(answer: &str) -> Option<Flight> {
++        let [allowed, flying] = fields(answer)[..] else {
++            return None;
++        };
++        Some(Flight {
++            allowed: boolean(allowed)?,
++            flying: boolean(flying)?,
++        })
++    }
++
++    /// Reads one answer of `inventory`.
++    pub fn stack(answer: &str) -> Option<Stack> {
++        let [slot, id, count, damage, block] = fields(answer)[..] else {
++            return None;
++        };
++        Some(Stack {
++            slot: slot.parse().ok()?,
++            id: id.to_owned(),
++            count: count.parse().ok()?,
++            damage: damage.parse().ok()?,
++            block: boolean(block)?,
++        })
++    }
++
++    /// Reads one answer of `dimensions`.
++    pub fn dimension(answer: &str) -> Option<Dimension> {
++        let [id, kind, min, max, logical_height, sea_level, day_time] = fields(answer)[..] else {
++            return None;
++        };
++        Some(Dimension {
++            id: id.to_owned(),
++            kind: kind.to_owned(),
++            heights: Heights {
++                min: min.parse().ok()?,
++                max: max.parse().ok()?,
++            },
++            logical_height: logical_height.parse().ok()?,
++            sea_level: sea_level.parse().ok()?,
++            day_time: day_time.parse().ok()?,
++        })
++    }
++
++    /// Reads the answer of `maxPlayers`.
++    pub fn max_players(answer: &str) -> Option<u32> {
++        answer.parse().ok()
++    }
++
+     /// Reads the answer of `spawn` for `dimension`.
+     pub fn spawn(dimension: &str, answer: &str) -> Option<Spawn> {
+         let [x, y, z, spawn_angle] = fields(answer)[..] else {
+diff --git a/crates/golem-bridge/src/host.rs b/crates/golem-bridge/src/host.rs
+index b706a81..890511e 100644
+--- a/crates/golem-bridge/src/host.rs
++++ b/crates/golem-bridge/src/host.rs
+@@ -66,8 +66,9 @@ use std::{
+ use crate::{
+     Action,
+     Actions,
+-    BlockLocation,
++    Dimension,
+     Event,
++    Flight,
+     Game,
+     Handler,
+     Heights,
+@@ -77,9 +78,12 @@ use crate::{
+     NoGame,
+     OnlinePlayer,
+     Player,
++    RespawnPlace,
++    RespawnPoint,
+     SafePlace,
+     Sender,
+     Spawn,
++    Stack,
+     TeleportFailure,
+     Throttle,
+     TickStats,
+@@ -248,12 +252,42 @@ impl Game for ServerThread<'_> {
+             .flatten()
+     }
+ 
+-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
++    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
+         Self::allowed("respawn")
+             .then(|| self.0.respawn(uuid))
+             .flatten()
+     }
+ 
++    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
++        Self::allowed("respawnPlace")
++            .then(|| self.0.respawn_place(uuid))
++            .flatten()
++    }
++
++    fn flight(&self, uuid: &str) -> Option<Flight> {
++        Self::allowed("flight")
++            .then(|| self.0.flight(uuid))
++            .flatten()
++    }
++
++    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
++        Self::allowed("inventory")
++            .then(|| self.0.inventory(uuid))
++            .flatten()
++    }
++
++    fn dimensions(&self) -> Option<Vec<Dimension>> {
++        Self::allowed("dimensions")
++            .then(|| self.0.dimensions())
++            .flatten()
++    }
++
++    fn max_players(&self) -> Option<u32> {
++        Self::allowed("maxPlayers")
++            .then(|| self.0.max_players())
++            .flatten()
++    }
++
+     fn spawn(&self, dimension: &str) -> Option<Spawn> {
+         Self::allowed("spawn")
+             .then(|| self.0.spawn(dimension))
+diff --git a/crates/golem-bridge/src/jni_game.rs b/crates/golem-bridge/src/jni_game.rs
+index a29c32e..74f4d27 100644
+--- a/crates/golem-bridge/src/jni_game.rs
++++ b/crates/golem-bridge/src/jni_game.rs
+@@ -30,14 +30,18 @@ use jni::{
+ };
+ 
+ use crate::{
+-    BlockLocation,
++    Dimension,
++    Flight,
+     Game,
+     Heights,
+     Item,
+     Location,
+     OnlinePlayer,
++    RespawnPlace,
++    RespawnPoint,
+     SafePlace,
+     Spawn,
++    Stack,
+     Throttle,
+     game::wire,
+     log, //
+@@ -82,6 +86,39 @@ impl<'a, 'local> JniGame<'a, 'local> {
+         .flatten()
+     }
+ 
++    /// Asks the method `method`, which takes no string or one and answers `String[]`, and
++    /// answers its strings, or `None` for null or a failure.
++    fn strings(&self, method: &'static str, value: Option<&str>) -> Option<Vec<String>> {
++        self.ask(method, |env, game| {
++            let array = match value {
++                Some(value) => {
++                    let value = env.new_string(value)?;
++                    env.call_method(
++                        game,
++                        method,
++                        "(Ljava/lang/String;)[Ljava/lang/String;",
++                        &[JValue::Object(&value)],
++                    )?
++                }
++                None => env.call_method(game, method, "()[Ljava/lang/String;", &[])?,
++            }
++            .l()?;
++            if array.is_null() {
++                return Ok(None);
++            }
++            let array = JObjectArray::from(array);
++            let length = env.get_array_length(&array)?;
++            let mut lines = Vec::new();
++            for index in 0..length {
++                let element = JString::from(env.get_object_array_element(&array, index)?);
++                lines.extend(text(env, &element)?);
++                env.delete_local_ref(element)?;
++            }
++            Ok(Some(lines))
++        })
++        .flatten()
++    }
++
+     /// Runs one question in a local frame of its own, and answers `None` when it fails, after
+     /// the exception it left is taken and cleared and the failure is logged.
+     fn ask<T>(
+@@ -191,23 +228,7 @@ fn unread<T>(method: &'static str, answer: &str) -> Option<T> {
+ 
+ impl Game for JniGame<'_, '_> {
+     fn players(&self) -> Option<Vec<OnlinePlayer>> {
+-        let lines = self.ask("players", |env, game| {
+-            let array = env
+-                .call_method(game, "players", "()[Ljava/lang/String;", &[])?
+-                .l()?;
+-            if array.is_null() {
+-                return Ok(None);
+-            }
+-            let array = JObjectArray::from(array);
+-            let length = env.get_array_length(&array)?;
+-            let mut lines = Vec::new();
+-            for index in 0..length {
+-                let element = JString::from(env.get_object_array_element(&array, index)?);
+-                lines.extend(text(env, &element)?);
+-                env.delete_local_ref(element)?;
+-            }
+-            Ok(Some(lines))
+-        })??;
++        let lines = self.strings("players", None)?;
+         Some(
+             lines
+                 .iter()
+@@ -221,11 +242,53 @@ impl Game for JniGame<'_, '_> {
+         wire::location(&answer).or_else(|| unread("location", &answer))
+     }
+ 
+-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
++    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
+         let answer = self.string("respawn", uuid)?;
+         wire::respawn(&answer).or_else(|| unread("respawn", &answer))
+     }
+ 
++    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
++        let answer = self.string("respawnPlace", uuid)?;
++        wire::respawn_place(&answer).or_else(|| unread("respawnPlace", &answer))
++    }
++
++    fn flight(&self, uuid: &str) -> Option<Flight> {
++        let answer = self.string("flight", uuid)?;
++        wire::flight(&answer).or_else(|| unread("flight", &answer))
++    }
++
++    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
++        let lines = self.strings("inventory", Some(uuid))?;
++        Some(
++            lines
++                .iter()
++                .filter_map(|line| wire::stack(line).or_else(|| unread("inventory", line)))
++                .collect(),
++        )
++    }
++
++    fn dimensions(&self) -> Option<Vec<Dimension>> {
++        let lines = self.strings("dimensions", None)?;
++        Some(
++            lines
++                .iter()
++                .filter_map(|line| wire::dimension(line).or_else(|| unread("dimensions", line)))
++                .collect(),
++        )
++    }
++
++    fn max_players(&self) -> Option<u32> {
++        let answer = self
++            .ask("maxPlayers", |env, game| {
++                let answer = env
++                    .call_method(game, "maxPlayers", "()Ljava/lang/String;", &[])?
++                    .l()?;
++                text(env, &JString::from(answer))
++            })
++            .flatten()?;
++        wire::max_players(&answer).or_else(|| unread("maxPlayers", &answer))
++    }
++
+     fn spawn(&self, dimension: &str) -> Option<Spawn> {
+         let answer = self.string("spawn", dimension)?;
+         wire::spawn(dimension, &answer).or_else(|| unread("spawn", &answer))
+diff --git a/crates/golem-bridge/src/lib.rs b/crates/golem-bridge/src/lib.rs
+index 9a2488b..860d34e 100644
+--- a/crates/golem-bridge/src/lib.rs
++++ b/crates/golem-bridge/src/lib.rs
+@@ -56,6 +56,8 @@ pub use crate::{
+     },
+     game::{
+         BlockLocation,
++        Dimension,
++        Flight,
+         Game,
+         GameMode,
+         Heights,
+@@ -63,8 +65,11 @@ pub use crate::{
+         Location,
+         NoGame,
+         OnlinePlayer,
++        RespawnPlace,
++        RespawnPoint,
+         SafePlace,
+         Spawn,
++        Stack,
+         wire, //
+     },
+     text::{
+diff --git a/crates/golem-devtool/src/game.rs b/crates/golem-devtool/src/game.rs
+index 94868d1..cfa07a6 100644
+--- a/crates/golem-devtool/src/game.rs
++++ b/crates/golem-devtool/src/game.rs
+@@ -15,17 +15,30 @@
+ //!   "players": [{"uuid": "...", "name": "Alex", "displayName": "Alex", "listName": null,
+ //!                "ping": 12, "gameMode": "survival", "level": 0, "idleMs": 1500,
+ //!                "location": {"dimension": "minecraft:overworld", "x": 0.5, "y": 64, "z": 0.5},
+-//!                "respawn": {"dimension": "...", "x": 1, "y": 64, "z": 2}, "mainHand": null}],
++//!                "respawn": {"dimension": "...", "x": 1, "y": 64, "z": 2, "angle": 0,
++//!                            "forced": true},
++//!                "respawnPlace": {"dimension": "...", "x": 1.5, "y": 64.1, "z": 2.5, "yaw": 0},
++//!                "flight": {"allowed": true, "flying": false},
++//!                "inventory": [{"slot": 0, "id": "minecraft:stone", "count": 2, "block": true}],
++//!                "mainHand": null}],
++//!   "maxPlayers": 20,
+ //!   "dimensions": [{"id": "minecraft:overworld", "spawn": {"x": 0, "y": 64, "z": 0, "angle": 0},
+-//!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5}}]
++//!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5},
++//!                   "type": "minecraft:overworld", "logicalHeight": 384, "seaLevel": 63,
++//!                   "dayTime": 1000}]
+ //! }
+ //! ```
+ //!
+ //! The scripted game answers as the natives answer the game of the mod. A player whose game
+ //! mode the game does not have is left out of the players, as the natives leave out a line that
+ //! does not read, and a UUID matches in any case, as `UUID.fromString` of Java reads it. A
+-//! player without `respawn` has none and one without `mainHand` holds nothing, and `"players":
+-//! null` makes the game answer none for the players, as a game that cannot answer does. A
++//! player without `respawn` has none and one without `mainHand` holds nothing, one without
++//! `respawnPlace` respawns at the world spawn and `"respawnPlace": "unloaded"` answers that a
++//! chunk around the point is not loaded, one without `flight` may not fly and one without
++//! `inventory` holds nothing, and `"players": null` makes the game answer none for the players,
++//! as a game that cannot answer does. A game without `maxPlayers` answers none for it, and a
++//! dimension without `type` has the type of its id, without `logicalHeight` the height of its
++//! blocks, and without `seaLevel` and `dayTime` 0. A
+ //! dimension with `safe` answers that place to a search whose radius, held to 8 as the natives
+ //! hold it, reaches the block of the place from the block of the target, one with `"safe":
+ //! "unloaded"` answers that a chunk the search must read is not loaded, and one without answers
+@@ -34,16 +47,21 @@
+ 
+ use golem_bridge::{
+     BlockLocation,
++    Dimension,
+     Event,
++    Flight,
+     Game,
+     GameMode,
+     Heights,
+     Item,
+     Location,
+     OnlinePlayer,
++    RespawnPlace,
++    RespawnPoint,
+     SafePlace,
+     Sender,
+     Spawn,
++    Stack,
+     Verdict,
+     wire, //
+ };
+@@ -122,6 +140,7 @@ pub struct GameSpec {
+     players: Option<Vec<PlayerSpec>>,
+     #[serde(default)]
+     dimensions: Vec<DimensionSpec>,
++    max_players: Option<u32>,
+ }
+ 
+ /// A player of the scripted game.
+@@ -141,10 +160,69 @@ struct PlayerSpec {
+     #[serde(default)]
+     idle_ms: u64,
+     location: LocationSpec,
+-    respawn: Option<BlockSpec>,
++    respawn: Option<RespawnSpec>,
++    respawn_place: Option<PlaceOrWord>,
++    #[serde(default)]
++    flight: FlightSpec,
++    #[serde(default)]
++    inventory: Vec<StackSpec>,
+     main_hand: Option<ItemSpec>,
+ }
+ 
++/// The respawn point of a scripted player.
++#[derive(Clone, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct RespawnSpec {
++    dimension: String,
++    x: i32,
++    y: i32,
++    z: i32,
++    #[serde(default)]
++    angle: f32,
++    #[serde(default)]
++    forced: bool,
++}
++
++/// A place with its dimension and yaw, or the word unloaded.
++#[derive(Clone, Deserialize)]
++#[serde(untagged)]
++enum PlaceOrWord {
++    /// The place.
++    Place {
++        dimension: String,
++        x: f64,
++        y: f64,
++        z: f64,
++        #[serde(default)]
++        yaw: f32,
++    },
++    /// The word unloaded.
++    Word(Unloaded),
++}
++
++/// Whether a scripted player may fly and flies.
++#[derive(Clone, Copy, Default, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct FlightSpec {
++    #[serde(default)]
++    allowed: bool,
++    #[serde(default)]
++    flying: bool,
++}
++
++/// A stack of the inventory of a scripted player.
++#[derive(Clone, Deserialize)]
++#[serde(rename_all = "camelCase", deny_unknown_fields)]
++struct StackSpec {
++    slot: u32,
++    id: String,
++    count: u32,
++    #[serde(default)]
++    damage: u32,
++    #[serde(default)]
++    block: bool,
++}
++
+ /// The players of a script that names none: nobody is online.
+ #[allow(clippy::unnecessary_wraps)]
+ fn no_players() -> Option<Vec<PlayerSpec>> {
+@@ -156,16 +234,6 @@ fn survival() -> String {
+     "survival".to_owned()
+ }
+ 
+-/// A block of the scripted game.
+-#[derive(Clone, Deserialize)]
+-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+-struct BlockSpec {
+-    dimension: String,
+-    x: i32,
+-    y: i32,
+-    z: i32,
+-}
+-
+ /// An item of the scripted game.
+ #[derive(Clone, Deserialize)]
+ #[serde(rename_all = "camelCase", deny_unknown_fields)]
+@@ -183,6 +251,13 @@ struct DimensionSpec {
+     min_y: i32,
+     max_y: i32,
+     safe: Option<SafeSpec>,
++    #[serde(rename = "type")]
++    kind: Option<String>,
++    logical_height: Option<i32>,
++    #[serde(default)]
++    sea_level: i32,
++    #[serde(default)]
++    day_time: i64,
+ }
+ 
+ /// What every search for a safe place in a scripted dimension answers.
+@@ -273,15 +348,94 @@ impl Game for ScriptedGame {
+         Some(self.of(uuid)?.location.clone().into())
+     }
+ 
+-    fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>> {
+-        Some(self.of(uuid)?.respawn.clone().map(|block| BlockLocation {
+-            dimension: block.dimension,
+-            x: block.x,
+-            y: block.y,
+-            z: block.z,
++    fn respawn(&self, uuid: &str) -> Option<Option<RespawnPoint>> {
++        Some(self.of(uuid)?.respawn.clone().map(|point| RespawnPoint {
++            block: BlockLocation {
++                dimension: point.dimension,
++                x: point.x,
++                y: point.y,
++                z: point.z,
++            },
++            angle: point.angle,
++            forced: point.forced,
+         }))
+     }
+ 
++    fn respawn_place(&self, uuid: &str) -> Option<RespawnPlace> {
++        Some(match self.of(uuid)?.respawn_place.clone() {
++            None => RespawnPlace::Nowhere,
++            Some(PlaceOrWord::Word(Unloaded::Unloaded)) => RespawnPlace::Unloaded,
++            Some(PlaceOrWord::Place {
++                dimension,
++                x,
++                y,
++                z,
++                yaw,
++            }) => RespawnPlace::At(Location {
++                dimension,
++                x,
++                y,
++                z,
++                yaw,
++                pitch: 0.0,
++            }),
++        })
++    }
++
++    fn flight(&self, uuid: &str) -> Option<Flight> {
++        let flight = self.of(uuid)?.flight;
++        Some(Flight {
++            allowed: flight.allowed,
++            flying: flight.flying,
++        })
++    }
++
++    fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
++        let mut stacks: Vec<Stack> = self
++            .of(uuid)?
++            .inventory
++            .iter()
++            .map(|stack| Stack {
++                slot: stack.slot,
++                id: stack.id.clone(),
++                count: stack.count,
++                damage: stack.damage,
++                block: stack.block,
++            })
++            .collect();
++        stacks.sort_by_key(|stack| stack.slot);
++        Some(stacks)
++    }
++
++    fn dimensions(&self) -> Option<Vec<Dimension>> {
++        Some(
++            self.spec
++                .dimensions
++                .iter()
++                .map(|dimension| Dimension {
++                    id: dimension.id.clone(),
++                    kind: dimension
++                        .kind
++                        .clone()
++                        .unwrap_or_else(|| dimension.id.clone()),
++                    heights: Heights {
++                        min: dimension.min_y,
++                        max: dimension.max_y,
++                    },
++                    logical_height: dimension
++                        .logical_height
++                        .unwrap_or(dimension.max_y - dimension.min_y),
++                    sea_level: dimension.sea_level,
++                    day_time: dimension.day_time,
++                })
++                .collect(),
++        )
++    }
++
++    fn max_players(&self) -> Option<u32> {
++        self.spec.max_players
++    }
++
+     fn spawn(&self, dimension: &str) -> Option<Spawn> {
+         let spawn = &self.dimension(dimension)?.spawn;
+         Some(Spawn {
+@@ -357,6 +511,44 @@ fn block_json(block: &BlockLocation) -> Value {
+     json!({"dimension": block.dimension, "x": block.x, "y": block.y, "z": block.z})
+ }
+ 
++/// Answers a respawn point as JSON, its block with the angle and whether it is forced.
++fn point_json(point: &RespawnPoint) -> Value {
++    let mut value = block_json(&point.block);
++    value["angle"] = json!(point.angle);
++    value["forced"] = json!(point.forced);
++    value
++}
++
++/// Answers where a player would respawn as JSON: null when the game cannot answer or the answer
++/// does not read, `{"none": true}` for the world spawn, `{"unloaded": true}` when a chunk is not
++/// loaded, and the place otherwise.
++fn place_json(answer: Option<RespawnPlace>) -> Value {
++    match answer {
++        None => Value::Null,
++        Some(RespawnPlace::Nowhere) => json!({"none": true}),
++        Some(RespawnPlace::Unloaded) => json!({"unloaded": true}),
++        Some(RespawnPlace::At(place)) => location_json(&place),
++    }
++}
++
++/// Answers a flight as JSON.
++fn flight_json(flight: Flight) -> Value {
++    json!({"allowed": flight.allowed, "flying": flight.flying})
++}
++
++/// Answers a stack as JSON.
++fn stack_json(stack: &Stack) -> Value {
++    json!({"slot": stack.slot, "id": stack.id, "count": stack.count, "damage": stack.damage,
++           "block": stack.block})
++}
++
++/// Answers a dimension as JSON.
++fn dimension_json(dimension: &Dimension) -> Value {
++    json!({"id": dimension.id, "type": dimension.kind, "minY": dimension.heights.min,
++           "maxY": dimension.heights.max, "logicalHeight": dimension.logical_height,
++           "seaLevel": dimension.sea_level, "dayTime": dimension.day_time})
++}
++
+ /// Answers a spawn as JSON.
+ fn spawn_json(spawn: &Spawn) -> Value {
+     let mut value = block_json(&spawn.block);
+@@ -401,8 +593,9 @@ fn maybe<T>(answer: Option<Option<T>>, json: impl Fn(&T) -> Value) -> Value {
+ /// A test plugin that asks the game on its commands and on the events whose names `on` lists.
+ ///
+ /// A command answers one line, the JSON of the answer: `players`, `player <who>`,
+-/// `location <uuid>`, `respawn <uuid>`, `spawn <dimension>`, `hand <uuid>`,
+-/// `heights <dimension>` and `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it
++/// `location <uuid>`, `respawn <uuid>`, `respawnplace <uuid>`, `spawn <dimension>`,
++/// `hand <uuid>`, `inventory <uuid>`, `flight <uuid>`, `heights <dimension>`, `dimensions`,
++/// `maxplayers` and `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it
+ /// asks for the players and broadcasts how many it got, or that the game did not answer.
+ pub struct Ask {
+     pub name: String,
+@@ -423,7 +616,16 @@ impl Ask {
+                 .location(uuid)
+                 .as_ref()
+                 .map_or(Value::Null, location_json),
+-            ["respawn", uuid] => maybe(game.respawn(uuid), block_json),
++            ["respawn", uuid] => maybe(game.respawn(uuid), point_json),
++            ["respawnplace", uuid] => place_json(game.respawn_place(uuid)),
++            ["flight", uuid] => game.flight(uuid).map_or(Value::Null, flight_json),
++            ["inventory", uuid] => game.inventory(uuid).map_or(Value::Null, |stacks| {
++                json!(stacks.iter().map(stack_json).collect::<Vec<_>>())
++            }),
++            ["dimensions"] => game.dimensions().map_or(Value::Null, |dimensions| {
++                json!(dimensions.iter().map(dimension_json).collect::<Vec<_>>())
++            }),
++            ["maxplayers"] => game.max_players().map_or(Value::Null, |count| json!(count)),
+             ["spawn", dimension] => game
+                 .spawn(dimension)
+                 .as_ref()
+@@ -520,7 +722,14 @@ fn read_wire(entry: WireEntry) -> Result<Value, String> {
+         "location" => wire::location(answer)
+             .as_ref()
+             .map_or(Value::Null, location_json),
+-        "respawn" => maybe(wire::respawn(answer), block_json),
++        "respawn" => maybe(wire::respawn(answer), point_json),
++        "respawnPlace" => place_json(wire::respawn_place(answer)),
++        "flight" => wire::flight(answer).map_or(Value::Null, flight_json),
++        "inventory" => wire::stack(answer).as_ref().map_or(Value::Null, stack_json),
++        "dimensions" => wire::dimension(answer)
++            .as_ref()
++            .map_or(Value::Null, dimension_json),
++        "maxPlayers" => wire::max_players(answer).map_or(Value::Null, |count| json!(count)),
+         "spawn" => {
+             let dimension = entry.dimension.as_deref().unwrap_or("minecraft:overworld");
+             wire::spawn(dimension, answer)
+diff --git a/crates/golem-plugin/src/operator.rs b/crates/golem-plugin/src/operator.rs
+index 7500b6a..748f3bf 100644
+--- a/crates/golem-plugin/src/operator.rs
++++ b/crates/golem-plugin/src/operator.rs
+@@ -102,7 +102,7 @@ pub fn player(words: &[&str], context: &Context<'_>) -> Vec<String> {
+         return vec![NO_ANSWER.to_owned()];
+     };
+     let respawn = match game.respawn(&player.uuid) {
+-        Some(Some(block)) => block.to_string(),
++        Some(Some(point)) => point.block.to_string(),
+         Some(None) => "none".to_owned(),
+         None => "unknown".to_owned(),
+     };
+diff --git a/okf/bridge.md b/okf/bridge.md
+index b542856..a1ae054 100644
+--- a/okf/bridge.md
++++ b/okf/bridge.md
+@@ -87,7 +87,7 @@ does not run, instead of failing on every event.
+ | `serverStopped()` | On `ServerStoppedEvent` | None |
+ | `tick(nanos)` | At the end of every server tick, with the nanoseconds since its start and the time the bridge took after the report of the tick before, see [Plugins](plugins/index.md#tick-statistics) | None |
+ | `playerJoined(uuid, name)` | On `PlayerLoggedInEvent` | None |
+-| `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
++| `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent`, while the player is still in the list of the server, so the game answers every question about them | None |
+ | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
+ | `death(uuid, name, cause, dimension, x, y, z, yaw, pitch)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type and where the player died | None |
+ | `respawn(uuid, name, dimension, endConquered)` | On `PlayerRespawnEvent`, with the id of the dimension and `isEndConquered` of the event, which is true when the player left the End through its exit portal and did not die | None |
+@@ -192,9 +192,14 @@ public interface Game {
+ 	String[] players();
+ 	String location(String uuid);
+ 	String respawn(String uuid);
++	String respawnPlace(String uuid);
+ 	String spawn(String dimension);
+ 	String mainHand(String uuid);
++	String[] inventory(String uuid);
+ 	String heights(String dimension);
++	String[] dimensions();
++	String flight(String uuid);
++	String maxPlayers();
+ 	String safeLocation(String dimension, double x, double y, double z, int radius);
+ 	void log(String line);
+ }
+@@ -208,10 +213,15 @@ display name that a mod made, has it replaced by a space.
+ | --- | --- | --- | --- |
+ | `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list, and no answer for a player whose answer throws, such as in a listener of a mod for the display name, which the guard logs | Never on the server thread | The name in the list, while the client shows the name of the profile |
+ | `location(uuid)` | The dimension, `x`, `y`, `z` of the feet, `yaw`, `pitch` | The player is not online | Never |
+-| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
++| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, its angle and whether `/spawnpoint` forced it, `true` or `false`, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
++| `respawnPlace(uuid)` | The dimension, `x`, `y`, `z` of the feet and the yaw where the player would respawn now, see below, or the one field `unloaded` when a chunk within 3 blocks of the point is not loaded | The player is not online | The player holds no point, or the point holds no respawn now, so the game would respawn them at the world spawn |
+ | `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
+ | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
++| `inventory(uuid)` | One answer per stack in the order of the slots, empty slots left out: the slot, 0 to 8 the hotbar, 9 to 35 the rest, 36 to 39 the armor from the boots to the helmet and 40 the off hand, as the game and Bukkit number them, the registry id of the item, the count, the damage and whether the item places a block, `true` or `false` | The player is not online | No stack, an empty array |
+ | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
++| `dimensions()` | One answer per dimension, the Overworld first, in the order of the levels of the server: the id, the id of its dimension type, the lowest y of a block, the y above the highest, the logical height of the type, the sea level of its generator, 63 in the Overworld, 32 in the Nether and 0 in the End, where `Level.getSeaLevel` of Minecraft 1.20.1 and so `World.getSeaLevel` of Bukkit answer 63 for every dimension, and the time of day in ticks, which `getDayTime` of the level answers and the dimensions of a server share | Never on the server thread | Never |
++| `flight(uuid)` | Whether the player may fly and whether they fly now, each `true` or `false`, from the abilities of the player | The player is not online | Never |
++| `maxPlayers()` | The most players the server takes, `max-players` of `server.properties` | Never on the server thread | Never |
+ | `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block, or the one field `unloaded` when the search met a chunk that is not loaded | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
+ 
+ `log(line)` is no question. Golem calls it for every line that it logs while a native runs, on the
+@@ -234,6 +244,24 @@ away. The shared spawn of the Nether and the End is the one of the Overworld, si
+ keeps one spawn for the worlds of a server. The registry id of an item comes from the registry of
+ Forge, such as `minecraft:diamond`.
+ 
++`respawnPlace` resolves the respawn point as `PlayerList.respawn` of Minecraft 1.20.1 does, with
++`Player.findRespawnPositionAndUseSpawnBlock` for a player who lives, so a respawn anchor keeps its
++charge: a bed needs room beside it, an anchor a charge, which `/spawnpoint` does not ask, and a
++point that `/spawnpoint` forced needs room for the player, and Forge lets a bed of a mod answer for
++itself. The yaw faces a bed or an anchor as a respawn turns the player, and is the angle of the
++point otherwise, and the place is lifted by whole blocks while the box of a player collides
++there, as the game lifts a player after a respawn. The question reads the blocks within 3 blocks
++of the point alone, and answers `unloaded` when a chunk of them is not loaded, since a question
++never loads a chunk. So the port of EssentialsX tells a bed that is gone from one that stands, as
++`getBedSpawnLocation` of Bukkit does, without a respawn.
++
++A player who leaves is still in the list of the server while Forge posts `PlayerLoggedOutEvent`,
++which `PlayerList.remove` posts before it removes them, so every question about the player answers
++during `playerLeft`, their place among them, as `PlayerQuitEvent` of Bukkit finds the player still
++online, and `players()` still names them. The place where a player logged out needs no field of its
++own. A player who is still online when the server stops gets no `playerLeft` from Forge 47.4.18,
++as notebook 05 records, since the game ends their connection without the event.
++
+ `safeLocation` answers the nearest place near the block of the target where a player stands safely,
+ with the search that the mod writes itself and copies from no plugin. A place is safe when the block
+ below the feet carries a player on its full top face and is no block that hurts, the blocks of the
+@@ -568,7 +596,7 @@ jars against this page.
+   `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
+   public methods of `Host` are the 18 natives of the first Java block above, each with the
+   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
+-  `available()`, and those of `Game` are the 8 abstract methods of the block of
++  `available()`, and those of `Game` are the 13 abstract methods of the block of
+   [The game](#the-game).
+ - The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
+   no `.license` file. It listens for every event of the table and calls every native but
+diff --git a/okf/plugins/index.md b/okf/plugins/index.md
+index 021f74b..4c8d0f7 100644
+--- a/okf/plugins/index.md
++++ b/okf/plugins/index.md
+@@ -201,7 +201,8 @@ and the first such replacement of the process is logged.
+ ## The game
+ 
+ `Context::game` answers what the game holds while the call runs on the server thread: every event
+-but a chat message and `ServerStopped`, every command and a permission that a mod asks on the
++but a chat message and `ServerStopped`, `PlayerLeft` included, during which the player who leaves
++is still online, every command and a permission that a mod asks on the
+ server thread. On any other thread, such as for a chat message, every question answers none, and
+ the log names the first such question of the process. On `ServerStopped` every question answers
+ none as well, since Minecraft closed every level before that event. Every answer is `None` when
+@@ -213,9 +214,14 @@ outer one.
+ | `players()` | Every player online as `OnlinePlayer`: the UUID, the name, the display name, the name in the player list, the ping in milliseconds, the `GameMode`, the operator level and the milliseconds since the last action |
+ | `player(who)` | The player online of that name or UUID in any case, or `Some(None)` |
+ | `location(uuid)` | The `Location` of an online player |
+-| `respawn(uuid)` | The respawn point that the player holds as a `BlockLocation`, which a bed, a respawn anchor or `/spawnpoint` set and which Minecraft checks only on a respawn, or `Some(None)` |
++| `respawn(uuid)` | The respawn point that the player holds as a `RespawnPoint`, its `BlockLocation`, its angle and whether `/spawnpoint` forced it, which a bed, a respawn anchor or `/spawnpoint` set and which Minecraft checks only on a respawn, or `Some(None)` |
++| `respawn_place(uuid)` | The `RespawnPlace` where the player would respawn now: `At` with the place and the yaw, `Nowhere` for the world spawn, or `Unloaded` when a chunk around the point is not loaded |
+ | `spawn(dimension)` | The shared spawn of a dimension as a `Spawn`, its block and angle |
+ | `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
++| `inventory(uuid)` | Every `Stack` of the inventory, the armor and the off hand included, with its slot, id, count, damage and whether it places a block |
++| `flight(uuid)` | The `Flight` of the player: whether they may fly and fly now |
++| `dimensions()` | Every `Dimension` of the server with its type, heights, logical height, sea level and time of day |
++| `max_players()` | The most players the server takes |
+ | `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |
+ | `safe_location(target, radius)` | The `SafePlace` of the search within the radius, at most 8: `Found` with the nearest safe place, with the dimension and the rotation of the target, `Nowhere`, or `Unloaded` when a chunk it must read is not loaded, since a question loads no chunk |
+ 
+diff --git a/tests/notebooks/04_plugins.ipynb b/tests/notebooks/04_plugins.ipynb
+index 7cc7054..2008a70 100644
+--- a/tests/notebooks/04_plugins.ipynb
++++ b/tests/notebooks/04_plugins.ipynb
+@@ -953,7 +953,10 @@
+     "thread of the first `serverStarting`, so a question before it answers none, and the first such\n",
+     "question of the process is logged once. Then every question answers what the game holds, none\n",
+     "where the game holds none, and nothing for a player who is not online or a dimension the server\n",
+-    "does not have. A player whose game mode the game does not have is left out of the players alone,\n",
++    "does not have: the respawn point with its angle and whether `/spawnpoint` forced it, where the\n",
++    "player would respawn, at the world spawn or in a chunk that is not loaded, whether they may fly\n",
++    "and fly, the stacks of the inventory by their slots, every dimension with its type, heights,\n",
++    "logical height, sea level and time of day, and the most players the server takes. A player whose game mode the game does not have is left out of the players alone,\n",
+     "as the natives leave out a line that does not read, and a UUID reads in any case. A safe place\n",
+     "keeps the dimension and the rotation of its target and is found within the radius alone, held to\n",
+     "8 blocks, a target that is no number gets no answer, and a search that meets a chunk that is not\n",
+@@ -980,13 +983,21 @@
+     "GAME = {\n",
+     "    \"players\": [\n",
+     "        {**ALEX, \"displayName\": \"Alex the Brave\", \"ping\": 12, \"gameMode\": \"creative\", \"level\": 2, \"idleMs\": 1500,\n",
+-    "         \"location\": NETHER, \"respawn\": {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20},\n",
++    "         \"location\": NETHER, \"respawn\": {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20, \"angle\": 45.0,\n",
++    "                                         \"forced\": True},\n",
++    "         \"respawnPlace\": {\"dimension\": \"minecraft:overworld\", \"x\": 10.5, \"y\": 64.1, \"z\": -19.5, \"yaw\": 45.0},\n",
++    "         \"flight\": {\"allowed\": True, \"flying\": True},\n",
++    "         \"inventory\": [{\"slot\": 40, \"id\": \"minecraft:shield\", \"count\": 1, \"damage\": 7},\n",
++    "                       {\"slot\": 0, \"id\": \"minecraft:diamond\", \"count\": 3},\n",
++    "                       {\"slot\": 1, \"id\": \"minecraft:stone\", \"count\": 64, \"block\": True}],\n",
+     "         \"mainHand\": {\"id\": \"minecraft:diamond\", \"count\": 3}},\n",
+-    "        {**SAM, \"listName\": \"[AFK] Sam\", \"idleMs\": 900000, \"location\": LAVA},\n",
++    "        {**SAM, \"listName\": \"[AFK] Sam\", \"idleMs\": 900000, \"location\": LAVA, \"respawnPlace\": \"unloaded\"},\n",
+     "        {\"uuid\": \"0f0e0d0c-0b0a-4908-8706-050403020100\", \"name\": \"Broken\", \"gameMode\": \"hardcore\", \"location\": LAVA},\n",
+     "    ],\n",
+     "    \"dimensions\": [OVERWORLD, NETHER_DIMENSION, END_DIMENSION],\n",
++    "    \"maxPlayers\": 20,\n",
+     "}\n",
++    "GAME[\"dimensions\"][1] = {**NETHER_DIMENSION, \"logicalHeight\": 128, \"seaLevel\": 32, \"dayTime\": 1000}\n",
+     "ASK = {\"kind\": \"ask\", \"name\": \"ask\", \"commands\": [\"ask\"], \"on\": [\"chat\", \"tick\"]}\n",
+     "questions = [\"players\", \"player alex\", \"player \" + SAM[\"uuid\"].upper(), \"player nobody\", \"location \" + ALEX[\"uuid\"],\n",
+     "             \"respawn \" + ALEX[\"uuid\"], \"respawn \" + SAM[\"uuid\"], \"spawn minecraft:overworld\", \"spawn golem:void\",\n",
+@@ -995,7 +1006,9 @@
+     "             \"safe minecraft:the_end 0 64 0 3\", \"location 00000000-0000-4000-8000-000000000000\",\n",
+     "             \"location \" + ALEX[\"uuid\"].upper(), \"safe minecraft:overworld 0.2 64 2.9 0\",\n",
+     "             \"safe minecraft:overworld 0.2 57 2.9 50\", \"safe minecraft:overworld 0.2 56 2.9 50\",\n",
+-    "             \"safe minecraft:overworld NaN 64 2.9 3\"]\n",
++    "             \"safe minecraft:overworld NaN 64 2.9 3\", \"respawnplace \" + ALEX[\"uuid\"], \"respawnplace \" + SAM[\"uuid\"],\n",
++    "             \"respawnplace nobody\", \"flight \" + ALEX[\"uuid\"], \"flight \" + SAM[\"uuid\"], \"inventory \" + ALEX[\"uuid\"],\n",
++    "             \"inventory \" + SAM[\"uuid\"], \"inventory nobody\", \"dimensions\", \"maxplayers\"]\n",
+     "steps, log = script(\"game\", {\n",
+     "    \"plugins\": [ASK],\n",
+     "    \"game\": GAME,\n",
+@@ -1020,7 +1033,24 @@
+     "assert answers[\"player alex\"] == players[0] and answers[\"player \" + SAM[\"uuid\"].upper()] == players[1], answers\n",
+     "assert answers[\"player nobody\"] == {\"none\": True}, answers[\"player nobody\"]\n",
+     "assert answers[\"location \" + ALEX[\"uuid\"]] == NETHER, answers\n",
+-    "assert answers[\"respawn \" + ALEX[\"uuid\"]] == {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20}\n",
++    "assert answers[\"respawn \" + ALEX[\"uuid\"]] == {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20,\n",
++    "                                              \"angle\": 45.0, \"forced\": True}, answers[\"respawn \" + ALEX[\"uuid\"]]\n",
++    "assert answers[\"respawnplace \" + ALEX[\"uuid\"]] == {\"dimension\": \"minecraft:overworld\", \"x\": 10.5, \"y\": 64.1, \"z\": -19.5,\n",
++    "                                                   \"yaw\": 45.0, \"pitch\": 0.0}\n",
++    "assert answers[\"respawnplace \" + SAM[\"uuid\"]] == {\"unloaded\": True} and answers[\"respawnplace nobody\"] is None\n",
++    "assert answers[\"flight \" + ALEX[\"uuid\"]] == {\"allowed\": True, \"flying\": True}\n",
++    "assert answers[\"flight \" + SAM[\"uuid\"]] == {\"allowed\": False, \"flying\": False}\n",
++    "assert answers[\"inventory \" + ALEX[\"uuid\"]] == [\n",
++    "    {\"slot\": 0, \"id\": \"minecraft:diamond\", \"count\": 3, \"damage\": 0, \"block\": False},\n",
++    "    {\"slot\": 1, \"id\": \"minecraft:stone\", \"count\": 64, \"damage\": 0, \"block\": True},\n",
++    "    {\"slot\": 40, \"id\": \"minecraft:shield\", \"count\": 1, \"damage\": 7, \"block\": False}], answers[\"inventory \" + ALEX[\"uuid\"]]\n",
++    "assert answers[\"inventory \" + SAM[\"uuid\"]] == [] and answers[\"inventory nobody\"] is None\n",
++    "assert [dimension[\"id\"] for dimension in answers[\"dimensions\"]] == [\n",
++    "    \"minecraft:overworld\", \"minecraft:the_nether\", \"minecraft:the_end\"], answers[\"dimensions\"]\n",
++    "assert answers[\"dimensions\"][1] == {\"id\": \"minecraft:the_nether\", \"type\": \"minecraft:the_nether\", \"minY\": 0, \"maxY\": 256,\n",
++    "                                    \"logicalHeight\": 128, \"seaLevel\": 32, \"dayTime\": 1000}, answers[\"dimensions\"][1]\n",
++    "assert answers[\"dimensions\"][0][\"logicalHeight\"] == 384, answers[\"dimensions\"][0]\n",
++    "assert answers[\"maxplayers\"] == 20, answers[\"maxplayers\"]\n",
+     "assert answers[\"respawn \" + SAM[\"uuid\"]] == {\"none\": True}\n",
+     "assert answers[\"spawn minecraft:overworld\"] == {\"dimension\": \"minecraft:overworld\", \"x\": 8, \"y\": 70, \"z\": -16,\n",
+     "                                                 \"angle\": 90.0}\n",
+@@ -1066,13 +1096,14 @@
+     "\n",
+     "The mod answers every question as fields joined by U+001F, with the numbers as Java writes them.\n",
+     "`game-wire` reads answers as the natives read them. A number in the exponent form of Java reads,\n",
+-    "a coordinate that is no finite number, a game mode the game does not have and a wrong number of\n",
+-    "fields do not read, an operator level above 4 reads as 4 and one below 0 as 0, with one line on\n",
++    "a coordinate that is no finite number, a game mode the game does not have, a boolean that is\n",
++    "neither `true` nor `false` and a wrong number of fields do not read, an operator level above 4 reads as 4 and one below 0 as 0, with one line on\n",
+     "the log for the first of them, since the game takes the level of `ops.json` without a bound, a\n",
+     "ping below 0 counts as 0, an empty name in the list is no\n",
+-    "name, and the empty answer of a respawn point, a hand and a safe place is none. A safe place\n",
+-    "keeps the dimension and the rotation of its target, and the answer `unloaded` says that the\n",
+-    "search met a chunk that is not loaded."
++    "name, and the empty answer of a respawn point, a hand, a place to respawn and a safe place is none.\n",
++    "A safe place keeps the dimension and the rotation of its target, a place to respawn has the pitch\n",
++    "0, and the answer `unloaded` says that the search met a chunk that is not loaded, or that a chunk\n",
++    "around the respawn point is not loaded."
+    ]
+   },
+   {
+@@ -1101,8 +1132,8 @@
+     "    {\"question\": \"location\", \"answer\": joined(\"minecraft:overworld\", \"Infinity\", 64.0, 0.0, 0.0, 0.0)},\n",
+     "    {\"question\": \"location\", \"answer\": joined(\"minecraft:overworld\", 1.5, 64.0, -3.25, 90.0)},\n",
+     "    {\"question\": \"respawn\", \"answer\": \"\"},\n",
+-    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", 10, 64, -20)},\n",
+-    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", \"ten\", 64, -20)},\n",
++    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", 10, 64, -20, \"90.0\", \"true\")},\n",
++    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", \"ten\", 64, -20, \"90.0\", \"true\")},\n",
+     "    {\"question\": \"spawn\", \"answer\": joined(8, 70, -16, \"90.0\"), \"dimension\": \"minecraft:overworld\"},\n",
+     "    {\"question\": \"mainHand\", \"answer\": \"\"},\n",
+     "    {\"question\": \"mainHand\", \"answer\": joined(\"minecraft:diamond\", 3)},\n",
+@@ -1112,6 +1143,20 @@
+     "    {\"question\": \"safeLocation\", \"answer\": \"unloaded\", \"target\": TARGET},\n",
+     "    {\"question\": \"safeLocation\", \"answer\": \"loaded\", \"target\": TARGET},\n",
+     "    {\"question\": \"players\", \"answer\": joined(*PLAYER[:5], -1, *PLAYER[6:])},\n",
++    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", 10, 64, -20)},\n",
++    "    {\"question\": \"respawn\", \"answer\": joined(\"minecraft:overworld\", 10, 64, -20, \"0.0\", \"yes\")},\n",
++    "    {\"question\": \"respawnPlace\", \"answer\": joined(\"minecraft:overworld\", \"10.5\", \"64.1\", \"-19.5\", \"-90.0\")},\n",
++    "    {\"question\": \"respawnPlace\", \"answer\": \"\"},\n",
++    "    {\"question\": \"respawnPlace\", \"answer\": \"unloaded\"},\n",
++    "    {\"question\": \"respawnPlace\", \"answer\": joined(\"minecraft:overworld\", \"10.5\", \"64.1\", \"-19.5\")},\n",
++    "    {\"question\": \"flight\", \"answer\": joined(\"true\", \"false\")},\n",
++    "    {\"question\": \"flight\", \"answer\": joined(\"true\")},\n",
++    "    {\"question\": \"inventory\", \"answer\": joined(36, \"minecraft:diamond_boots\", 1, 12, \"false\")},\n",
++    "    {\"question\": \"inventory\", \"answer\": joined(36, \"minecraft:diamond_boots\", 1, -1, \"false\")},\n",
++    "    {\"question\": \"dimensions\", \"answer\": joined(\"minecraft:the_nether\", \"minecraft:the_nether\", 0, 256, 128, 32, 1000)},\n",
++    "    {\"question\": \"dimensions\", \"answer\": joined(\"minecraft:the_nether\", \"minecraft:the_nether\", 0, 256, 128, 32)},\n",
++    "    {\"question\": \"maxPlayers\", \"answer\": \"20\"},\n",
++    "    {\"question\": \"maxPlayers\", \"answer\": \"many\"},\n",
+     "]\n",
+     "rows, log = devtool(\"game-wire\", write(\"game-wire.json\", entries))\n",
+     "decoded = [row[\"decoded\"] for row in rows]\n",
+@@ -1130,7 +1175,18 @@
+     "                      \"pitch\": 0.0}, decoded[7]\n",
+     "assert decoded[8:11] == [None, None, None], decoded[8:11]\n",
+     "assert decoded[11] == {\"none\": True} and decoded[13] is None, decoded[11:14]\n",
+-    "assert decoded[12] == {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20}, decoded[12]\n",
++    "assert decoded[12] == {\"dimension\": \"minecraft:overworld\", \"x\": 10, \"y\": 64, \"z\": -20, \"angle\": 90.0,\n",
++    "                       \"forced\": True}, decoded[12]\n",
++    "assert decoded[23] is None and decoded[24] is None, \"a respawn point without its angle or with a word reads\"\n",
++    "assert decoded[25] == {\"dimension\": \"minecraft:overworld\", \"x\": 10.5, \"y\": 64.1, \"z\": -19.5, \"yaw\": -90.0,\n",
++    "                       \"pitch\": 0.0}, decoded[25]\n",
++    "assert decoded[26] == {\"none\": True} and decoded[27] == {\"unloaded\": True} and decoded[28] is None, decoded[26:29]\n",
++    "assert decoded[29] == {\"allowed\": True, \"flying\": False} and decoded[30] is None, decoded[29:31]\n",
++    "assert decoded[31] == {\"slot\": 36, \"id\": \"minecraft:diamond_boots\", \"count\": 1, \"damage\": 12, \"block\": False}, decoded[31]\n",
++    "assert decoded[32] is None, decoded[32]\n",
++    "assert decoded[33] == {\"id\": \"minecraft:the_nether\", \"type\": \"minecraft:the_nether\", \"minY\": 0, \"maxY\": 256,\n",
++    "                       \"logicalHeight\": 128, \"seaLevel\": 32, \"dayTime\": 1000} and decoded[34] is None, decoded[33:35]\n",
++    "assert decoded[35] == 20 and decoded[36] is None, decoded[35:]\n",
+     "assert decoded[14] == {\"dimension\": \"minecraft:overworld\", \"x\": 8, \"y\": 70, \"z\": -16, \"angle\": 90.0}, decoded[14]\n",
+     "assert decoded[15] == {\"none\": True} and decoded[16] == {\"id\": \"minecraft:diamond\", \"count\": 3}, decoded[15:17]\n",
+     "assert decoded[17] == {\"min\": -64, \"max\": 320}, decoded[17]\n",
+diff --git a/tests/notebooks/05_bridge_build.ipynb b/tests/notebooks/05_bridge_build.ipynb
+index 02b91c2..64784dd 100644
+--- a/tests/notebooks/05_bridge_build.ipynb
++++ b/tests/notebooks/05_bridge_build.ipynb
+@@ -329,7 +329,7 @@
+     "print(\"game   %s\" % GAME)\n",
+     "assert len(NATIVES) == 18, \"okf/bridge.md names %d natives, not 18\" % len(NATIVES)\n",
+     "assert PLAIN == {\"available\": \"()Z\"}, PLAIN\n",
+-    "assert len(GAME) == 8, \"okf/bridge.md names %d methods of Game, not 8\" % len(GAME)"
++    "assert len(GAME) == 13, \"okf/bridge.md names %d methods of Game, not 13\" % len(GAME)"
+    ]
+   },
+   {
+@@ -778,7 +778,10 @@
+     "duration of the tick after it. The natives `teleported` and `teleportFailed` trace their id, the\n",
+     "UUID and the places or the reason. `golemstub styled <uuid>` sends the player a styled text with a\n",
+     "colour, a click and a hover, a styled broadcast to every player but the one of the UUID and a\n",
+-    "styled broadcast whose JSON does not read, and then a plain broadcast."
++    "styled broadcast whose JSON does not read, and then a plain broadcast. The native `playerLeft`\n",
++    "asks the game where the player who leaves is and traces the answer, and `golemstub where` asks\n",
++    "every question of the game, the respawn place, the flight, the inventory, the dimensions and the\n",
++    "most players among them."
+    ]
+   },
+   {
+@@ -936,6 +939,43 @@
+     "\t(*env)->DeleteLocalRef(env, type);\n",
+     "}\n",
+     "\n",
++    "/* Asks the game one question that takes no argument and answers a string. */\n",
++    "static void ask0(JNIEnv *env, const char *method, char *out, size_t size)\n",
++    "{\n",
++    "\tjclass type = (*env)->GetObjectClass(env, game);\n",
++    "\tjmethodID id = (*env)->GetMethodID(env, type, method, \"()Ljava/lang/String;\");\n",
++    "\n",
++    "\tanswer_of(env, (*env)->CallObjectMethod(env, game, id), out, size);\n",
++    "\t(*env)->DeleteLocalRef(env, type);\n",
++    "}\n",
++    "\n",
++    "/* Asks the game one question that answers String[], with a UUID or with none, and writes its\n",
++    " * answers into out, joined by a semicolon, or the word null. */\n",
++    "static void ask_all(JNIEnv *env, const char *method, const char *argument, char *out, size_t size)\n",
++    "{\n",
++    "\tjclass type = (*env)->GetObjectClass(env, game);\n",
++    "\tjmethodID id = (*env)->GetMethodID(env, type, method, argument ? \"(Ljava/lang/String;)[Ljava/lang/String;\"\n",
++    "\t\t\t\t\t   : \"()[Ljava/lang/String;\");\n",
++    "\tjstring value = argument ? (*env)->NewStringUTF(env, argument) : NULL;\n",
++    "\tjobjectArray all = argument ? (*env)->CallObjectMethod(env, game, id, value)\n",
++    "\t\t\t\t    : (*env)->CallObjectMethod(env, game, id);\n",
++    "\tchar one[512];\n",
++    "\tsize_t used = 0;\n",
++    "\n",
++    "\tsnprintf(out, size, \"null\");\n",
++    "\tif (all) {\n",
++    "\t\tout[0] = 0;\n",
++    "\t\tfor (int i = 0; i < (*env)->GetArrayLength(env, all); i++) {\n",
++    "\t\t\tanswer_of(env, (*env)->GetObjectArrayElement(env, all, i), one, sizeof(one));\n",
++    "\t\t\tused += snprintf(out + used, used < size ? size - used : 0, \"%s%s\", i ? \";\" : \"\", one);\n",
++    "\t\t}\n",
++    "\t\t(*env)->DeleteLocalRef(env, all);\n",
++    "\t}\n",
++    "\tif (value)\n",
++    "\t\t(*env)->DeleteLocalRef(env, value);\n",
++    "\t(*env)->DeleteLocalRef(env, type);\n",
++    "}\n",
++    "\n",
+     "/* Asks the game for the players, the first of them into out, and answers how many it got. */\n",
+     "static int players(JNIEnv *env, char *out, size_t size)\n",
+     "{\n",
+@@ -1172,7 +1212,14 @@
+     "\n",
+     "NATIVE(void, playerLeft)(JNIEnv *env, jclass host, jstring uuid, jstring name)\n",
+     "{\n",
+-    "\tplayer(env, \"playerLeft\", uuid, name, NULL);\n",
++    "\tchar a[64], b[64], c[256] = \"no game\";\n",
++    "\n",
++    "\ttext(env, uuid, a, sizeof(a));\n",
++    "\ttext(env, name, b, sizeof(b));\n",
++    "\t/* The player who leaves is still in the list of the server, so the game answers. */\n",
++    "\tif (game)\n",
++    "\t\task(env, \"location\", a, c, sizeof(c));\n",
++    "\ttrace(env, \"playerLeft\", a, b, c, NULL, NULL);\n",
+     "}\n",
+     "\n",
+     "NATIVE(jboolean, chat)(JNIEnv *env, jclass host, jstring uuid, jstring name, jstring message)\n",
+@@ -1333,8 +1380,8 @@
+     "/* Answers every question of the game, one line each, for the player with the UUID. */\n",
+     "static jobjectArray where(JNIEnv *env, const char *uuid)\n",
+     "{\n",
+-    "\tchar answers[9][560], first[512];\n",
+-    "\tchar *lines[9];\n",
++    "\tchar answers[14][560], first[512];\n",
++    "\tchar *lines[14];\n",
+     "\tint count = players(env, first, sizeof(first));\n",
+     "\n",
+     "\tsnprintf(answers[0], sizeof(answers[0]), \"game players %d %s\", count, first);\n",
+@@ -1354,9 +1401,19 @@
+     "\tsnprintf(answers[7], sizeof(answers[7]), \"game void %s\", first);\n",
+     "\task(env, \"location\", \"not-a-uuid\", first, sizeof(first));\n",
+     "\tsnprintf(answers[8], sizeof(answers[8]), \"game nobody %s\", first);\n",
+-    "\tfor (int i = 0; i < 9; i++)\n",
++    "\task(env, \"respawnPlace\", uuid, first, sizeof(first));\n",
++    "\tsnprintf(answers[9], sizeof(answers[9]), \"game respawnPlace %s\", first);\n",
++    "\task(env, \"flight\", uuid, first, sizeof(first));\n",
++    "\tsnprintf(answers[10], sizeof(answers[10]), \"game flight %s\", first);\n",
++    "\task_all(env, \"inventory\", uuid, first, sizeof(first));\n",
++    "\tsnprintf(answers[11], sizeof(answers[11]), \"game inventory %s\", first);\n",
++    "\task_all(env, \"dimensions\", NULL, first, sizeof(first));\n",
++    "\tsnprintf(answers[12], sizeof(answers[12]), \"game dimensions %s\", first);\n",
++    "\task0(env, \"maxPlayers\", first, sizeof(first));\n",
++    "\tsnprintf(answers[13], sizeof(answers[13]), \"game maxPlayers %s\", first);\n",
++    "\tfor (int i = 0; i < 14; i++)\n",
+     "\t\tlines[i] = answers[i];\n",
+-    "\treturn strings(env, lines, 9);\n",
++    "\treturn strings(env, lines, 14);\n",
+     "}\n",
+     "\n",
+     "NATIVE(jobjectArray, command)(JNIEnv *env, jclass host, jstring name, jstring uuid,\n",
+@@ -1580,10 +1637,13 @@
+     "traced(\"minecraft:overworld\\ttrue\")\n",
+     "player.chat(\"ask the game\")\n",
+     "traced(\"\\tchatgame\\t\")\n",
++    "# The point of /spawnpoint gets ground of bedrock and room of air, whatever the seed put there.\n",
+     "for command in (\"spawnpoint Tester 10 64 10\", \"give Tester minecraft:diamond 3\", \"setworldspawn 4 70 4\",\n",
+-    "                \"forceload add 0 0\", \"fill 0 249 0 2 249 2 minecraft:stone\"):\n",
++    "                \"forceload add 0 0\", \"fill 0 249 0 2 249 2 minecraft:stone\", \"give Tester minecraft:stone 2\",\n",
++    "                \"give Tester minecraft:iron_sword{Damage:5}\", \"fill 9 63 9 11 63 11 minecraft:bedrock\",\n",
++    "                \"fill 9 64 9 11 65 11 minecraft:glass\", \"fill 9 64 9 11 65 11 minecraft:air\"):\n",
+     "    on.console(command)\n",
+-    "on.expect(\"Successfully filled 9 block\", timeout=30)\n",
++    "on.expect(\"Successfully filled 18 block\", count=2, timeout=30)\n",
+     "on.console(\"data get entity Tester Pos\")\n",
+     "asked_at = on.expect(\"Tester has the following entity data: [\", count=3)\n",
+     "player.command(\"golemstub where\")\n",
+@@ -1719,11 +1779,12 @@
+     "assert calls[-1][3] == \"null\", \"the game answered after the server stopped: %s\" % calls[-1]\n",
+     "assert player.uuid == TESTER, (player.uuid, TESTER)\n",
+     "assert [\"Server thread\", \"playerJoined\", TESTER, \"Tester\"] in calls\n",
+-    "assert [\"Server thread\", \"playerLeft\", TESTER, \"Tester\"] in calls\n",
++    "left_at = [call[4] for call in calls if call[1:4] == [\"playerLeft\", TESTER, \"Tester\"]]\n",
++    "assert left_at == [\"minecraft:the_nether|4000.5|128.0|4000.5|0.0|0.0\"], \"the game did not answer during playerLeft: %s\" % left_at\n",
+     "ALEX = offline_uuid(\"Alex\")\n",
+     "# Alex is still online at the stop, which Forge 47.4.18 ends without a PlayerLoggedOutEvent.\n",
+     "assert [\"Server thread\", \"playerJoined\", ALEX, \"Alex\"] in calls, calls\n",
+-    "print(\"Alex left before the stop ended:\", [\"Server thread\", \"playerLeft\", ALEX, \"Alex\"] in calls)\n",
++    "print(\"Alex left before the stop ended:\", [call for call in calls if call[1:4] == [\"playerLeft\", ALEX, \"Alex\"]])\n",
+     "assert [call[2:] for call in calls if call[1] == \"chat\"] == [\n",
+     "    [TESTER, \"Tester\", \"hello golem\"], [TESTER, \"Tester\", \"cancel this one\"], [TESTER, \"Tester\", \"ask the game\"]]\n",
+     "deaths = [call for call in calls if call[1] == \"death\"]\n",
+@@ -1796,7 +1857,11 @@
+     "level, the place that `data get entity` shows, the respawn point and the world spawn that the\n",
+     "console set, the diamonds that the console gave, the heights of the Nether, the middle of the block\n",
+     "on a stone platform as the safe place, and null for a dimension the server does not have and for a\n",
+-    "UUID that does not parse. A search reaches 8 blocks at most, however large its radius, so the\n",
++    "UUID that does not parse. The point of `/spawnpoint` came with its angle and as forced, the player\n",
++    "would respawn in the middle of its block, a tenth above it, they may not fly, the inventory held\n",
++    "the diamonds, the stone, which places a block, and the sword with its damage in their slots, the\n",
++    "dimensions came with the heights, logical heights and sea levels of the game, and the server\n",
++    "takes 20 players. While a player left, the game still answered where they were. A search reaches 8 blocks at most, however large its radius, so the\n",
+     "platform 8 blocks below a target is found within 8 and 50 blocks and not within 7, a target 9 blocks\n",
+     "above it finds nothing within 50, and a radius below 0 looks at the target alone. The sphere of 8\n",
+     "blocks holds the 2109 places that `okf/bridge.md` names. While Tester had no game mode, the answer\n",
+@@ -1851,7 +1916,18 @@
+     "where = heard[\"location\"].split(\"|\")\n",
+     "assert where[0] == \"minecraft:overworld\" and [float(number) for number in where[1:4]] == [float(n) for n in place], (\n",
+     "    where, place)\n",
+-    "assert heard[\"respawn\"] == \"minecraft:overworld|10|64|10\", heard[\"respawn\"]\n",
++    "assert heard[\"respawn\"] == \"minecraft:overworld|10|64|10|0.0|true\", heard[\"respawn\"]\n",
++    "assert heard[\"respawnPlace\"] == \"minecraft:overworld|10.5|64.1|10.5|0.0\", heard[\"respawnPlace\"]\n",
++    "assert heard[\"flight\"] == \"false|false\", heard[\"flight\"]\n",
++    "assert heard[\"inventory\"] == (\"0|minecraft:diamond|3|0|false;1|minecraft:stone|2|0|true;\"\n",
++    "                              \"2|minecraft:iron_sword|1|5|false\"), heard[\"inventory\"]\n",
++    "worlds = [world.split(\"|\") for world in heard[\"dimensions\"].split(\";\")]\n",
++    "assert [world[:6] for world in worlds] == [\n",
++    "    [\"minecraft:overworld\", \"minecraft:overworld\", \"-64\", \"320\", \"384\", \"63\"],\n",
++    "    [\"minecraft:the_nether\", \"minecraft:the_nether\", \"0\", \"256\", \"128\", \"32\"],\n",
++    "    [\"minecraft:the_end\", \"minecraft:the_end\", \"0\", \"256\", \"256\", \"0\"]], worlds\n",
++    "assert len({world[6] for world in worlds}) == 1 and int(worlds[0][6]) >= 0, \"the worlds disagree on the time\"\n",
++    "assert heard[\"maxPlayers\"] == \"20\", heard[\"maxPlayers\"]\n",
+     "assert heard[\"spawn\"] == \"4|70|4|0.0\", heard[\"spawn\"]\n",
+     "assert heard[\"mainHand\"] == \"minecraft:diamond|3\", heard[\"mainHand\"]\n",
+     "assert heard[\"heights\"] == \"0|256\", heard[\"heights\"]\n",
+diff --git a/tests/notebooks/07_forge_boot.ipynb b/tests/notebooks/07_forge_boot.ipynb
+index 0e8b85e..7ca367c 100644
+--- a/tests/notebooks/07_forge_boot.ipynb
++++ b/tests/notebooks/07_forge_boot.ipynb
+@@ -284,6 +284,27 @@
+     "\t\treturn \"\";\n",
+     "\t}\n",
+     "\n",
++    "\tpublic String respawnPlace(String uuid) {\n",
++    "\t\treturn \"\";\n",
++    "\t}\n",
++    "\n",
++    "\tpublic String[] inventory(String uuid) {\n",
++    "\t\treturn new String[0];\n",
++    "\t}\n",
++    "\n",
++    "\tpublic String[] dimensions() {\n",
++    "\t\treturn new String[] {String.join(US, \"minecraft:overworld\", \"minecraft:overworld\", \"-64\", \"320\",\n",
++    "\t\t\t\t\"384\", \"63\", \"0\")};\n",
++    "\t}\n",
++    "\n",
++    "\tpublic String flight(String uuid) {\n",
++    "\t\treturn String.join(US, \"false\", \"false\");\n",
++    "\t}\n",
++    "\n",
++    "\tpublic String maxPlayers() {\n",
++    "\t\treturn \"20\";\n",
++    "\t}\n",
++    "\n",
+     "\tpublic String spawn(String dimension) {\n",
+     "\t\treturn String.join(US, \"0\", \"64\", \"0\", \"0.0\");\n",
+     "\t}\n",
+-- 
+2.43.0
+

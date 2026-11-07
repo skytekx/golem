@@ -1,0 +1,1564 @@
+From eb21a7e65259ebe1607d82901dd8f08643b1e7f1 Mon Sep 17 00:00:00 2001
+From: Florian Kleber <26285351+kleberbaum@users.noreply.github.com>
+Date: Sat, 7 Nov 2026 08:14:30 +0000
+Subject: [PATCH 5/9] feat(plugin): resolve the permissions of the store for
+ every plugin
+
+golem run seeds the permissions of the store, but no plugin can ask
+whether a sender holds a node, so every plugin would judge a player by
+their operator level, and the tools of /golem stay with every operator
+of level 2 while the seed grants their nodes golem.* to the group admin
+alone.
+
+The runtime now holds a Resolver, the permissions of the store loaded
+into golem-permissions, which golem run builds after the seed and which
+stops the start when the set of the store does not load. A plugin asks
+it through Context::check_permission, which answers whether the sender
+holds the node, whether a rule decided and why, and
+Context::has_permission, which allocates nothing for a player. The
+console holds every node, another source every node from the level 2
+and none below it, never one of the player it runs as, and a player
+what golem-permissions grants them, whatever their operator level.
+
+A change of the store moves its generation. Resolver::refresh looks at
+it under one lock of the store and wakes the thread golem-permissions,
+which loads the set and its generation and swaps it in, so a check
+never waits for a reload. A set that does not load is logged once and
+the checks keep the one they hold.
+
+The tools of operators of /golem take the node golem.<subcommand> that
+way, so an operator of the game who is not in the group admin is
+refused them, while a command block keeps them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016dYAZEa3eZnoeGd1c8FkBT
+Signed-off-by: Florian Kleber <opensource@skytekx.com>
+---
+ Cargo.lock                             |   1 +
+ crates/golem-devtool/src/bridge.rs     | 203 ++++++++++++++-
+ crates/golem-plugin/Cargo.toml         |   5 +-
+ crates/golem-plugin/src/core_plugin.rs |   4 +-
+ crates/golem-plugin/src/lib.rs         |   8 +-
+ crates/golem-plugin/src/operator.rs    |  35 ++-
+ crates/golem-plugin/src/permissions.rs | 340 +++++++++++++++++++++++++
+ crates/golem-plugin/src/services.rs    |  20 +-
+ crates/golem/src/main.rs               |  14 +-
+ okf/bridge.md                          |   7 +-
+ okf/plugins/core.md                    |  38 +--
+ okf/plugins/index.md                   |  38 +--
+ okf/plugins/permissions.md             |  59 ++++-
+ tests/notebooks/04_plugins.ipynb       | 180 ++++++++++++-
+ tests/notebooks/07_forge_boot.ipynb    |  32 ++-
+ 15 files changed, 878 insertions(+), 106 deletions(-)
+ create mode 100644 crates/golem-plugin/src/permissions.rs
+
+diff --git a/Cargo.lock b/Cargo.lock
+index b3c572f..d533619 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -144,6 +144,7 @@ name = "golem-plugin"
+ version = "0.1.0"
+ dependencies = [
+  "golem-bridge",
++ "golem-permissions",
+  "golem-store",
+ ]
+ 
+diff --git a/crates/golem-devtool/src/bridge.rs b/crates/golem-devtool/src/bridge.rs
+index 1d01759..844e223 100644
+--- a/crates/golem-devtool/src/bridge.rs
++++ b/crates/golem-devtool/src/bridge.rs
+@@ -22,10 +22,20 @@
+ //!   "source": {"version": "0.1.0", "repository": "...", "commit": "..."},   or "build"
+ //!   "plugins": [{"kind": "core"}, {"kind": "echo", "name": "echo-a", "commands": ["a"]}],
+ //!   "game": {"players": [], "dimensions": []},   the scripted game of the module game
++//!   "permissions": "[groups.default]...",   the TOML of the permissions of the runtime
++//!   "store": "/tmp/golem-store.db",         a store of the runtime, seeded with the permissions
+ //!   "steps": [{"op": "chat", "uuid": "...", "name": "Alex", "message": "hello"}]
+ //! }
+ //! ```
+ //!
++//! With `permissions` alone the runtime checks with those permissions. With `store` the devtool
++//! opens the store, seeds it with `permissions` when it holds no group, as `golem run` does,
++//! hands it to the runtime with the resolver over its set, and closes it after the last step.
++//! The steps `stored`, which answers the TOML of the set of the store, `generation`, which
++//! answers the generation the resolver holds and that of the store, `refresh`, which wakes the
++//! reload of the resolver as a tick does and waits up to a second for it, and `behind`, which puts
++//! a group into the store behind the resolver, as another writer of the store would, reach them.
++//!
+ //! Every native step hands the natives the scripted game, or a game that answers nothing when
+ //! the script names none, and the natives hand it to the plugins behind the guard of the server
+ //! thread, as they do the game of the mod.
+@@ -51,7 +61,8 @@
+ //! `commandNames` from inside its handler on the events named `on` and broadcasts how many names
+ //! it got. `grant` grants the nodes of its `grants` and denies those of its `denies`, and with
+ //! `operators` answers every other node as the live server answers a node that nothing names,
+-//! true for a UUID of `operators` and false for every other player. `mover`
++//! true for a UUID of `operators` and false for every other player. `checker` answers each node
++//! of the arguments of its `commands` with the check of the context for the sender. `mover`
+ //! answers its `commands` with the helpers of the context that teleport a player to its place
+ //! `to`, to a place that is no number and to one beyond the bounds of the world, and name them in
+ //! the player list. `ask` asks the game, as the module game describes.
+@@ -85,9 +96,15 @@ use golem_plugin::{
+     CorePlugin,
+     DEFAULT_BUDGET,
+     Plugin,
++    Resolver,
+     Runtime,
+     Source, //
+ };
++use golem_store::{
++    PermissionGroup,
++    PermissionSet,
++    Store, //
++};
+ use serde::{
+     Deserialize,
+     Serialize, //
+@@ -142,6 +159,8 @@ struct Script {
+     #[serde(default)]
+     plugins: Vec<PluginSpec>,
+     game: Option<GameSpec>,
++    permissions: Option<String>,
++    store: Option<String>,
+     steps: Vec<Step>,
+ }
+ 
+@@ -235,6 +254,9 @@ enum PluginSpec {
+         commands: Vec<String>,
+         to: LocationSpec,
+     },
++    /// A plugin that answers its commands with the check of each node of the arguments for the
++    /// sender, through the context.
++    Checker { name: String, commands: Vec<String> },
+ }
+ 
+ /// The default of a count of the script.
+@@ -335,6 +357,18 @@ enum Step {
+         stagger_ms: u64,
+         steps: Vec<Step>,
+     },
++    Stored,
++    Generation,
++    Refresh,
++    Behind {
++        group: String,
++        #[serde(default)]
++        weight: i32,
++        #[serde(default)]
++        inherits: Vec<String>,
++        #[serde(default)]
++        nodes: Vec<String>,
++    },
+ }
+ 
+ /// An action as JSON.
+@@ -450,6 +484,7 @@ fn run_script(script: Script) -> Result<Value, String> {
+             commit,
+         },
+     };
++    let (store, resolver) = permissions_of(script.permissions.as_deref(), script.store.as_deref())?;
+     let mut run = Run {
+         kind: script.handler,
+         budget,
+@@ -458,6 +493,8 @@ fn run_script(script: Script) -> Result<Value, String> {
+         budgets: None,
+         actions: host::actions(),
+         game: script.game.map(ScriptedGame::new),
++        store,
++        resolver,
+     };
+     run.install();
+     let answers: Vec<Value> = script
+@@ -470,13 +507,46 @@ fn run_script(script: Script) -> Result<Value, String> {
+             answer
+         })
+         .collect();
++    let closed = run
++        .store
++        .take()
++        .map(|store| store.close().map_err(|error| error.to_string()));
+     Ok(json!({
+         "handler": run.kind_name(),
+         "budgetMs": budget.as_secs_f64() * 1000.0,
+         "steps": answers,
++        "storeClosed": closed,
+     }))
+ }
+ 
++/// The store and the resolver of a script, from its TOML of the permissions and the path of its
++/// store, as `golem run` makes them: the store seeded with the permissions when it holds no group.
++fn permissions_of(
++    permissions: Option<&str>,
++    store: Option<&str>,
++) -> Result<(Option<Store>, Option<Resolver>), String> {
++    let Some(path) = store else {
++        let Some(text) = permissions else {
++            return Ok((None, None));
++        };
++        let permissions =
++            golem_permissions::Permissions::from_toml(text).map_err(|error| error.to_string())?;
++        return Ok((None, Some(Resolver::from_permissions(permissions))));
++    };
++    let store = Store::open(path).map_err(|error| error.to_string())?;
++    if let Some(text) = permissions
++        && store.permissions().groups.is_empty()
++    {
++        golem_permissions::Permissions::from_toml(text).map_err(|error| error.to_string())?;
++        let set = PermissionSet::from_toml(text)?;
++        store
++            .replace_permissions(set)
++            .map_err(|error| error.to_string())?;
++    }
++    let resolver = Resolver::from_store(&store)?;
++    Ok((Some(store), Some(resolver)))
++}
++
+ /// The state of a script between its steps.
+ struct Run {
+     kind: HandlerKind,
+@@ -487,6 +557,10 @@ struct Run {
+     actions: Actions,
+     /// The game of the script, or none for a game that answers nothing.
+     game: Option<ScriptedGame>,
++    /// The store of the script, which the runtime hands its plugins.
++    store: Option<Store>,
++    /// The resolver of the permissions of the script.
++    resolver: Option<Resolver>,
+ }
+ 
+ impl Run {
+@@ -512,6 +586,12 @@ impl Run {
+         match self.kind {
+             HandlerKind::Runtime => {
+                 let mut runtime = Runtime::new(self.budget);
++                if let Some(store) = &self.store {
++                    runtime.set_store(store.clone());
++                }
++                if let Some(resolver) = &self.resolver {
++                    runtime.set_permissions(resolver.clone());
++                }
+                 for spec in &self.plugins {
+                     runtime.add(build_plugin(spec, &self.source));
+                 }
+@@ -541,6 +621,54 @@ impl Run {
+                 json!({"op": "install", "answer": null, "queued": self.actions.len()})
+             }
+             Step::Together { stagger_ms, steps } => together(stagger_ms, &steps, self.game()),
++            Step::Stored => answer(
++                "stored",
++                self.store
++                    .as_ref()
++                    .map(|store| store.permissions().to_toml()),
++            ),
++            Step::Generation => answer(
++                "generation",
++                json!({
++                    "resolver": self.resolver.as_ref().map(Resolver::generation),
++                    "store": self.store.as_ref().map(Store::permissions_generation),
++                }),
++            ),
++            Step::Refresh => {
++                let Some(resolver) = &self.resolver else {
++                    return answer("refresh", Value::Null);
++                };
++                resolver.refresh();
++                let target = self.store.as_ref().map(Store::permissions_generation);
++                let deadline = Instant::now() + Duration::from_secs(1);
++                while target.is_some_and(|target| resolver.generation() != target)
++                    && Instant::now() < deadline
++                {
++                    thread::sleep(Duration::from_millis(5));
++                }
++                answer("refresh", json!(resolver.generation()))
++            }
++            Step::Behind {
++                group,
++                weight,
++                inherits,
++                nodes,
++            } => {
++                let Some(store) = &self.store else {
++                    return answer("behind", Value::Null);
++                };
++                let changed = store.put_permission_group(PermissionGroup {
++                    name: group,
++                    weight,
++                    parents: inherits,
++                    nodes,
++                });
++                answer(
++                    "behind",
++                    changed
++                        .map_or_else(|error| json!(error.to_string()), |replaced| json!(replaced)),
++                )
++            }
+             _ => unreachable!("native() answers every other step"),
+         }
+     }
+@@ -614,14 +742,9 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
+             yaw,
+             pitch,
+         } => done("death", || {
+-            let location = dimension.clone().map(|dimension| Location {
+-                dimension,
+-                x: *x,
+-                y: *y,
+-                z: *z,
+-                yaw: *yaw,
+-                pitch: *pitch,
+-            });
++            let location = dimension
++                .clone()
++                .map(|dimension| place(dimension, [*x, *y, *z], [*yaw, *pitch]));
+             host::death(
+                 uuid.as_deref(),
+                 name.as_deref(),
+@@ -669,10 +792,29 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
+         Step::Drain => drain(),
+         Step::Stats => answer("stats", stats_json(golem_bridge::stats())),
+         Step::Sleep { ms } => done("sleep", || thread::sleep(Duration::from_millis(*ms))),
+-        Step::Budgets | Step::Push { .. } | Step::Install | Step::Together { .. } => return None,
++        Step::Budgets
++        | Step::Push { .. }
++        | Step::Install
++        | Step::Together { .. }
++        | Step::Stored
++        | Step::Generation
++        | Step::Refresh
++        | Step::Behind { .. } => return None,
+     })
+ }
+ 
++/// The place of a death step: its dimension, its coordinates and its rotation.
++fn place(dimension: String, [x, y, z]: [f64; 3], [yaw, pitch]: [f32; 2]) -> Location {
++    Location {
++        dimension,
++        x,
++        y,
++        z,
++        yaw,
++        pitch,
++    }
++}
++
+ /// Runs `steps` each on a thread of its own, the next one `stagger_ms` after the one before,
+ /// and answers their answers in the order of the steps, each with the milliseconds from the
+ /// start of the first to its own end.
+@@ -791,6 +933,7 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
+             commands,
+             to: to.into(),
+         }),
++        PluginSpec::Checker { name, commands } => Box::new(Checker { name, commands }),
+     }
+ }
+ 
+@@ -1016,6 +1159,46 @@ impl Plugin for Reenter {
+ }
+ 
+ /// A test plugin that answers its commands with the helpers of the context for the actions on
++/// The test plugin `checker`: answers each node of the arguments of its commands with the check
++/// of the context for the sender, as `<node>: granted <bool>, set <bool>, has <bool>, <reason>`,
++/// where `has` is the answer of the check without the reason.
++struct Checker {
++    name: String,
++    commands: Vec<String>,
++}
++
++impl Plugin for Checker {
++    fn name(&self) -> &str {
++        &self.name
++    }
++
++    fn commands(&self) -> Vec<CommandSpec> {
++        specs(&self.name, &self.commands)
++    }
++
++    fn on_command(
++        &mut self,
++        _name: &str,
++        sender: &Sender,
++        arguments: &str,
++        context: &mut Context<'_>,
++    ) -> Vec<String> {
++        arguments
++            .split_whitespace()
++            .map(|node| {
++                let answer = context.check_permission(sender, node);
++                format!(
++                    "{node}: granted {}, set {}, has {}, {}",
++                    answer.granted,
++                    answer.set,
++                    context.has_permission(sender, node),
++                    answer.reason
++                )
++            })
++            .collect()
++    }
++}
++
+ /// players: `teleport <uuid>` to its place, `nowhere <uuid>` to a place that is no number,
+ /// `far <uuid>` to x 30000001, beyond the bounds of the world, `name <uuid> <text>` and
+ /// `clear <uuid>`.
+diff --git a/crates/golem-plugin/Cargo.toml b/crates/golem-plugin/Cargo.toml
+index fd5d3a1..5d00df9 100644
+--- a/crates/golem-plugin/Cargo.toml
++++ b/crates/golem-plugin/Cargo.toml
+@@ -2,7 +2,9 @@
+ # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+ #
+ # The plugin runtime of Golem: the trait of a plugin, the calls on the server thread with their
+-# time budget, the store that it hands the plugins, and the core plugin with the command golem.
++# time budget, the store and the permissions that it hands the plugins, the plugin that answers
++# the PermissionAPI of Forge with the commands of the port of LuckPerms, and the core plugin with
++# the command golem.
+ 
+ [package]
+ name = "golem-plugin"
+@@ -17,6 +19,7 @@ publish = false
+ 
+ [dependencies]
+ golem-bridge.workspace = true
++golem-permissions.workspace = true
+ golem-store.workspace = true
+ 
+ [lints]
+diff --git a/crates/golem-plugin/src/core_plugin.rs b/crates/golem-plugin/src/core_plugin.rs
+index 0f57466..eeaeb30 100644
+--- a/crates/golem-plugin/src/core_plugin.rs
++++ b/crates/golem-plugin/src/core_plugin.rs
+@@ -215,7 +215,7 @@ impl Plugin for CorePlugin {
+         let subcommand = words.first().map(|word| word.to_ascii_lowercase());
+         let rest = words.get(1..).unwrap_or_default();
+         if subcommand.as_deref() == Some("listname") {
+-            return operator::refusal("listname", sender, context.game())
++            return operator::refusal("listname", sender, context)
+                 .unwrap_or_else(|| operator::list_name(after_first_word(arguments), context));
+         }
+         let operation: fn(&[&str], &Context<'_>) -> Vec<String> = match subcommand.as_deref() {
+@@ -235,7 +235,7 @@ impl Plugin for CorePlugin {
+             }
+         };
+         let name = subcommand.unwrap_or_default();
+-        operator::refusal(&name, sender, context.game()).unwrap_or_else(|| operation(rest, context))
++        operator::refusal(&name, sender, context).unwrap_or_else(|| operation(rest, context))
+     }
+ }
+ 
+diff --git a/crates/golem-plugin/src/lib.rs b/crates/golem-plugin/src/lib.rs
+index 25dcba0..27ee2e2 100644
+--- a/crates/golem-plugin/src/lib.rs
++++ b/crates/golem-plugin/src/lib.rs
+@@ -21,7 +21,8 @@
+ //! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
+ //! | `core_plugin` | [`CorePlugin`], the command golem, and [`Source`], the source that the AGPL asks Golem to offer |
+ //! | `operator` | The subcommands of /golem that ask the game, most of them for operators |
+-//! | `services` | What the runtime hands every plugin beside the game: the store |
++//! | `services` | What the runtime hands every plugin beside the game: the store and the permissions |
++//! | `permissions` | [`Resolver`], the permissions of the store, and the check of a node for a sender |
+ //!
+ //! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
+ //! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
+@@ -29,6 +30,7 @@
+ 
+ mod core_plugin;
+ mod operator;
++mod permissions;
+ mod runtime;
+ mod services;
+ 
+@@ -55,6 +57,10 @@ pub use crate::{
+         OPERATOR_LEVEL,
+         SAFE_RADIUS, //
+     },
++    permissions::{
++        PermissionAnswer,
++        Resolver, //
++    },
+     runtime::{
+         Budget,
+         Budgets,
+diff --git a/crates/golem-plugin/src/operator.rs b/crates/golem-plugin/src/operator.rs
+index 7500b6a..a80bbb3 100644
+--- a/crates/golem-plugin/src/operator.rs
++++ b/crates/golem-plugin/src/operator.rs
+@@ -2,7 +2,8 @@
+ // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+ /*
+  * The subcommands of /golem that ask the game: whoami for everyone, and player, world, teleport
+- * and listname for the console and the operators of level 2 and more.
++ * and listname for the console, another source of level 2 and more and a player who holds the
++ * node golem.<subcommand>, such as golem.player.
+  *
+  * They are the tools of an operator who wants to see what Golem sees: who runs a command and at
+  * which level, where a player is and how they play, the spawn and the heights of a dimension, a
+@@ -21,8 +22,9 @@ use golem_bridge::{
+ 
+ use crate::Context;
+ 
+-/// The level from which a player or another source may run the subcommands of operators, the
+-/// level of a game master in Minecraft.
++/// The level from which a source that is no player, such as a command block or a function, holds
++/// every node and so may run the subcommands of operators, the level of a game master in
++/// Minecraft.
+ pub const OPERATOR_LEVEL: u8 = 2;
+ 
+ /// How far from its target a teleport of /golem teleport looks for a safe place, in blocks.
+@@ -57,23 +59,18 @@ pub fn whoami(sender: &Sender, game: &dyn Game) -> Vec<String> {
+     vec![line]
+ }
+ 
+-/// Answers the refusal of the subcommand `name` for a sender below the operator level, or
+-/// `None` when the sender may run it. A player counts at the lower of the level of the source
+-/// and their operator level, and a player whom the game does not answer reads that the game
+-/// gives no answer, since that says nothing about their level.
+-pub fn refusal(name: &str, sender: &Sender, game: &dyn Game) -> Option<Vec<String>> {
+-    let allowed = match sender {
+-        Sender::Console => true,
+-        Sender::Other { level, .. } => *level >= OPERATOR_LEVEL,
+-        Sender::Player { player, level } => match game.player(&player.uuid) {
+-            Some(Some(online)) => online.level.min(*level) >= OPERATOR_LEVEL,
+-            Some(None) => false,
+-            None => return Some(vec![NO_ANSWER.to_owned()]),
+-        },
+-    };
+-    (!allowed).then(|| {
++/// Answers the refusal of the subcommand `name` for a sender who does not hold its node
++/// `golem.<name>`, or `None` when the sender may run it.
++///
++/// The console holds every node, another source every node from the level 2, and a player the
++/// nodes that `golem-permissions` grants them, such as through the group `admin` of the seed, so
++/// neither the operator level of a player nor a source that runs as them through `execute as`
++/// gives a player a tool.
++pub fn refusal(name: &str, sender: &Sender, context: &Context<'_>) -> Option<Vec<String>> {
++    let node = format!("golem.{name}");
++    (!context.has_permission(sender, &node)).then(|| {
+         vec![format!(
+-            "Only the console and operators of level {OPERATOR_LEVEL} and more may run /golem {name}."
++            "Only the console, a source of level {OPERATOR_LEVEL} and more and a player who holds {node} may run /golem {name}."
+         )]
+     })
+ }
+diff --git a/crates/golem-plugin/src/permissions.rs b/crates/golem-plugin/src/permissions.rs
+new file mode 100644
+index 0000000..138f363
+--- /dev/null
++++ b/crates/golem-plugin/src/permissions.rs
+@@ -0,0 +1,340 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++// SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
++/*
++ * The permissions in the runtime of golem-plugin: the resolver of golem-permissions over the set
++ * of the store, which loads the set again on a thread of its own when the generation of the store
++ * moves, and the check of a node for a sender that every plugin reaches through its context.
++ *
++ * A check of the server thread must stay inside the budget of a call, and a reload of a large set
++ * costs about a whole budget, so a check reads the permissions that the resolver holds and never
++ * waits for a reload. The plugin golem-permissions looks at the generation once per tick and wakes
++ * the thread golem-permissions, which reads the set and its generation under one lock of the
++ * store, loads it and swaps it in. A command of the port loads its change before it writes it, so
++ * it installs the result at once, and the reload that follows its write finds the same set.
++ *
++ * okf/plugins/permissions.md defines the rules of a check for each sender.
++ */
++
++use std::sync::{
++    Arc, Mutex, PoisonError, RwLock,
++    atomic::{
++        AtomicBool,
++        Ordering, //
++    },
++    mpsc,
++};
++
++use golem_bridge::{
++    Sender,
++    log, //
++};
++use golem_permissions::Permissions;
++use golem_store::Store;
++
++use crate::{
++    Context,
++    OPERATOR_LEVEL, //
++};
++
++/// The permissions that a resolver holds, with the generation of the store they came from.
++struct Loaded {
++    generation: u64,
++    permissions: Arc<Permissions>,
++}
++
++struct Shared {
++    /// The store whose set the resolver loads, or none for a resolver of fixed permissions.
++    store: Option<Store>,
++    loaded: RwLock<Loaded>,
++    /// The generation whose set did not load, which the resolver does not try again.
++    failed: Mutex<Option<u64>>,
++    /// Whether a wake of the thread golem-permissions waits to be taken.
++    pending: AtomicBool,
++    wake: Mutex<Option<mpsc::Sender<()>>>,
++}
++
++/// The resolver of the permissions that the runtime hands every plugin, a handle that clones.
++#[derive(Clone)]
++pub struct Resolver {
++    shared: Arc<Shared>,
++}
++
++/// The answer to whether a sender holds a node.
++#[derive(Clone, Debug, PartialEq, Eq)]
++pub struct PermissionAnswer {
++    /// Whether the sender holds the node.
++    pub granted: bool,
++    /// Whether a rule decided it, as `isPermissionSet` of Bukkit answers: a node of the player
++    /// or of a group that matches, or a sender who holds every node. A port whose upstream gives
++    /// a node the default true grants it when no rule decided.
++    pub set: bool,
++    /// The rule that decided, as a sentence.
++    pub reason: String,
++}
++
++/// Loads the TOML of a set of the store into `golem-permissions`.
++fn load(store: &Store) -> Result<(u64, Permissions), (u64, String)> {
++    let (generation, set) = store.permissions_with_generation();
++    Permissions::from_toml(&set.to_toml())
++        .map(|permissions| (generation, permissions))
++        .map_err(|error| (generation, error.to_string()))
++}
++
++impl Resolver {
++    /// The resolver of the permissions of `store`, loaded on the calling thread, which is the
++    /// start of the program, with the thread `golem-permissions` that loads them again.
++    ///
++    /// # Errors
++    ///
++    /// Answers why the set of the store does not load into `golem-permissions`, or why the
++    /// thread did not start.
++    pub fn from_store(store: &Store) -> Result<Self, String> {
++        let (generation, permissions) = load(store).map_err(|(_, error)| {
++            format!(
++                "the permissions of the store {} do not load: {error}",
++                store.path().display()
++            )
++        })?;
++        let resolver = Self::new(Some(store.clone()), generation, permissions);
++        let (wake, wakes) = mpsc::channel::<()>();
++        let shared = Arc::clone(&resolver.shared);
++        std::thread::Builder::new()
++            .name("golem-permissions".to_owned())
++            .spawn(move || {
++                for () in wakes {
++                    shared.pending.store(false, Ordering::SeqCst);
++                    shared.reload();
++                }
++            })
++            .map_err(|error| format!("the thread golem-permissions did not start: {error}"))?;
++        *resolver
++            .shared
++            .wake
++            .lock()
++            .unwrap_or_else(PoisonError::into_inner) = Some(wake);
++        Ok(resolver)
++    }
++
++    /// A resolver of fixed permissions without a store, for a tool or a test.
++    pub fn from_permissions(permissions: Permissions) -> Self {
++        Self::new(None, 0, permissions)
++    }
++
++    fn new(store: Option<Store>, generation: u64, permissions: Permissions) -> Self {
++        Self {
++            shared: Arc::new(Shared {
++                store,
++                loaded: RwLock::new(Loaded {
++                    generation,
++                    permissions: Arc::new(permissions),
++                }),
++                failed: Mutex::new(None),
++                pending: AtomicBool::new(false),
++                wake: Mutex::new(None),
++            }),
++        }
++    }
++
++    /// The permissions the resolver holds now.
++    pub fn permissions(&self) -> Arc<Permissions> {
++        Arc::clone(&self.shared.read().permissions)
++    }
++
++    /// The generation of the store whose set the resolver holds.
++    pub fn generation(&self) -> u64 {
++        self.shared.read().generation
++    }
++
++    /// The store of the resolver, if it has one.
++    pub fn store(&self) -> Option<&Store> {
++        self.shared.store.as_ref()
++    }
++
++    /// Wakes the thread `golem-permissions` when the generation of the store moved past the set
++    /// the resolver holds. It takes one lock of the store and never waits for a reload, so the
++    /// server thread calls it once per tick.
++    pub fn refresh(&self) {
++        let Some(store) = &self.shared.store else {
++            return;
++        };
++        let generation = store.permissions_generation();
++        if generation == self.generation() || self.shared.failed() == Some(generation) {
++            return;
++        }
++        if self.shared.pending.swap(true, Ordering::SeqCst) {
++            return;
++        }
++        let wake = self
++            .shared
++            .wake
++            .lock()
++            .unwrap_or_else(PoisonError::into_inner);
++        if wake.as_ref().is_none_or(|wake| wake.send(()).is_err()) {
++            self.shared.pending.store(false, Ordering::SeqCst);
++        }
++    }
++
++    /// Loads the set of the store on the calling thread when its generation moved, and answers
++    /// the permissions the resolver then holds. A command of the port calls this before it
++    /// builds on the permissions, so it never builds on a set that the store has left.
++    pub fn reload_now(&self) -> Arc<Permissions> {
++        self.shared.reload();
++        self.permissions()
++    }
++
++    /// Installs `permissions`, which hold every change of the store up to `generation`, unless
++    /// the resolver holds a later generation already.
++    pub fn install(&self, generation: u64, permissions: Permissions) {
++        self.shared.install(generation, Arc::new(permissions));
++    }
++
++    /// Whether `sender` holds `node`, by the rules of okf/plugins/permissions.md, without the
++    /// sentence of the reason. A check of a player allocates nothing.
++    pub fn has_permission(&self, sender: &Sender, node: &str) -> bool {
++        holds(Some(&self.shared.read().permissions), sender, node)
++    }
++
++    /// Whether `sender` holds `node`, with the rule that decided.
++    pub fn check_permission(&self, sender: &Sender, node: &str) -> PermissionAnswer {
++        check(Some(&self.shared.read().permissions), sender, node)
++    }
++}
++
++impl Shared {
++    fn read(&self) -> std::sync::RwLockReadGuard<'_, Loaded> {
++        self.loaded.read().unwrap_or_else(PoisonError::into_inner)
++    }
++
++    fn failed(&self) -> Option<u64> {
++        *self.failed.lock().unwrap_or_else(PoisonError::into_inner)
++    }
++
++    fn install(&self, generation: u64, permissions: Arc<Permissions>) {
++        let mut loaded = self.loaded.write().unwrap_or_else(PoisonError::into_inner);
++        if generation >= loaded.generation {
++            *loaded = Loaded {
++                generation,
++                permissions,
++            };
++        }
++    }
++
++    /// Loads the set of the store until the resolver holds its generation, or until a set does
++    /// not load, which is logged once and kept from the next tries.
++    fn reload(&self) {
++        let Some(store) = &self.store else {
++            return;
++        };
++        loop {
++            let generation = store.permissions_generation();
++            if generation == self.read().generation || self.failed() == Some(generation) {
++                return;
++            }
++            match load(store) {
++                Ok((generation, permissions)) => self.install(generation, Arc::new(permissions)),
++                Err((generation, error)) => {
++                    *self.failed.lock().unwrap_or_else(PoisonError::into_inner) = Some(generation);
++                    log(format_args!(
++                        "the permissions of the store {} at the generation {generation} do not load, so the checks keep the permissions they hold: {error}",
++                        store.path().display()
++                    ));
++                    return;
++                }
++            }
++        }
++    }
++}
++
++/// The reason of a sender who holds every node or none, and whether they hold it.
++fn without_nodes(sender: &Sender) -> Option<(bool, String)> {
++    match sender {
++        Sender::Console => Some((true, "The console holds every node".to_owned())),
++        Sender::Other { name, level } if *level >= OPERATOR_LEVEL => Some((
++            true,
++            format!(
++                "The source {name} runs at the level {level}, and a source that is no player holds every node from the level {OPERATOR_LEVEL}"
++            ),
++        )),
++        Sender::Other { name, level } => Some((
++            false,
++            format!(
++                "The source {name} runs at the level {level}, and a source that is no player holds no node below the level {OPERATOR_LEVEL}"
++            ),
++        )),
++        Sender::Player { .. } => None,
++    }
++}
++
++/// Whether `sender` holds `node` with the permissions `permissions`, or with none.
++pub(crate) fn holds(permissions: Option<&Permissions>, sender: &Sender, node: &str) -> bool {
++    match sender {
++        Sender::Console => true,
++        Sender::Other { level, .. } => *level >= OPERATOR_LEVEL,
++        Sender::Player { player, .. } => {
++            permissions.and_then(|permissions| permissions.value(&player.uuid, node)) == Some(true)
++        }
++    }
++}
++
++/// Whether `sender` holds `node` with the permissions `permissions`, or with none, and why.
++pub(crate) fn check(
++    permissions: Option<&Permissions>,
++    sender: &Sender,
++    node: &str,
++) -> PermissionAnswer {
++    if let Some((granted, reason)) = without_nodes(sender) {
++        return PermissionAnswer {
++            granted,
++            set: granted,
++            reason,
++        };
++    }
++    let Sender::Player { player, .. } = sender else {
++        unreachable!("without_nodes answers every other sender");
++    };
++    let Some(permissions) = permissions else {
++        return PermissionAnswer {
++            granted: false,
++            set: false,
++            reason: format!("The runtime holds no permissions, so no rule names {node}"),
++        };
++    };
++    let decision = permissions.check(&player.uuid, node);
++    PermissionAnswer {
++        granted: decision.value == Some(true),
++        set: decision.value.is_some(),
++        reason: decision.reason,
++    }
++}
++
++impl Context<'_> {
++    /// Whether `sender` holds `node`, without the reason, for a check of the server thread.
++    ///
++    /// The console holds every node. Another source holds every node from the level 2 and none
++    /// below it, and never a node of the player it runs as. A player holds what
++    /// `golem-permissions` grants them, and a node that no rule names is not held, so a port
++    /// whose upstream grants a node by default asks [`Context::check_permission`] and reads
++    /// [`PermissionAnswer::set`]. Outside a runtime that holds permissions, a player holds no node.
++    pub fn has_permission(&self, sender: &Sender, node: &str) -> bool {
++        match self.permissions() {
++            Some(resolver) => resolver.has_permission(sender, node),
++            None => holds(None, sender, node),
++        }
++    }
++
++    /// Whether `sender` holds `node`, with the rule that decided, by the rules of
++    /// [`Context::has_permission`].
++    pub fn check_permission(&self, sender: &Sender, node: &str) -> PermissionAnswer {
++        match self.permissions() {
++            Some(resolver) => resolver.check_permission(sender, node),
++            None => check(None, sender, node),
++        }
++    }
++
++    /// The resolver of the permissions of the runtime, or `None` outside a runtime or in one that
++    /// the program gave none.
++    pub fn permissions(&self) -> Option<&Resolver> {
++        self.services()
++            .and_then(|services| services.permissions.as_ref())
++    }
++}
+diff --git a/crates/golem-plugin/src/services.rs b/crates/golem-plugin/src/services.rs
+index b7c6bfe..feddbc7 100644
+--- a/crates/golem-plugin/src/services.rs
++++ b/crates/golem-plugin/src/services.rs
+@@ -3,8 +3,9 @@
+ /*
+  * What the runtime of golem-plugin hands every plugin beside the game: the store of the plugins,
+  * which the program golem opens before the JVM starts and gives the runtime before it installs
+- * it. A plugin reaches it through the context of its call, so no plugin holds a handle of its own
+- * that could outlive the close of the program.
++ * it, and the resolver of the permissions over the set of that store. A plugin reaches both
++ * through the context of its call, so no plugin holds a handle of its own that could outlive the
++ * close of the program.
+  *
+  * The runtime flushes the store once every plugin saw ServerStopped, the last event of the server
+  * thread, where a wait for the disk costs no tick, so every change of the plugins is in the file
+@@ -20,6 +21,7 @@ use golem_store::Store;
+ 
+ use crate::{
+     Context,
++    Resolver,
+     Runtime, //
+ };
+ 
+@@ -28,6 +30,8 @@ use crate::{
+ pub(crate) struct Services {
+     /// The store of the plugins, once the program gave one.
+     pub store: Option<Store>,
++    /// The resolver of the permissions, once the program gave one.
++    pub permissions: Option<Resolver>,
+ }
+ 
+ impl Services {
+@@ -53,6 +57,13 @@ impl Runtime {
+     pub fn set_store(&mut self, store: Store) {
+         self.services.store = Some(store);
+     }
++
++    /// Gives the plugins the resolver of the permissions, which every later call reaches
++    /// through [`Context::has_permission`], [`Context::check_permission`] and
++    /// [`Context::permissions`]. A second call replaces the resolver.
++    pub fn set_permissions(&mut self, resolver: Resolver) {
++        self.services.permissions = Some(resolver);
++    }
+ }
+ 
+ impl Context<'_> {
+@@ -66,4 +77,9 @@ impl Context<'_> {
+     pub fn store(&self) -> Option<&Store> {
+         self.services.and_then(|services| services.store.as_ref())
+     }
++
++    /// What the runtime holds for its plugins, or `None` outside a runtime.
++    pub(crate) fn services(&self) -> Option<&Services> {
++        self.services
++    }
+ }
+diff --git a/crates/golem/src/main.rs b/crates/golem/src/main.rs
+index 8c027f0..b8e4e80 100644
+--- a/crates/golem/src/main.rs
++++ b/crates/golem/src/main.rs
+@@ -47,6 +47,7 @@ use golem_jvm::{
+ use golem_plugin::{
+     CorePlugin,
+     DEFAULT_BUDGET,
++    Resolver,
+     Runtime,
+     Source, //
+ };
+@@ -221,13 +222,16 @@ fn source() -> Source {
+     }
+ }
+ 
+-/// Installs the plugin runtime with the store and the core plugin as the handler of the bridge,
+-/// and answers the queue of actions the mod drains on the server thread.
+-fn install_plugins(budget: Duration, store: &Store) -> Actions {
++/// Installs the plugin runtime with the store, the permissions of the store and the core plugin as
++/// the handler of the bridge, and answers the queue of actions the mod drains on the server thread. A set of the store that `golem-permissions` refuses stops the
++/// start, since every check would then deny every player.
++fn install_plugins(budget: Duration, store: &Store) -> Result<Actions, String> {
++    let resolver = Resolver::from_store(store)?;
+     let mut runtime = Runtime::new(budget);
+     runtime.set_store(store.clone());
++    runtime.set_permissions(resolver);
+     runtime.add(Box::new(CorePlugin::new(source())));
+-    golem_bridge::install(Box::new(runtime))
++    Ok(golem_bridge::install(Box::new(runtime)))
+ }
+ 
+ /// The JVM once it exists, for the stop of a server that the bridge does not reach.
+@@ -620,7 +624,7 @@ fn run(arguments: &[OsString]) -> Result<ExitCode, String> {
+ 
+     let store = store::open(&server)?;
+     store::seed(&store, &server)?;
+-    let actions = install_plugins(options.budget, &store);
++    let actions = install_plugins(options.budget, &store)?;
+     let _ = STORE.set(store.clone());
+     // A JVM that ends through System.exit never returns from golem_jvm::run, so its exit hook
+     // closes the store instead.
+diff --git a/okf/bridge.md b/okf/bridge.md
+index 0db4acd..ef6c083 100644
+--- a/okf/bridge.md
++++ b/okf/bridge.md
+@@ -136,10 +136,9 @@ to every player. A silent source still sees no line, since `sendSystemMessage` o
+ drops every message to a source whose output is suppressed, such as a function. The answer goes to
+ the player of the source when it has one, so a command that runs as a player through `execute as`
+ answers that player, and else to the source itself, such as the console or a command block. A
+-command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself.
+-Until the runtime hands the plugins the permissions, a plugin judges by the level of the source and
+-the operator level of the player alone, since `golem run` loads neither `golem-permissions` nor
+-`config/permissions.toml`, see [Permissions](plugins/permissions.md).
++command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself,
++a player by the nodes that `golem-permissions` grants them and every other source by its level,
++see [Permissions](plugins/permissions.md#the-check-of-a-sender).
+ 
+ The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
+ of the chat, so a player would type the link to the source that `/golem source` offers by hand.
+diff --git a/okf/plugins/core.md b/okf/plugins/core.md
+index 09607a7..11d4576 100644
+--- a/okf/plugins/core.md
++++ b/okf/plugins/core.md
+@@ -18,8 +18,11 @@ command `golem` and logs once that the bridge is connected. The program golem ad
+ 
+ The subcommands `source`, `status`, `whoami` and `help` need no permission, since section 13 of
+ the AGPL gives every player the right to the source, and they name nothing that a player could
+-misuse. The tools of operators read the game and change it, so only the console, a player of
+-operator level 2 and more and another source of level 2 and more may run them, `OPERATOR_LEVEL`.
++misuse. The tools of operators read the game and change it, so each takes the node `golem.<name>`
++of its subcommand, such as `golem.player`, which the console holds, another source holds from the
++level 2, `OPERATOR_LEVEL`, and a player holds when `golem-permissions` grants it to them, such as
++through `golem.*` of the group `admin` of the seed, see
++[Permissions](permissions.md#the-check-of-a-sender).
+ The first word of the arguments picks the subcommand, in any case, and the words after it are its
+ arguments, which `source`, `status`, `whoami` and `help` ignore, while `listname` takes its text
+ as it is typed.
+@@ -31,17 +34,22 @@ as it is typed.
+ | `/golem source` | Everyone | The license, the version, the repository, the commit and the link to its source |
+ | `/golem status` | Everyone | The TPS, the MSPT and the ticks, and the budget of every plugin |
+ | `/golem whoami` | Everyone | Who Golem sees run the command, and at which level |
+-| `/golem player <name>` | Operators | Where a player is and how they play |
+-| `/golem world [<dimension>]` | Operators | The spawn and the heights of a dimension, by default the Overworld |
+-| `/golem teleport <name> <dimension> <x> <y> <z>` | Operators | A teleport to the nearest safe place |
+-| `/golem listname <name> [<text>]` | Operators | The name of a player in the player list, cleared without a text |
++| `/golem player <name>` | `golem.player` | Where a player is and how they play |
++| `/golem world [<dimension>]` | `golem.world` | The spawn and the heights of a dimension, by default the Overworld |
++| `/golem teleport <name> <dimension> <x> <y> <z>` | `golem.teleport` | A teleport to the nearest safe place |
++| `/golem listname <name> [<text>]` | `golem.listname` | The name of a player in the player list, cleared without a text |
+ | `/golem <other>` | Everyone | `The subcommand <other> of /golem is unknown.` and the help |
+ 
+-The console runs the same command, without the slash, and sees the same lines. A source below the
+-level reads `Only the console and operators of level 2 and more may run /golem <name>.`. A player
+-is judged by the lower of their operator level as the game answers it and the level of the source,
+-and a command that another source runs as a player through `execute as` is judged by the level of
+-that source alone, as [Plugins](index.md#commands) says.
++The console runs the same command, without the slash, and sees the same lines. A sender who does
++not hold the node reads `Only the console, a source of level 2 and more and a player who holds
++golem.<name> may run /golem <name>.`. A player is judged by their nodes alone, whatever their
++operator level and the level of the source, and a command that another source runs as a player
++through `execute as` is judged by the level of that source alone, as
++[Plugins](index.md#commands) says, so no source borrows the nodes of a player. The seed grants
++`golem.*` to the group `admin` alone, which the console fills with `lp user <name> parent add
++admin`, so an operator of the game who is not in it is refused the tools. The level stays the rule
++for a source that is no player, since such a source has no nodes, and the level 2 is the level of
++the game masters of Minecraft, at which a command block and a function run.
+ 
+ ## Source
+ 
+@@ -151,8 +159,7 @@ from the text, which the tool takes as it is typed, runs of spaces included, so
+ Each tool answers `No player <name> is online.` for a player who is not, names a dimension the
+ server does not have, and answers its usage for words it cannot read. The tools ask the game on
+ the server thread alone, so a tool answers `The game gives no answer now, so try again.` when the
+-game cannot answer, also to a player whose operator level the game does not answer, in place of
+-the refusal.
++game cannot answer.
+ 
+ ## Help
+ 
+@@ -187,8 +194,9 @@ The notebook `tests/notebooks/04_plugins.ipynb` checks every answer above in its
+ core plugin: the five lines of the source with a known, an unknown and a dirty commit and of the
+ build, the help of `/golem` and `/golem help`, the error of an unknown subcommand, the first line
+ of the status against the statistics of the bridge, and the single line of the log. Its section on
+-the tools of operators checks `whoami` for every sender, the refusal below level 2 and every
+-answer and action of `player`, `world`, `teleport` and `listname` against a scripted game. The
++the tools of operators checks `whoami` for every sender, the refusal of a sender without the node
++and every answer and action of `player`, `world`, `teleport` and `listname` against a scripted
++game. The
+ notebook `tests/notebooks/07_forge_boot.ipynb` runs them under `golem run` against the real game:
+ `whoami` for the console, the player, an armor stand and a command block, `player` and `world`
+ against what the console set, a teleport onto a block of magma in the Nether that lands on the
+diff --git a/okf/plugins/index.md b/okf/plugins/index.md
+index 8a273a2..faba130 100644
+--- a/okf/plugins/index.md
++++ b/okf/plugins/index.md
+@@ -38,17 +38,21 @@ the log, since it would wait for itself.
+ 
+ ## Wiring
+ 
+-The program golem builds one runtime, gives it the store of the plugins, adds its plugins and
+-installs it before the JVM starts, as [Store](../store.md#the-place-in-the-program-golem) says. Its
+-budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
+-the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the git checkout of
+-Golem itself, with `-dirty` behind it when the files that make the binary differ from HEAD, as
+-[JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
+-alone and names the commit unknown without it.
++The program golem builds one runtime, gives it the store of the plugins and the resolver of the
++permissions of that store, adds its plugins and installs it before the JVM starts, as
++[Store](../store.md#the-place-in-the-program-golem) says. A set of the store that
++`golem-permissions` refuses stops the start with `golem: the permissions of the store <path> do not
++load: <reason>`. Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and
++its source names the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the
++git checkout of Golem itself, with `-dirty` behind it when the files that make the binary differ
++from HEAD, as [JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads
++`GOLEM_COMMIT` alone and names the commit unknown without it.
+ 
+ ```rust
++let resolver = Resolver::from_store(&store)?;
+ let mut runtime = Runtime::new(budget);
+ runtime.set_store(store.clone());
++runtime.set_permissions(resolver.clone());
+ runtime.add(Box::new(CorePlugin::new(Source {
+     version: VERSION.to_owned(),
+     repository: REPOSITORY.to_owned(),
+@@ -146,15 +150,14 @@ says. A null `arguments` reads as the empty string.
+ | `Sender::Console` | The console and RCON, with no entity at the level `MAX_LEVEL`, 4 |
+ | `Sender::Other { name, level }` | Every other source, such as a command block at level 2, or a command that the console or a command block runs as an armor stand or as a player through `execute as`, named after that entity |
+ 
+-A plugin judges a player by the lower of the level of the source and the rights of the player, and
+-every other sender by its level alone, with no node of any player, also when it runs as a player
+-through `execute as`. The rights of a player are their operator level, since the runtime hands the
+-plugins no permissions yet, and will take in the nodes of `golem-permissions` once it does. So a
+-source at level 2 never borrows the rights of a player, as in vanilla, where `execute as` keeps the
+-level of the source, and as on the live server, where Arclight handed a Bukkit plugin the source and
+-not the player. A source that the mod passes wrong, a UUID without a name, neither of them below
+-level 4 or a level outside 0 to 4, is refused with an empty answer instead of running as the
+-console, which may do more than any other source.
++A plugin judges a sender with `Context::check_permission` and `Context::has_permission`, see [the
++check of a sender](permissions.md#the-check-of-a-sender): a player by their nodes in
++`golem-permissions`, and every other sender by its level alone, with no node of any player, also
++when it runs as a player through `execute as`. So a source at level 2 never borrows the rights of a
++player, as in vanilla, where `execute as` keeps the level of the source, and as on the live server,
++where Arclight handed a Bukkit plugin the source and not the player. A source that the mod passes
++wrong, a UUID without a name, neither of them below level 4 or a level outside 0 to 4, is refused
++with an empty answer instead of running as the console, which may do more than any other source.
+ 
+ ## Permissions
+ 
+@@ -188,6 +191,9 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
+ | `game()` | The game, which answers on the server thread and answers none on any other thread |
+ | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
+ | `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
++| `check_permission(sender, node)` | Whether the sender holds the node, as `PermissionAnswer` with `granted`, `set`, which says whether a rule decided, and the `reason`, by the rules of [the check of a sender](permissions.md#the-check-of-a-sender) |
++| `has_permission(sender, node)` | The same answer without the reason, which allocates nothing for a player, for the server thread |
++| `permissions()` | The `Resolver` of the permissions that the program gave the runtime with `Runtime::set_permissions`, or none |
+ 
+ Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
+ plugin, so every change of the plugins is in the file before the JVM ends.
+diff --git a/okf/plugins/permissions.md b/okf/plugins/permissions.md
+index c2372dd..ed8616b 100644
+--- a/okf/plugins/permissions.md
++++ b/okf/plugins/permissions.md
+@@ -15,12 +15,13 @@ The crate `golem-permissions` is the one permission system of Golem. It takes th
+ license of LuckPerms and names its holders, lucko (Luck) and the LuckPerms contributors, beside the
+ holder of Golem, see [Licensing](../../Documentation/licensing.md). The groups and nodes are a
+ tracked TOML file, [config/permissions.toml](../../config/permissions.toml), and every decision
+-names the rule that made it. Once `golem run` loads it, a plugin asks it whether a player holds a
+-node, and a port of LuckPerms that answers `on_permission` answers the handler of the Forge
+-PermissionAPI through it. The [store](../store.md#permissions) holds the same groups and nodes and
+-hands them to the crate as TOML of the same format, so it is seeded from the same file. Today the
+-crate reads the TOML, and `golem run` loads neither the crate nor the store yet, so no plugin asks
+-the crate and `config/permissions.toml` grants and denies nothing on a running server.
++names the rule that made it. The [store](../store.md#permissions) holds the same groups and nodes
++and hands them to the crate as TOML of the same format, and `golem run` seeds it from
++`config/permissions.toml` of the server, or from the seed of the Golem repository, as
++[Store](../store.md#the-place-in-the-program-golem) says. The runtime of the plugins resolves every
++check with the crate over the set of the store, which it loads again when the store changes, and a
++plugin asks it whether a sender holds a node, as [the check of a sender](#the-check-of-a-sender)
++says.
+ 
+ The notebook `tests/notebooks/06_permissions.ipynb` holds every rule on this page to a case.
+ 
+@@ -170,6 +171,43 @@ answer of `has_permission` for a player and for an operator, and
+ with their weight, depth, rank and nodes. A broken configuration goes to standard error with the
+ exit status 1.
+ 
++## The check of a sender
++
++The runtime of the plugins holds a `Resolver`, the permissions of the store loaded into this crate,
++and every plugin asks it through its context whether the sender of a command holds a node, with
++`Context::check_permission`, which answers whether the sender holds it, whether a rule decided and
++the reason, and `Context::has_permission`, which answers the first alone and allocates nothing for
++a player. The senders are those of [Plugins](index.md#commands).
++
++| Sender | Holds | Reason |
++| --- | --- | --- |
++| The console and RCON | Every node | `The console holds every node` |
++| Another source at the level 2 and more, such as a command block or a function | Every node | `The source @ runs at the level 2, and a source that is no player holds every node from the level 2` |
++| Another source below the level 2 | No node | `The source Server runs at the level 1, and a source that is no player holds no node below the level 2` |
++| A player | What the rules of resolution grant them, a node that no rule names not | The reason of the decision, such as `Group admin grants golem.*` |
++
++- A player is judged by their nodes and groups alone. Their operator level and the level of the
++  source play no part, so an operator of the game holds no node that the permissions do not grant
++  them, and the group `admin` of the seed stands for the operators, as above.
++- A source that runs a command as a player through `execute as` is another source at its own
++  level, so it never holds a node of that player, and a source at the level 2 holds every node
++  whoever it runs as. The level 2 is the level of the game masters of Minecraft, at which command
++  blocks and functions run, and the level from which the core plugin gave such a source its tools
++  before.
++- A node that no rule names is not held, and `set` is false then, as `isPermissionSet` of Bukkit
++  answers. A port whose upstream declares a node with the default true, such as
++  `essentials.back.onteleport` of EssentialsX, grants it when no rule decided.
++- A runtime without permissions, such as a test of a plugin, grants a player no node.
++
++The program `golem` builds the resolver from the store after the seed, so a set of the store that
++this crate refuses stops the start. A change of the store moves its generation, and the runtime
++looks at the generation once per tick and wakes the thread `golem-permissions`, which reads the set
++and its generation under one lock of the store, loads it and swaps it in. A check never waits for
++that reload and answers with the set the resolver holds until then. A set that this crate refuses,
++such as one whose inheritance is a cycle, is logged once with its generation, `the permissions of
++the store <path> at the generation 3 do not load, so the checks keep the permissions they hold:
++<reason>`, and the checks keep the set they hold.
++
+ ## The cost of a check
+ 
+ Loading builds one table per source, with the exact nodes, the prefixes of the wildcards and `*`
+@@ -273,11 +311,10 @@ and the server does another.
+ 
+ Golem has one permission system and no switch that turns a second one on or off. A command of a
+ plugin needs no permission level in Brigadier, and the plugin judges the sender itself, as
+-[Bridge](../bridge.md#commands) says. Once the runtime hands the plugins the permissions, a plugin
+-checks the sender through `golem-permissions`, so the nodes of `config/permissions.toml` and of the
+-store seeded from it are the only place that grants a command. That is not built yet. `golem run`
+-loads neither the crate nor the store, and the one command of a plugin, `golem`, needs no node, see
+-[Open items](../open-items.md#open-in-what-is-built).
++[Bridge](../bridge.md#commands) says. A plugin checks the sender through `golem-permissions`, as
++[the check of a sender](#the-check-of-a-sender) says, so the nodes of the store seeded from
++`config/permissions.toml` are the only place that grants a command to a player. The tools of
++operators of `/golem` take the nodes `golem.<name>` that way.
+ 
+ Issue: [#1](https://github.com/skytekx/golem/issues/1).
+ 
+diff --git a/tests/notebooks/04_plugins.ipynb b/tests/notebooks/04_plugins.ipynb
+index d12c103..b41bba7 100644
+--- a/tests/notebooks/04_plugins.ipynb
++++ b/tests/notebooks/04_plugins.ipynb
+@@ -15,7 +15,8 @@
+     "mod drives the natives on the server thread, so the notebook judges the same path. The notebook\n",
+     "holds the table of natives to the contract, then the order of the plugins, the cancel chain, the\n",
+     "panics, the budgets, the commands with the sources and levels of their senders, the permissions,\n",
+-    "the core plugin, the wire form of the actions, the actions on players, the game with the guard of\n",
++    "the core plugin, the check of a node for a sender with the reload of the permissions of a store,\n",
++    "the wire form of the actions, the actions on players, the game with the guard of\n",
+     "the server thread and the wire form of its answers, the tools of operators, the queue, the tick\n",
+     "statistics and the pass values of a broken handler. The game is a scripted one in place of the\n",
+     "one the mod connects. The natives themselves run only inside a JVM, which the end to end test with\n",
+@@ -132,6 +133,19 @@
+     "LAVA = {\"dimension\": \"minecraft:overworld\", \"x\": -10.0, \"y\": 11.0, \"z\": 300.75, \"yaw\": -45.0, \"pitch\": 0.0}\n",
+     "LAVA_TEXT = \"minecraft:overworld -10.00 11.00 300.75, yaw -45.0, pitch 0.0\"\n",
+     "\n",
++    "# The permissions of the scripts: Alex is in the group admin, which grants every node of Golem.\n",
++    "PERMISSIONS = '''\n",
++    "[groups.default]\n",
++    "nodes = [\"essentials.home\"]\n",
++    "\n",
++    "[groups.admin]\n",
++    "weight = 100\n",
++    "inherits = [\"default\"]\n",
++    "nodes = [\"golem.*\", \"-golem.listname\"]\n",
++    "\n",
++    "[players.%s]\n",
++    "groups = [\"admin\"]\n",
++    "''' % ALEX[\"uuid\"]\n",
+     "natives_table, _ = devtool(\"natives\")\n",
+     "print(\"python:\", sys.version.split()[0])\n",
+     "print(\"cargo:\", run([\"cargo\", \"--version\"], cwd=P.root, check=True).stdout.strip())\n",
+@@ -619,6 +633,136 @@
+     "print(\"the build names the commit\", commit)"
+    ]
+   },
++  {
++   "cell_type": "markdown",
++   "id": "04b000001",
++   "metadata": {},
++   "source": [
++    "## The check of a node for a sender\n",
++    "\n",
++    "A plugin asks the runtime whether a sender holds a node through `Context::check_permission`, with\n",
++    "the rule that decided, and `Context::has_permission`, without it, which must agree. The console\n",
++    "holds every node. Another source holds every node from the level 2 and none below it, also when it\n",
++    "runs a command as Alex through `execute as`, so it never borrows the nodes of a player. A player\n",
++    "holds what `golem-permissions` grants them, with its reason, and a node that no rule names is not\n",
++    "held and not set, so a port whose upstream grants a node by default can tell. A runtime without\n",
++    "permissions grants a player nothing. The plugin `checker` of the devtool answers each node of its\n",
++    "arguments with the check."
++   ]
++  },
++  {
++   "cell_type": "code",
++   "execution_count": null,
++   "id": "04b000002",
++   "metadata": {},
++   "outputs": [],
++   "source": [
++    "NODES = \"golem.player golem.listname essentials.home essentials.fly\"\n",
++    "CHECK = {\"op\": \"command\", \"name\": \"check\", \"arguments\": NODES}\n",
++    "SENDERS = [\n",
++    "    (\"console\", {}),\n",
++    "    (\"Alex\", {\"senderUuid\": ALEX[\"uuid\"], \"senderName\": ALEX[\"name\"], \"level\": 0}),\n",
++    "    (\"Sam\", {\"senderUuid\": SAM[\"uuid\"], \"senderName\": SAM[\"name\"], \"level\": 4}),\n",
++    "    (\"block\", {\"senderName\": \"@\", \"level\": 2}),\n",
++    "    (\"as Alex\", {\"senderName\": ALEX[\"name\"], \"level\": 1}),\n",
++    "]\n",
++    "checked, log = script(\"checks\", {\n",
++    "    \"plugins\": [{\"kind\": \"checker\", \"name\": \"checker\", \"commands\": [\"check\"]}],\n",
++    "    \"permissions\": PERMISSIONS,\n",
++    "    \"steps\": [{**CHECK, **sender} for _, sender in SENDERS],\n",
++    "})\n",
++    "said = {name: step[\"answer\"] for (name, _), step in zip(SENDERS, checked)}\n",
++    "for name, lines in said.items():\n",
++    "    for line in lines:\n",
++    "        print(\"%-8s %s\" % (name, line))\n",
++    "assert said[\"console\"] == [\"%s: granted true, set true, has true, The console holds every node\" % node\n",
++    "                           for node in NODES.split()], said[\"console\"]\n",
++    "assert said[\"Alex\"] == [\n",
++    "    \"golem.player: granted true, set true, has true, Group admin grants golem.*\",\n",
++    "    \"golem.listname: granted false, set true, has false, Group admin denies golem.listname\",\n",
++    "    \"essentials.home: granted true, set true, has true, Group default grants essentials.home\",\n",
++    "    \"essentials.fly: granted false, set false, has false, No rule names essentials.fly\",\n",
++    "], said[\"Alex\"]\n",
++    "assert said[\"Sam\"] == [\n",
++    "    \"golem.player: granted false, set false, has false, No rule names golem.player\",\n",
++    "    \"golem.listname: granted false, set false, has false, No rule names golem.listname\",\n",
++    "    \"essentials.home: granted true, set true, has true, Group default grants essentials.home\",\n",
++    "    \"essentials.fly: granted false, set false, has false, No rule names essentials.fly\",\n",
++    "], said[\"Sam\"]\n",
++    "assert said[\"block\"] == [\"%s: granted true, set true, has true, The source @ runs at the level 2, and a source that \"\n",
++    "                         \"is no player holds every node from the level 2\" % node for node in NODES.split()]\n",
++    "assert said[\"as Alex\"] == [\"%s: granted false, set false, has false, The source Alex runs at the level 1, and a \"\n",
++    "                           \"source that is no player holds no node below the level 2\" % node for node in NODES.split()]\n",
++    "bare, _ = script(\"checks-without-permissions\", {\n",
++    "    \"plugins\": [{\"kind\": \"checker\", \"name\": \"checker\", \"commands\": [\"check\"]}],\n",
++    "    \"steps\": [{**CHECK, **SENDERS[1][1]}],\n",
++    "})\n",
++    "assert bare[0][\"answer\"][0] == (\"golem.player: granted false, set false, has false, The runtime holds no permissions, \"\n",
++    "                                \"so no rule names golem.player\"), bare[0]\n",
++    "assert log == [], log"
++   ]
++  },
++  {
++   "cell_type": "markdown",
++   "id": "04b000003",
++   "metadata": {},
++   "source": [
++    "## The permissions of a store\n",
++    "\n",
++    "With a store the runtime holds the resolver over the set of the store, which the devtool seeds as\n",
++    "`golem run` does. A change that another writer puts into the store behind the resolver moves the\n",
++    "generation of the store, and the resolver keeps its set until a tick wakes its reload, which loads\n",
++    "the set of that generation on the thread `golem-permissions`, so a check then sees the change. A\n",
++    "set that `golem-permissions` refuses, such as one whose inheritance is a cycle, is logged once and\n",
++    "the checks keep the set they hold. The store closes after the last step."
++   ]
++  },
++  {
++   "cell_type": "code",
++   "execution_count": null,
++   "id": "04b000004",
++   "metadata": {},
++   "outputs": [],
++   "source": [
++    "STORE = SCRATCH / \"permissions.db\"\n",
++    "CHECK_SAM = {**CHECK, **SENDERS[2][1], \"arguments\": \"essentials.fly golem.player\"}\n",
++    "reloaded, log = script(\"reload\", {\n",
++    "    \"plugins\": [{\"kind\": \"checker\", \"name\": \"checker\", \"commands\": [\"check\"]}],\n",
++    "    \"permissions\": PERMISSIONS,\n",
++    "    \"store\": str(STORE),\n",
++    "    \"steps\": [\n",
++    "        CHECK_SAM,\n",
++    "        {\"op\": \"generation\"},\n",
++    "        {\"op\": \"behind\", \"group\": \"default\", \"nodes\": [\"essentials.home\", \"essentials.fly\"]},\n",
++    "        {\"op\": \"generation\"},\n",
++    "        CHECK_SAM,\n",
++    "        {\"op\": \"refresh\"},\n",
++    "        CHECK_SAM,\n",
++    "        {\"op\": \"behind\", \"group\": \"default\", \"inherits\": [\"admin\"], \"nodes\": [\"essentials.home\"]},\n",
++    "        {\"op\": \"refresh\"},\n",
++    "        {\"op\": \"generation\"},\n",
++    "        CHECK_SAM,\n",
++    "    ],\n",
++    "})\n",
++    "answers = [step[\"answer\"] for step in reloaded]\n",
++    "for answer in answers:\n",
++    "    print(answer)\n",
++    "FLY_UNSET = \"essentials.fly: granted false, set false, has false, No rule names essentials.fly\"\n",
++    "FLY_SET = \"essentials.fly: granted true, set true, has true, Group default grants essentials.fly\"\n",
++    "assert answers[0][0] == FLY_UNSET, answers[0]\n",
++    "assert answers[1] == {\"resolver\": 1, \"store\": 1}, answers[1]\n",
++    "assert answers[2] is True and answers[3] == {\"resolver\": 1, \"store\": 2}, answers[2:4]\n",
++    "assert answers[4][0] == FLY_UNSET, \"the resolver loaded the set on the server thread: %s\" % answers[4]\n",
++    "assert answers[5] == 2 and answers[6][0] == FLY_SET, answers[5:7]\n",
++    "assert answers[7] is True and answers[8] == 2 and answers[9] == {\"resolver\": 2, \"store\": 3}, answers[7:10]\n",
++    "assert answers[10][0] == FLY_SET, \"the checks lost the set they held: %s\" % answers[10]\n",
++    "cycle = [line for line in log if \"do not load\" in line]\n",
++    "print(cycle)\n",
++    "assert cycle == [\"the permissions of the store %s at the generation 3 do not load, so the checks keep the \"\n",
++    "                 \"permissions they hold: groups.default.inherits: the inheritance admin, default, admin is a cycle\"\n",
++    "                 % STORE], log"
++   ]
++  },
+   {
+    "cell_type": "markdown",
+    "id": "410325c8",
+@@ -943,12 +1087,13 @@
+     "## The tools of operators\n",
+     "\n",
+     "`/golem whoami` tells every sender how Golem sees them. `/golem player`, `world`, `teleport` and\n",
+-    "`listname` ask the game, and only the console, a player of operator level 2 and more and another\n",
+-    "source of level 2 and more may run them, so a player of level 0 and a source of level 1 are\n",
+-    "refused. A player counts at the lower of their operator level and the level of the source, so\n",
+-    "Alex, of operator level 2, is refused at a source of level 0, and `whoami` names both levels.\n",
+-    "When the game gives no answer for the players, a player reads that the game gives no answer, not\n",
+-    "that they are no operator. `player` names where a player is and how they play, and `world` the\n",
++    "`listname` ask the game, and only the console, another source of level 2 and more and a player\n",
++    "who holds the node of the tool, such as `golem.player`, may run them, so Sam, who holds no node of\n",
++    "Golem, and a source of level 1 are refused. Alex holds `golem.*` through the group `admin` of the\n",
++    "permissions of the script, which deny `golem.listname`, so Alex runs the other tools also at a\n",
++    "source of level 0, while `whoami` names both levels, and is refused `listname`. The operator level\n",
++    "plays no part, and a script without permissions refuses every player. When the game gives no answer\n",
++    "for the players, the tool reads that the game gives no answer. `player` names where a player is and how they play, and `world` the\n",
+     "spawn and the heights of a dimension. `teleport` queues a teleport to the nearest safe place\n",
+     "within 3 blocks, `SAFE_RADIUS`, with the rotation the player has and says that it queued it, since\n",
+     "the mod runs it at the end of the tick, or says that there is none or that its chunks are not\n",
+@@ -984,10 +1129,11 @@
+     "    (AS_SAM, \"teleport Sam minecraft:overworld 0 64 0\"),\n",
+     "    (CONSOLE, \"listname Alex [AFK] Alex\"), (CONSOLE, \"listname Alex\"), (AS_SAM, \"listname Sam x\"),\n",
+     "    (CONSOLE, \"listname Alex [AFK]   Alex\"), (CONSOLE, \"listname Nobody x\"),\n",
+-    "    (CONSOLE, \"PLAYER Alex\"), (CONSOLE, \"player Broken\"),\n",
++    "    (CONSOLE, \"PLAYER Alex\"), (CONSOLE, \"player Broken\"), (AS_ALEX, \"listname Alex x\"),\n",
+     "]\n",
+     "steps, log = script(\"operators\", {\n",
+     "    \"plugins\": [{\"kind\": \"core\"}],\n",
++    "    \"permissions\": PERMISSIONS,\n",
+     "    \"game\": GAME,\n",
+     "    \"steps\": [{\"op\": \"serverStarting\", \"forgeVersion\": \"47.4.18\", \"minecraftVersion\": \"1.20.1\"}]\n",
+     "             + [{**sender, \"arguments\": arguments} for sender, arguments in runs]\n",
+@@ -997,15 +1143,16 @@
+     "        in zip(runs, steps[1:])}\n",
+     "for key, lines in said.items():\n",
+     "    print(\"%-8s %-45s %s\" % (key[0], key[1][:45], \" / \".join(lines)[:160]))\n",
+-    "refused = [\"Only the console and operators of level 2 and more may run /golem %s.\" % name for name in\n",
+-    "           (\"player\", \"teleport\", \"listname\")]\n",
++    "refused = [\"Only the console, a source of level 2 and more and a player who holds golem.%s may run /golem %s.\" % (\n",
++    "    name, name) for name in (\"player\", \"teleport\", \"listname\")]\n",
+     "assert said[(\"console\", \"whoami\")] == [\"You run /golem as the console.\"]\n",
+     "assert said[(\"Alex\", \"whoami\")] == [\"You run /golem as the player Alex at the operator level 2.\"]\n",
+     "assert said[(\"Sam\", \"whoami\")] == [\"You run /golem as the player Sam at the operator level 0.\"]\n",
+     "assert said[(\"@\", \"whoami\")] == [\"You run /golem as @ at the level 2.\"]\n",
+     "assert said[(\"Alex\", \"WHOAMI\")] == [\"You run /golem as the player Alex at the operator level 2, from a source at the \"\n",
+     "                                    \"level 0.\"]\n",
+-    "assert said[(\"Alex\", \"player SAM\")] == [refused[0]], said[(\"Alex\", \"player SAM\")]\n",
++    "assert said[(\"Alex\", \"player SAM\")][0].startswith(\"Sam (\"), said[(\"Alex\", \"player SAM\")]\n",
++    "assert said[(\"Alex\", \"listname Alex x\")] == [refused[2]], said[(\"Alex\", \"listname Alex x\")]\n",
+     "alex = said[(\"console\", \"player Alex\")]\n",
+     "assert alex == [\n",
+     "    \"Alex (%s): minecraft:the_nether 1.50 64.00 -2.25, yaw 90.0, pitch -12.5\" % ALEX[\"uuid\"],\n",
+@@ -1065,6 +1212,7 @@
+     "\n",
+     "silent, _ = script(\"operators-no-answer\", {\n",
+     "    \"plugins\": [{\"kind\": \"core\"}],\n",
++    "    \"permissions\": PERMISSIONS,\n",
+     "    \"game\": {\"players\": None, \"dimensions\": [OVERWORLD]},\n",
+     "    \"steps\": [{\"op\": \"serverStarting\", \"forgeVersion\": \"47.4.18\", \"minecraftVersion\": \"1.20.1\"},\n",
+     "              {**AS_ALEX, \"arguments\": \"player Alex\"}, {**AS_ALEX, \"arguments\": \"whoami\"},\n",
+@@ -1072,7 +1220,15 @@
+     "})\n",
+     "NO_ANSWER = [\"The game gives no answer now, so try again.\"]\n",
+     "assert [step[\"answer\"] for step in silent[1:]] == [\n",
+-    "    NO_ANSWER, [\"You run /golem as the player Alex from a source at the level 2.\"], NO_ANSWER], silent"
++    "    NO_ANSWER, [\"You run /golem as the player Alex from a source at the level 2.\"], NO_ANSWER], silent\n",
++    "without, _ = script(\"operators-without-permissions\", {\n",
++    "    \"plugins\": [{\"kind\": \"core\"}],\n",
++    "    \"game\": GAME,\n",
++    "    \"steps\": [{\"op\": \"serverStarting\", \"forgeVersion\": \"47.4.18\", \"minecraftVersion\": \"1.20.1\"},\n",
++    "              {**AS_ALEX, \"arguments\": \"player Alex\"}, {**CONSOLE, \"arguments\": \"world\"}],\n",
++    "})\n",
++    "assert without[1][\"answer\"] == [refused[0]], without[1]\n",
++    "assert without[2][\"answer\"][0].startswith(\"minecraft:overworld: spawn \"), without[2]"
+    ]
+   },
+   {
+diff --git a/tests/notebooks/07_forge_boot.ipynb b/tests/notebooks/07_forge_boot.ipynb
+index 4c07527..f6d458b 100644
+--- a/tests/notebooks/07_forge_boot.ipynb
++++ b/tests/notebooks/07_forge_boot.ipynb
+@@ -932,6 +932,9 @@
+     "The cell copies the installed server without its world, logs, crash reports and mods, sets the port\n",
+     "of the copy, turns command blocks on and names the permission handler of Golem, `golem:permissions`,\n",
+     "in `defaultconfigs/forge-server.toml`, which Forge copies into the configuration of the new world. A\n",
++    "copy of the server with the mod also gets `config/permissions.toml`, the seed of the Golem\n",
++    "repository with the player Tester in the group `admin`, which grants the nodes `golem.*` of the\n",
++    "tools of operators, so `golem run` seeds its store from that file. A\n",
+     "boot runs `golem run` on the copy with the Java home, the host jar and `nogui` after `--`, reads its\n",
+     "output on a thread, waits for `Done` and answers what it printed and logged. Every line of the host\n",
+     "starts with `[golem]` on standard error, which the boot reads together with the console of the\n",
+@@ -958,6 +961,10 @@
+     "    (server / \"mods\").mkdir()\n",
+     "    if with_mod:\n",
+     "        shutil.copy2(MOD_JAR, server / \"mods\" / MOD_JAR.name)\n",
++    "        (server / \"config\").mkdir(exist_ok=True)\n",
++    "        (server / \"config\" / \"permissions.toml\").write_text(\n",
++    "            (P.root / \"config\" / \"permissions.toml\").read_text()\n",
++    "            + '\\n[players.%s]\\ngroups = [\"admin\"]\\n' % offline_uuid(\"Tester\"))\n",
+     "    settings = [line for line in (server / \"server.properties\").read_text().splitlines()\n",
+     "                if not line.startswith((\"server-port=\", \"server-ip=\", \"online-mode=\", \"enable-command-block=\"))]\n",
+     "    settings += [\"server-port=%d\" % server_port, \"server-ip=127.0.0.1\", \"online-mode=false\",\n",
+@@ -1075,9 +1082,8 @@
+     "the console, `golem source` must name the license, the repository and the tree of the commit of the\n",
+     "binary, which section 13 of the AGPL asks for, or the repository alone for a build whose commit is\n",
+     "unknown or dirty, and `golem status` the ticks that the bridge counted. Before the banner the host\n",
+-    "opens the store `golem-store.db` beside `world/` and, since the copy holds no\n",
+-    "`config/permissions.toml`, seeds its permissions from the seed of the Golem repository, which it\n",
+-    "names."
++    "opens the store `golem-store.db` beside `world/` and seeds its permissions from\n",
++    "`config/permissions.toml` of the copy, which it names."
+    ]
+   },
+   {
+@@ -1107,7 +1113,8 @@
+     "seeded, first = on.host()[:2]\n",
+     "print(shown(seeded))\n",
+     "print(shown(first))\n",
+-    "assert seeded == SEEDED % (WITH_MOD / \"golem-store.db\"), seeded\n",
++    "assert seeded == (\"the store %s held no group of the permissions, so golem seeded them from \"\n",
++    "                  \"config/permissions.toml of the server\" % (WITH_MOD / \"golem-store.db\")), seeded\n",
+     "assert (WITH_MOD / \"golem-store.db\").is_file() and (WITH_MOD / \"world\").is_dir(), \"the store is not beside world/\"\n",
+     "assert first.startswith(\"Golem %s at %s runs cpw.mods.bootstraplauncher.BootstrapLauncher of \" % (\n",
+     "    WORKSPACE[\"version\"], COMMIT)), first\n",
+@@ -1183,7 +1190,8 @@
+     "level 2, whose last output `data get block` shows. A command that the console or a command block\n",
+     "runs as the player through `execute as` must reach Golem as that source, named after the player, at\n",
+     "the level of the source, 4 and 2, so no source borrows the rights of a player, and its answer goes\n",
+-    "to the player. A player below level 2 must be refused the tools of operators."
++    "to the player. A second player, Alex, who holds no node of Golem, must be refused the tools of\n",
++    "operators, which Tester holds through the group `admin` of the seed of the copy."
+    ]
+   },
+   {
+@@ -1222,8 +1230,15 @@
+     "on.console(\"setblock 2 201 0 minecraft:redstone_block\")\n",
+     "on.expect(\"Changed the block at 2, 201, 0\")\n",
+     "assert player.heard(\"You run /golem as Tester at the level 2.\"), player.messages\n",
+-    "player.command(\"golem player Tester\")\n",
+-    "assert player.heard(\"Only the console and operators of level 2 and more may run /golem player.\"), player.messages\n",
++    "alex = Client(server_port, \"Alex\")\n",
++    "alex.login()\n",
++    "on.expect(\"Alex joined the game\")\n",
++    "alex.command(\"golem player Tester\")\n",
++    "# The mod splits a word with a dot, such as a node, into a component of its own, as it looks for links.\n",
++    "assert alex.heard('\"text\":\"Only the console, a source of level 2 and more and a player who holds \"'), alex.messages\n",
++    "assert alex.heard('{\"text\":\"golem.player\"},{\"text\":\" may run /golem player.\"}'), alex.messages\n",
++    "alex.close()\n",
++    "on.expect(\"Alex left the game\")\n",
+     "print(\"the console, the player, the armor stand and the command block each ran as themselves\")"
+    ]
+   },
+@@ -1234,7 +1249,8 @@
+    "source": [
+     "## The game\n",
+     "\n",
+-    "After `op Tester` the player is an operator of level 4. `/golem player` must read the game through\n",
++    "After `op Tester` the player is an operator of level 4, which `/golem player` names, while the tools\n",
++    "take their node from the group `admin` alone. `/golem player` must read the game through\n",
+     "the real natives: the place that `data get entity` shows, the game mode, the operator level, the\n",
+     "respawn point and the world spawn that the console sets and the diamonds that it gives.\n",
+     "`/golem world` must name the world spawn for the Overworld and the Nether, which shares it, with the\n",
+-- 
+2.43.0
+
