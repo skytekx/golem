@@ -16,10 +16,10 @@ unchanged. Around the game it adds a GraphQL API, a plugin runtime in Rust and n
 hot paths of world generation. The Bukkit plugins the server uses today are ported to Golem plugins.
 
 Every duration on this page is an estimate that nobody measured. The owner changed some rulings
-later on 2026-11-06, and this page carries them: the license is the AGPL 3 only, the holder is
-Florian Kleber, the tree follows REUSE, and commits are Conventional Commits in the form of the
-kernel, signed off by the holder. [Decisions](decisions.md) lists each with its time, and
-[Index](index.md) says what is built.
+later on 2026-11-06, and this page carries them: the license is the AGPL 3 only, a port of a
+plugin keeps the license of that plugin, the holder is Florian Kleber, the tree follows REUSE, and
+commits are Conventional Commits in the form of the kernel, signed off by the holder.
+[Decisions](decisions.md) lists each with its time, and [Index](index.md) says what is built.
 
 ## Owner requirements
 
@@ -172,9 +172,11 @@ The license is written into the code itself.
 
 Each SPDX line is followed by the `SPDX-FileCopyrightText` line of REUSE that names the holder.
 
-- The `license` field of every `Cargo.toml` and the Gradle build of the bridge mod say
-  `AGPL-3.0-only`. The wiki pages carry both tags as YAML comments right after the opening `---` of
-  their front matter, so that REUSE reads them.
+- The `license` field of the workspace in `Cargo.toml` and the Gradle build of the bridge mod say
+  `AGPL-3.0-only`, and every crate that is no port inherits the field of the workspace. The
+  `Cargo.toml` of a port states the license of its upstream itself, as the later ruling below says.
+  The wiki pages carry both tags as YAML comments right after the opening `---` of their front
+  matter, so that REUSE reads them.
 - The folder `LICENSES/` holds the text of every license a dependency or a copied file brings, named
   by its SPDX identifier, and `NOTICE` names each such project.
 - CI runs `reuse lint` and the license lint of Golem so that no file lacks its SPDX lines, and

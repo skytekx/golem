@@ -17,11 +17,13 @@ with the seed of SkyTekx. The GraphQL API and the ports of EssentialsX come next
 
 ## License
 
-Golem is licensed under the GNU Affero General Public License 3.0 only,
-`AGPL-3.0-only`, whose text is in [LICENSE](LICENSE). Whoever runs a changed Golem for players
-must offer those players its source. Every file names its license on its first line with an SPDX
-identifier, and [Documentation/licensing.md](Documentation/licensing.md) explains the rules,
-the texts under [LICENSES/](LICENSES/) and the work of others that [NOTICE](NOTICE) names.
+Golem is licensed under the GNU Affero General Public License 3.0 only, `AGPL-3.0-only`, whose
+text is in [LICENSE](LICENSE). The ports of Bukkit plugins that [ports.toml](ports.toml) lists
+keep the licenses of the plugins they port, `MIT` for the port of LuckPerms and `GPL-3.0-or-later`
+for the ports of EssentialsX and EssentialsXSpawn. Whoever runs a changed Golem for players must
+offer those players its source. Every file names its license on its first line with an SPDX
+identifier, and [Documentation/licensing.md](Documentation/licensing.md) explains the rules, the
+texts under [LICENSES/](LICENSES/) and the work of others that [NOTICE](NOTICE) names.
 
 ## Tests
 
