@@ -58,7 +58,7 @@ server thread                       golem-store thread
   operation, and so in one transaction.
 
 The cache costs memory instead of time. A store of 5000 players with three homes, two mails and
-an account each is a file of 7.6 MB, and a process with it open held 40 MB resident, see
+an account each is a file of 7.9 MB, and a process with it open held 35 MB resident, see
 [The cost on the server thread](#the-cost-on-the-server-thread). The server has far fewer
 players.
 
@@ -87,11 +87,11 @@ thread such a wait costs a tick, and only a burst of more than 16384 changes mee
 
 `check` copies the cache under that lock, so that it compares the file with the cache as the call
 found it, and every other call waits for that copy. Every table of the cache sits behind an `Arc`,
-the players and the accounts in 64 parts, so the copy takes about 140 pointers instead of the
-rows, and its time does not grow with the players. In the run of `09_store` on 2026-11-06 a check
-of the store of 5000 players held the lock 28 microseconds in the median in the debug build. A
-change after the copy copies the part of the players or of the accounts, or the table, that it
-changes, once while the check still holds the copy.
+the players and the accounts in 64 parts, so the copy takes about 140 pointers instead of the rows,
+and its time does not grow with the players. In a run of `golem-devtool store-bench` of the debug
+build on 2026-11-07 a check of the store of 5000 players held the lock 14 microseconds in the
+median. A change after the copy copies the part of the players or of the accounts, or the table,
+that it changes, once while the check still holds the copy.
 
 ## Durability
 
@@ -512,53 +512,55 @@ Essentials sits in a tracked folder.
 
 ## The cost on the server thread
 
-`golem-devtool store-bench` fills a new store with 5000 players, each with three homes, two mails,
-an account and an ignore, with 50 warps, three spawns, 20 settings and eleven groups of 20 nodes,
-opens it again and times 2000 calls of each kind one by one. The table gives the mean and the 99th
-percentile of a call in microseconds, of the debug build in the run of `09_store` and of a release
-build in a run of `golem-devtool store-bench --players 5000 --repeat 2000`, both on 2026-11-06 in
-the cloud container of the session with an Intel Xeon at 2.10 GHz and 4 cores that another agent
+`golem-devtool store-bench` fills a new store with 5000 players, each with three homes and an
+account, every player but the first with two mails and an ignore of the player before them and every
+tenth with a nickname, with 50 warps, three spawns, 20 settings, ten groups of 20 nodes beside the
+group `default` with one node, and the first 100 players in a group and with a node of their own,
+opens it again and times 2000 calls of each kind one by one, with a flush after each kind. The table
+gives the mean and the 99th percentile of a call in microseconds, of a debug build and of a release
+build, each in a run of `golem-devtool store-bench --players 5000 --repeat 2000` on 2026-11-07 in
+the cloud container of the session with an Intel Xeon at 2.10 GHz and 4 cores that other agents
 shared.
 
 | Call | Kind | Debug mean | Debug p99 | Release mean | Release p99 |
 | --- | --- | --- | --- | --- | --- |
-| `player` | read | 0.62 | 1.06 | 0.29 | 0.58 |
-| `player_named` | read | 1.25 | 2.22 | 0.37 | 0.66 |
-| `home` | read | 0.67 | 1.29 | 0.35 | 0.69 |
-| `homes` | read | 1.15 | 2.15 | 0.38 | 0.73 |
-| `warp` | read | 0.63 | 0.99 | 0.13 | 0.32 |
-| `spawn` | read | 0.16 | 0.23 | 0.07 | 0.06 |
-| `balance` | read | 0.34 | 0.74 | 0.17 | 0.57 |
-| `top_balances(10)` | read | 0.78 | 1.89 | 0.06 | 0.06 |
-| `unread_mail` | read | 0.36 | 0.60 | 0.12 | 0.24 |
-| `mail` | read | 1.24 | 12.68 | 0.40 | 0.77 |
-| `ignores` | read | 0.74 | 2.00 | 0.48 | 0.86 |
-| `setting` | read | 0.27 | 0.45 | 0.08 | 0.12 |
-| `player_permissions` | read | 0.34 | 0.82 | 0.07 | 0.41 |
-| `permissions` | read | 50.79 | 85.89 | 30.84 | 63.89 |
-| `join` | change | 4.85 | 22.13 | 1.76 | 5.81 |
-| `set_back` | change | 4.45 | 14.45 | 1.88 | 11.24 |
-| `set_afk` | change | 3.43 | 11.12 | 1.43 | 4.91 |
-| `set_home` | change | 2.20 | 5.56 | 0.66 | 2.68 |
-| `send_mail` | change | 1.86 | 5.75 | 0.85 | 2.99 |
-| `mark_mail_read` | change | 0.85 | 3.48 | 0.42 | 2.31 |
-| `transfer` | change | 3.30 | 8.60 | 0.76 | 3.51 |
-| `deposit` | change | 3.17 | 11.09 | 0.70 | 3.31 |
-| `ignore` | change | 0.93 | 1.48 | 0.39 | 0.77 |
-| `set_setting` | change | 0.94 | 3.27 | 0.25 | 2.01 |
+| `player` | read | 0.61 | 1.23 | 0.22 | 0.57 |
+| `player_named` | read | 1.21 | 1.89 | 0.36 | 0.73 |
+| `home` | read | 0.68 | 1.13 | 0.43 | 0.87 |
+| `homes` | read | 1.14 | 2.02 | 0.34 | 0.68 |
+| `warp` | read | 0.36 | 0.52 | 0.12 | 0.22 |
+| `spawn` | read | 0.15 | 0.19 | 0.06 | 0.08 |
+| `balance` | read | 0.39 | 0.77 | 0.16 | 0.47 |
+| `top_balances(10)` | read | 0.74 | 0.81 | 0.06 | 0.06 |
+| `unread_mail` | read | 0.33 | 0.56 | 0.09 | 0.20 |
+| `mail` | read | 0.56 | 1.07 | 0.21 | 0.52 |
+| `ignores` | read | 0.51 | 0.91 | 0.20 | 0.48 |
+| `setting` | read | 0.23 | 0.31 | 0.06 | 0.09 |
+| `player_permissions` | read | 0.28 | 0.63 | 0.06 | 0.36 |
+| `permissions` | read | 49.05 | 65.72 | 28.40 | 46.48 |
+| `join` | change | 4.12 | 8.71 | 1.31 | 4.03 |
+| `set_back` | change | 6.59 | 12.50 | 1.29 | 3.38 |
+| `set_afk` | change | 15.97 | 29.43 | 1.38 | 3.35 |
+| `set_home` | change | 4.71 | 5.05 | 0.96 | 2.37 |
+| `send_mail` | change | 2.14 | 3.70 | 1.25 | 13.68 |
+| `mark_mail_read` | change | 1.42 | 2.93 | 0.72 | 1.92 |
+| `transfer` | change | 6.27 | 9.57 | 0.95 | 8.63 |
+| `deposit` | change | 4.45 | 5.30 | 0.71 | 1.77 |
+| `ignore` | change | 4.61 | 4.32 | 0.74 | 1.64 |
+| `set_setting` | change | 1.31 | 2.91 | 0.39 | 1.52 |
 
 Every call stays three orders of magnitude inside the budget of 1 ms, and a change costs about as
 much as a read, since it waits for nothing. The whole permission set is the one call that copies
-much, and a resolver loads it once and again only when the generation moved. The longest single
-call was 1.48 ms in the debug run and 0.29 ms in the release run, both a copy of the permission
-set, which is the scheduler of a shared machine and not the store, since the 99th percentile of
-the same call is 86 and 64 microseconds.
+much, and a resolver loads it once and again only when the generation moved. The longest single call
+was 14.36 ms in the debug run, a call of `set_afk`, and 0.35 ms in the release run, a call of
+`mark_mail_read`, which is the scheduler of a shared machine and not the store, since the 99th
+percentile of the same calls is 29.4 and 1.9 microseconds.
 
-The writer applied the 18000 changes of the timed calls in 952 ms of the debug build and 280 ms of
-the release build on its own thread, while they cost the server thread 52 ms in the debug build.
-The open of the store of 5000 players took 127 ms in the debug build and 49 ms in the release
-build, and the release process held 40 MB resident with the store open, which bounds the cache
-from above. The file was 7.6 MB.
+The writer applied the 20000 changes of the timed calls in 928 ms of the debug build and 382 ms of
+the release build on its own thread, while they cost the server thread 103 ms in the debug build.
+The open of the store of 5000 players took 142 ms in the debug build and 39 ms in the release build,
+and the release process held 35 MB resident with the store open, which bounds the cache from above.
+The file was 7.9 MB.
 
 ## Tests
 

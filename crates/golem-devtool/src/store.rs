@@ -1303,7 +1303,11 @@ fn summary(mut nanos: Vec<u64>) -> Value {
     })
 }
 
-/// Fills a store with `players` players as a server after years would hold them.
+/// Fills a store with `players` players as a server after years would hold them: each with three
+/// homes and an account, every player but the first with two mails and an ignore of the player
+/// before them, every tenth with a nickname, 50 warps, three spawns, 20 settings, ten groups of 20
+/// nodes that each inherit the one before beside the group `default` with one node, and the first
+/// 100 players in a group and with a node of their own.
 fn fill(store: &Store, players: usize) -> Result<(), StoreError> {
     let at = 1_700_000_000_000;
     for index in 0..players {
@@ -1371,12 +1375,14 @@ fn fill(store: &Store, players: usize) -> Result<(), StoreError> {
     })
 }
 
-/// What one call of the bench works on: the round, a player and another player.
+/// What one call of the bench works on: the round, a player and another player, and how often
+/// the rounds went through every player before this one.
 struct Round {
     index: usize,
     number: usize,
     player: Uuid,
     other: Uuid,
+    pass: usize,
 }
 
 /// The time of a call of the bench, a day after the fill.
@@ -1456,8 +1462,16 @@ const CALLS: &[(&str, fn(&Store, &Round))] = &[
     ("deposit", |store, round| {
         let _ = black_box(store.deposit(round.player, 5, BENCH_AT, "eco give"));
     }),
+    // The fill makes every player ignore the one before them, so a player ignores the one after
+    // them only once the bench did it, and a pass of the rounds through every player puts that
+    // ignore in place and the next one takes it away, so every call changes the store.
     ("ignore", |store, round| {
-        let _ = black_box(store.ignore(round.other, round.player));
+        let changed = if round.pass.is_multiple_of(2) {
+            store.ignore(round.player, round.other)
+        } else {
+            store.unignore(round.player, round.other)
+        };
+        let _ = black_box(changed);
     }),
     ("set_setting", |store, round| {
         let _ = black_box(store.set_setting("counter", &round.index.to_string()));
@@ -1482,6 +1496,7 @@ fn time_calls(
                 number: index % players,
                 player: bench_uuid(index % players),
                 other: bench_uuid((index + 1) % players),
+                pass: index / players,
             };
             let started = Instant::now();
             call(store, &round);
