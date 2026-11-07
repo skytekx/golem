@@ -3,7 +3,8 @@
 /*
  * The subcommands of golem-store: store runs a script of calls on a store and prints the answer
  * of every step as it goes, store-describe prints the schema of a file, and store-bench times
- * the calls of the server thread on a filled store.
+ * the calls of the server thread and the reload of a resolver of the permissions on a filled
+ * store.
  */
 
 //! The primitives of golem-store.
@@ -1508,6 +1509,22 @@ fn time_calls(
     Ok(summaries)
 }
 
+/// Times `count` reloads of the permissions as a resolver makes them once the generation moved:
+/// the set and its generation from the store, its TOML, and the resolver that golem-permissions
+/// loads from that TOML. A reload that golem-permissions refuses ends the bench.
+fn time_reloads(store: &Store, count: usize) -> Result<Value, String> {
+    let mut nanos = Vec::with_capacity(count);
+    for _ in 0..count {
+        let started = Instant::now();
+        let (generation, set) = store.permissions_with_generation();
+        let loaded = golem_permissions::Permissions::from_toml(&set.to_toml());
+        nanos.push(u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
+        let _ = black_box((generation, loaded.as_ref().is_ok()));
+        loaded.map_err(|error| format!("golem-permissions refuses the permissions: {error}"))?;
+    }
+    Ok(summary(nanos))
+}
+
 /// Runs `work` while a second thread reads a balance in a loop, as the server thread would, and
 /// answers the answer of `work`, the longest read meanwhile in nanoseconds and the reads.
 fn while_reading<T>(store: &Store, work: impl FnOnce() -> T) -> (T, u64, u64) {
@@ -1583,7 +1600,7 @@ fn bench(arguments: &[String]) -> i32 {
         Ok(options) => options,
         Err(message) => return fail(name, &message),
     };
-    let run = || -> Result<Value, StoreError> {
+    let run = || -> Result<Value, Box<dyn std::error::Error>> {
         let store = Store::open(&options.path)?;
         let started = Instant::now();
         fill(&store, options.players)?;
@@ -1601,6 +1618,7 @@ fn bench(arguments: &[String]) -> i32 {
         store.flush()?;
         let flush = started.elapsed();
         let after = store.stats();
+        let reload = time_reloads(&store, (options.repeat / 20).max(1))?;
         let check = check_stall(&store, 5)?;
         store.close()?;
         let file_bytes = fs::metadata(&options.path).map_or(0, |metadata| metadata.len());
@@ -1612,6 +1630,7 @@ fn bench(arguments: &[String]) -> i32 {
             "fill_written_ms": millis(fill_written),
             "open_ms": millis(open),
             "calls": calls,
+            "reload": reload,
             "flush_after_calls_ms": millis(flush),
             "writer": {
                 "written": after.written - before.written,

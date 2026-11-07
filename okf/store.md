@@ -69,6 +69,7 @@ players.
 | Every read, such as `player`, `home`, `balance` or `permissions` | Any, the server thread first | No |
 | Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No, but it waits for the writer behind `MAX_PENDING` changes |
 | `flush`, `close`, `check`, `ledger`, `durability` | Not the server thread | Yes |
+| The reload of a resolver of the permissions, see [The cost](#the-cost-on-the-server-thread) | Not the server thread | No |
 | `open` | The start of the program, before the server thread runs | Yes |
 
 `Store` is a handle that clones, so every plugin holds one, and it is `Send` and `Sync`. The lock
@@ -434,7 +435,9 @@ before it writes the change, and loads the set again when the generation moved.
 
 A resolver keeps the generation of the set it loaded, looks at `permissions_generation()` to learn
 whether the permissions changed, and reloads through `permissions_with_generation()`, which answers
-the set and its generation under one lock. `permissions()` and then `permissions_generation()` take
+the set and its generation under one lock, on a thread other than the server thread, since a reload
+costs about a whole budget of a call, see [The cost on the server
+thread](#the-cost-on-the-server-thread). `permissions()` and then `permissions_generation()` take
 the lock twice, so a change of another thread between them, such as the worker thread of the chat
 beside the server thread, pairs the set before the change with the generation after it. A resolver
 that keeps that pair never reloads the change, and a node that was revoked or denied stays granted
@@ -524,41 +527,55 @@ shared.
 
 | Call | Kind | Debug mean | Debug p99 | Release mean | Release p99 |
 | --- | --- | --- | --- | --- | --- |
-| `player` | read | 0.61 | 1.23 | 0.22 | 0.57 |
-| `player_named` | read | 1.21 | 1.89 | 0.36 | 0.73 |
-| `home` | read | 0.68 | 1.13 | 0.43 | 0.87 |
-| `homes` | read | 1.14 | 2.02 | 0.34 | 0.68 |
-| `warp` | read | 0.36 | 0.52 | 0.12 | 0.22 |
-| `spawn` | read | 0.15 | 0.19 | 0.06 | 0.08 |
-| `balance` | read | 0.39 | 0.77 | 0.16 | 0.47 |
-| `top_balances(10)` | read | 0.74 | 0.81 | 0.06 | 0.06 |
-| `unread_mail` | read | 0.33 | 0.56 | 0.09 | 0.20 |
-| `mail` | read | 0.56 | 1.07 | 0.21 | 0.52 |
-| `ignores` | read | 0.51 | 0.91 | 0.20 | 0.48 |
-| `setting` | read | 0.23 | 0.31 | 0.06 | 0.09 |
-| `player_permissions` | read | 0.28 | 0.63 | 0.06 | 0.36 |
-| `permissions` | read | 49.05 | 65.72 | 28.40 | 46.48 |
-| `join` | change | 4.12 | 8.71 | 1.31 | 4.03 |
-| `set_back` | change | 6.59 | 12.50 | 1.29 | 3.38 |
-| `set_afk` | change | 15.97 | 29.43 | 1.38 | 3.35 |
-| `set_home` | change | 4.71 | 5.05 | 0.96 | 2.37 |
-| `send_mail` | change | 2.14 | 3.70 | 1.25 | 13.68 |
-| `mark_mail_read` | change | 1.42 | 2.93 | 0.72 | 1.92 |
-| `transfer` | change | 6.27 | 9.57 | 0.95 | 8.63 |
-| `deposit` | change | 4.45 | 5.30 | 0.71 | 1.77 |
-| `ignore` | change | 4.61 | 4.32 | 0.74 | 1.64 |
-| `set_setting` | change | 1.31 | 2.91 | 0.39 | 1.52 |
+| `player` | read | 0.55 | 0.93 | 0.22 | 0.59 |
+| `player_named` | read | 1.30 | 2.71 | 0.35 | 0.74 |
+| `home` | read | 0.65 | 1.33 | 0.28 | 0.59 |
+| `homes` | read | 1.10 | 1.66 | 0.34 | 0.65 |
+| `warp` | read | 0.38 | 0.63 | 0.12 | 0.23 |
+| `spawn` | read | 0.16 | 0.20 | 0.06 | 0.08 |
+| `balance` | read | 0.36 | 0.73 | 0.12 | 0.42 |
+| `top_balances(10)` | read | 0.75 | 1.13 | 0.06 | 0.11 |
+| `unread_mail` | read | 0.36 | 0.67 | 0.10 | 0.20 |
+| `mail` | read | 0.62 | 1.07 | 0.21 | 0.56 |
+| `ignores` | read | 0.48 | 0.78 | 0.20 | 0.48 |
+| `setting` | read | 0.23 | 0.29 | 0.06 | 0.08 |
+| `player_permissions` | read | 0.28 | 0.58 | 0.06 | 0.29 |
+| `permissions` | read | 49.77 | 79.82 | 27.02 | 41.51 |
+| `permissions_with_generation`, `to_toml` and `Permissions::from_toml` | reload | 7479.14 | 9074.06 | 867.06 | 5009.63 |
+| `join` | change | 4.50 | 21.14 | 1.15 | 4.05 |
+| `set_back` | change | 6.75 | 21.06 | 1.52 | 9.41 |
+| `set_afk` | change | 8.60 | 16.13 | 1.22 | 3.10 |
+| `set_home` | change | 23.22 | 9.48 | 0.70 | 1.83 |
+| `send_mail` | change | 2.10 | 4.34 | 0.91 | 8.73 |
+| `mark_mail_read` | change | 2.57 | 2.73 | 0.49 | 1.12 |
+| `transfer` | change | 7.32 | 12.79 | 0.78 | 2.19 |
+| `deposit` | change | 3.31 | 7.27 | 0.53 | 1.45 |
+| `ignore` | change | 1.62 | 2.72 | 0.60 | 1.41 |
+| `set_setting` | change | 1.16 | 2.69 | 0.43 | 1.55 |
 
-Every call stays three orders of magnitude inside the budget of 1 ms, and a change costs about as
-much as a read, since it waits for nothing. The whole permission set is the one call that copies
-much, and a resolver loads it once and again only when the generation moved. The longest single call
-was 14.36 ms in the debug run, a call of `set_afk`, and 0.35 ms in the release run, a call of
-`mark_mail_read`, which is the scheduler of a shared machine and not the store, since the 99th
-percentile of the same calls is 29.4 and 1.9 microseconds.
+Every call stays inside the budget of 1 ms in its mean and in its 99th percentile. A read of one
+record takes at most 1.3 microseconds in the mean of the debug build, and a change 1.2 to 23.2
+microseconds, since it checks its rules, changes the cache and queues one operation, and it waits
+for nothing below `MAX_PENDING`. A single call that the scheduler of the shared machine stopped for
+milliseconds raises a mean, which the 99th percentile beside it shows. The copy of the whole
+permission set is the one call that copies much, 50 microseconds in the mean or 20 times inside the
+budget. The longest single call was 40.09 ms in the debug run, a call of `set_home`, and 0.18 ms in
+the release run, a call of `set_back`, which is the scheduler of a shared machine and not the store,
+since the 99th percentile of the same calls is 9.5 and 9.4 microseconds.
 
-The writer applied the 20000 changes of the timed calls in 928 ms of the debug build and 382 ms of
-the release build on its own thread, while they cost the server thread 103 ms in the debug build.
-The open of the store of 5000 players took 142 ms in the debug build and 39 ms in the release build,
+A resolver loads the set again whenever the generation moved, and every change of the permissions of
+any player moves it. A reload is `permissions_with_generation`, the `to_toml` of the set and
+`Permissions::from_toml` of `golem-permissions`, and the bench times 100 reloads of its set of
+eleven groups and 100 players with entries of their own: 7.5 ms in the mean in the debug build and
+0.87 ms in the release build, which is about the whole budget of a call or more, and the time grows
+with the players that have entries of their own. So a port reloads on a thread of its own, such as a
+worker that builds the new resolver and then swaps it in, and the server thread keeps checking with
+the resolver it holds until then. `09_store` holds the mean reload of the bench store in the debug
+build below 50 ms.
+
+The writer applied the 20000 changes of the timed calls in 876 ms of the debug build and 399 ms of
+the release build on its own thread, while they cost the server thread 122 ms in the debug build.
+The open of the store of 5000 players took 130 ms in the debug build and 49 ms in the release build,
 and the release process held 35 MB resident with the store open, which bounds the cache from above.
 The file was 7.9 MB.
 
