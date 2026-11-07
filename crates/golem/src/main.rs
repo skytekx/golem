@@ -380,12 +380,13 @@ enum Stop {
 
 /// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own.
 ///
-/// When the bridge is connected, the first signal queues save-all flush and stop, which the mod
-/// runs on the server thread at the end of the next tick. Without the bridge no tick drains the
-/// queue, so the first signal ends the JVM through System.exit, which runs the shutdown hook of
-/// the server as a signal does under java. A later signal changes nothing, since the stop is
-/// already on its way and a second stop would only race it, and it logs how the first one goes.
-/// SIGQUIT prints the dump of every thread and stops nothing, as under java, also while the
+/// While the server ticks, the first signal queues save-all flush and stop, which the mod runs
+/// on the server thread at the end of the next tick. No tick drains the queue without the bridge,
+/// before the first tick and after the server stopped, so a signal then ends the JVM through
+/// System.exit, which runs the shutdown hook of the server as a signal does under java, also
+/// when an earlier signal queued a stop that no tick ran. A later signal changes nothing while
+/// the stop is on its way, since a second stop would only race it, and it logs how the first one
+/// goes. SIGQUIT prints the dump of every thread and stops nothing, as under java, also while the
 /// shutdown hooks run.
 fn watch_signals(actions: Actions) -> Result<(), String> {
     use signal_hook::consts::{
@@ -421,13 +422,13 @@ fn watch_signals(actions: Actions) -> Result<(), String> {
                 }
                 let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
                 match stop {
-                    Stop::Queued => log(format_args!(
-                        "{name}: the stop is already queued, waiting for the server to end"
-                    )),
                     Stop::Exiting => log(format_args!(
                         "{name}: the JVM already exits through the shutdown hook of the server"
                     )),
-                    Stop::None if golem_bridge::connected() => {
+                    Stop::Queued if golem_bridge::ticking() => log(format_args!(
+                        "{name}: the stop is already queued, waiting for the server to end"
+                    )),
+                    Stop::None if golem_bridge::ticking() => {
                         actions.push(Action::Command("save-all flush".to_owned()));
                         actions.push(Action::Command("stop".to_owned()));
                         log(format_args!(
@@ -435,9 +436,16 @@ fn watch_signals(actions: Actions) -> Result<(), String> {
                         ));
                         stop = Stop::Queued;
                     }
-                    Stop::None => {
+                    Stop::None | Stop::Queued => {
+                        let why = if !golem_bridge::connected() {
+                            "the bridge is not connected"
+                        } else if golem_bridge::stats().ticks == 0 {
+                            "the server does not tick yet"
+                        } else {
+                            "the server has stopped"
+                        };
                         log(format_args!(
-                            "{name}: the bridge is not connected, so the JVM exits through the shutdown hook of the server"
+                            "{name}: {why}, so the JVM exits through the shutdown hook of the server"
                         ));
                         exit_through_jvm(128 + signal);
                         stop = Stop::Exiting;

@@ -261,10 +261,17 @@ pub fn stats() -> TickStats {
     host::stats()
 }
 
-/// Answers whether the bridge mod has reached the natives, so that it runs the queued actions.
-/// A server without the mod in `mods/`, or before Forge constructs it, never runs them.
+/// Answers whether the bridge mod has reached the natives, which it does while Forge constructs
+/// it. A server without the mod in `mods/` never reaches them.
 pub fn connected() -> bool {
     host::connected()
+}
+
+/// Answers whether the bridge mod runs the queued actions, at the end of every server tick from
+/// the first tick until the server stopped. Before the first tick, after the stop and on a server
+/// without the mod, no tick runs them.
+pub fn ticking() -> bool {
+    host::ticking()
 }
 
 /// Writes one line to the log of the server, the standard error, behind the prefix `[golem]`.

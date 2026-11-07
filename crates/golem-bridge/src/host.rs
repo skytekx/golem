@@ -111,6 +111,10 @@ static HOST: OnceLock<Host> = OnceLock::new();
 /// True once the mod has called `version()`, which it does while Forge constructs it.
 static CONNECTED: AtomicBool = AtomicBool::new(false);
 
+/// True from the first `tick()` until `serverStopped()`, while the mod drains the queue of actions
+/// at the end of every server tick.
+static TICKING: AtomicBool = AtomicBool::new(false);
+
 /// The thread of the first `serverStarting()`, the server thread, on which the game may be asked.
 static SERVER_THREAD: OnceLock<ThreadId> = OnceLock::new();
 
@@ -279,10 +283,15 @@ pub fn version() -> &'static str {
     VERSION
 }
 
-/// Answers whether the mod has called `version()`, after which it drains the queue of actions
-/// at the end of every server tick.
+/// Answers whether the mod has called `version()`, which it does while Forge constructs it.
 pub fn connected() -> bool {
     CONNECTED.load(Ordering::Acquire)
+}
+
+/// Answers whether the mod drains the queue of actions at the end of every server tick, which it
+/// does from the first `tick()` until `serverStopped()`.
+pub fn ticking() -> bool {
+    TICKING.load(Ordering::Acquire)
 }
 
 /// Reports `ServerStartingEvent` with the versions of Forge and Minecraft, and takes the thread
@@ -326,8 +335,9 @@ pub fn server_stopping(game: &dyn Game) {
     });
 }
 
-/// Reports `ServerStoppedEvent`.
+/// Reports `ServerStoppedEvent`, after which no tick drains the queue of actions.
 pub fn server_stopped(game: &dyn Game) {
+    TICKING.store(false, Ordering::Release);
     guard("serverStopped", (), || {
         dispatch("serverStopped", &Event::ServerStopped, game);
     });
@@ -338,6 +348,8 @@ pub fn server_stopped(game: &dyn Game) {
 /// The tick enters the statistics before the handler sees it, so a plugin that reads them on
 /// the tick reads that tick too. A negative duration, which the mod never sends, counts as 0.
 pub fn tick(nanos: i64, game: &dyn Game) {
+    // The mod drains the queue right after this call, at the end of the same tick.
+    TICKING.store(true, Ordering::Release);
     guard("tick", (), || {
         let nanos = u64::try_from(nanos).unwrap_or(0);
         host()
