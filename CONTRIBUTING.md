@@ -39,7 +39,9 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 ```
 
 The author of a commit is the person or the account that made it. An agent that helped names
-itself in a `Co-Authored-By` line above the sign off. A commit without the sign off is not merged.
+itself in a `Co-Authored-By` line above the sign off, and the line may also be spelled
+`Co-authored-by`, as GitHub writes it in the commits that it makes. A commit without the sign off
+is not merged.
 
 ## 3. Commit messages
 

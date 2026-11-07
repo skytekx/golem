@@ -67,11 +67,15 @@ SUBJECT_LIMIT = 72
 BODY_LIMIT = 72
 
 #: The trailers of the kernel's submitting-patches.rst, and those this repository adds: the
-#: Closes of a GitHub issue, the Co-Authored-By of GitHub and the session link of an agent.
+#: Closes of a GitHub issue, the Co-Authored-By that GitHub reads as a co-author and the session
+#: link of an agent.
 TRAILERS = (
     "Signed-off-by", "Co-developed-by", "Acked-by", "Reviewed-by", "Tested-by", "Reported-by",
     "Suggested-by", "Cc", "Fixes", "Link", "Closes", "Co-Authored-By", "Claude-Session",
 )
+#: The second spelling of a trailer that stands beside the first: GitHub writes Co-authored-by in
+#: the commits that it makes, such as a suggestion or a squash merge.
+SPELLINGS = {"Co-Authored-By": ("Co-authored-by",)}
 TRAILER = re.compile(r"^(?P<token>[A-Za-z][A-Za-z-]*): (?P<value>\S.*)$")
 PERSON = re.compile(r"^[^<>]+ <[^<>@\s]+@[^<>@\s]+>$")
 FIXES = re.compile(r'^[0-9a-f]{12,40} \("[^\n]+"\)$')
@@ -315,7 +319,7 @@ def check_message(message: str, subject_of=None) -> list[str]:
         canonical = next((known for known in TRAILERS if known.lower() == token.lower()), None)
         if canonical is None:
             failures.append("rule 5: the trailer %s is none of the kernel or of this repository" % token)
-        elif canonical != token:
+        elif canonical != token and token not in SPELLINGS.get(canonical, ()):
             failures.append("rule 5: the trailer %s is spelled %s" % (token, canonical))
         if canonical in ("Signed-off-by", "Co-developed-by", "Co-Authored-By", "Reviewed-by", "Tested-by",
                          "Acked-by", "Reported-by", "Suggested-by") and not PERSON.match(value):
