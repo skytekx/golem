@@ -595,15 +595,17 @@ shared.
 | `ignore` | change | 1.62 | 2.72 | 0.60 | 1.41 |
 | `set_setting` | change | 1.16 | 2.69 | 0.43 | 1.55 |
 
-Every call stays inside the budget of 1 ms in its mean and in its 99th percentile. A read of one
-record takes at most 1.3 microseconds in the mean of the debug build, and a change 1.2 to 23.2
-microseconds, since it checks its rules, changes the cache and queues one operation, and it waits
-for nothing below `MAX_PENDING`. A single call that the scheduler of the shared machine stopped for
-milliseconds raises a mean, which the 99th percentile beside it shows. The copy of the whole
-permission set is the one call that copies much, 50 microseconds in the mean or 20 times inside the
-budget. The longest single call was 40.09 ms in the debug run, a call of `set_home`, and 0.18 ms in
-the release run, a call of `set_back`, which is the scheduler of a shared machine and not the store,
-since the 99th percentile of the same calls is 9.5 and 9.4 microseconds.
+Every read and every change of the table, the calls of the server thread, stays inside the budget of
+1 ms in its mean and in its 99th percentile in both builds. The reload of the permissions is no call
+of the server thread and takes far longer, see below. A read of one record takes at most 1.3
+microseconds in the mean of the debug build, and a change 1.2 to 23.2 microseconds, since it checks
+its rules, changes the cache and queues one operation, and it waits for nothing below `MAX_PENDING`.
+A single call that the scheduler of the shared machine stopped for milliseconds raises a mean, which
+the 99th percentile beside it shows. The copy of the whole permission set is the one call that
+copies much, 50 microseconds in the mean or 20 times inside the budget. The longest single call was
+40.09 ms in the debug run, a call of `set_home`, and 0.18 ms in the release run, a call of
+`set_back`, which is the scheduler of a shared machine and not the store, since the 99th percentile
+of the same calls is 9.5 and 9.4 microseconds.
 
 A resolver loads the set again whenever the generation moved, and every change of the permissions of
 any player moves it. A reload is `permissions_with_generation`, the `to_toml` of the set and
