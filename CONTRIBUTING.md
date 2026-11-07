@@ -91,7 +91,9 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 its questions and `cz check` checks one. The questions of the body and of the trailers take several
 lines, which Esc and then Enter end. The commit lint,
 [.github/scripts/commit_lint.py](.github/scripts/commit_lint.py), checks the rules of the kernel
-that Commitizen does not know. CI runs both on every commit of a push and of a pull request.
+that Commitizen does not know. CI runs both on the commits of every push and pull request: the
+commits that a pull request adds to its base, the commits that a push adds to `main`, and on
+another branch or a tag the commits that `main` does not hold.
 
 ## 4. Style
 

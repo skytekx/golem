@@ -5,6 +5,8 @@
 
     python3 -I .github/scripts/commit_lint.py
     python3 -I .github/scripts/commit_lint.py --range origin/main..HEAD
+    python3 -I .github/scripts/commit_lint.py --event "$GITHUB_EVENT_PATH"
+    python3 -I .github/scripts/commit_lint.py --event "$GITHUB_EVENT_PATH" --print-range
     python3 -I .github/scripts/commit_lint.py --message-file .git/COMMIT_EDITMSG
     python3 -I .github/scripts/commit_lint.py --root path/to/repository
 
@@ -43,13 +45,21 @@ shallow clone cuts the parents of the commits at its edge, so there a commit who
 writes for a merge, such as the merge of a pull request that CI checks out, is left out as well.
 
 With no range, the commits are those of HEAD that origin/main does not hold, or every commit of
-HEAD while origin/main does not exist. Every failure is printed with the short hash and the
-subject, and the exit status is 1 when any rule fails.
+HEAD while origin/main does not exist. With --event, the payload of the GitHub event that
+GITHUB_EVENT_PATH names gives them, in a clone of the whole history as actions/checkout makes it:
+the commits that a pull request adds to its base, the commits that a push to main adds to the main
+it replaced, every commit of a push that creates main or replaces a main that the clone lacks, and
+for a push of another branch or of a tag the commits that origin/main does not hold. --print-range
+prints the range and checks nothing, so Commitizen can check the same commits.
+
+Every failure is printed with the short hash and the subject, and the exit status is 1 when any
+rule fails.
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -93,11 +103,31 @@ def git(root: Path, *args: str) -> str:
     return result.stdout
 
 
+def is_commit(root: Path, revision: str) -> bool:
+    """Whether `revision` names a commit that `root` holds."""
+    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", revision + "^{commit}"],
+                           capture_output=True, text=True, check=False)
+    return probe.returncode == 0
+
+
 def default_range(root: Path) -> str:
     """origin/main..HEAD, or HEAD alone while origin/main does not exist."""
-    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--verify", "--quiet", "origin/main"],
-                           capture_output=True, text=True, check=False)
-    return "origin/main..HEAD" if probe.returncode == 0 else "HEAD"
+    return "origin/main..HEAD" if is_commit(root, "origin/main") else "HEAD"
+
+
+def event_range(root: Path, event: dict) -> str:
+    """The commits that the GitHub event of the payload `event` brings to the clone `root`."""
+    request = event.get("pull_request")
+    if isinstance(request, dict):
+        return "%s..%s" % (request["base"]["sha"], request["head"]["sha"])
+    if event.get("ref") == "refs/heads/main" and (event.get("after") or "").strip("0"):
+        before = event.get("before") or ""
+        # A push that creates main names no commit before it, and a forced push may name one that
+        # the clone lacks. The whole history of main passes the lint, so it is checked then.
+        if before.strip("0") and is_commit(root, before):
+            return "%s..%s" % (before, event["after"])
+        return event["after"]
+    return default_range(root)
 
 
 #: The subject git gives a merge commit, and GitHub the merge of a pull request.
@@ -353,9 +383,13 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Check the commit messages of a range.")
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--range", dest="revisions", help="The commits to check, by default origin/main..HEAD.")
+    source.add_argument("--event", type=Path, help="Check the commits of the GitHub event of this payload.")
     source.add_argument("--message-file", type=Path, help="Check one message from a file, as a commit-msg hook.")
+    parser.add_argument("--print-range", action="store_true", help="Print the range of the commits, check none.")
     parser.add_argument("--root", type=Path, default=ROOT, help="The repository, by default this one.")
     args = parser.parse_args(argv)
+    if args.print_range and args.message_file:
+        parser.error("--print-range belongs to a range")
 
     subject_of = resolver(args.root)
     if args.message_file:
@@ -368,9 +402,15 @@ def main(argv=None) -> int:
         return 1 if failures else 0
 
     try:
-        revisions = args.revisions or default_range(args.root)
+        if args.event:
+            revisions = event_range(args.root, json.loads(args.event.read_text(encoding="utf-8")))
+        else:
+            revisions = args.revisions or default_range(args.root)
+        if args.print_range:
+            print(revisions)
+            return 0
         found = commits(args.root, revisions)
-    except Failure as broken:
+    except (Failure, OSError, ValueError, KeyError, TypeError) as broken:
         print("commit_lint: %s" % broken, file=sys.stderr)
         return 1
     failed = 0

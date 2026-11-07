@@ -10,9 +10,11 @@
 # and README.md to the rules of CONTRIBUTING.md section 4, and checks that the index of the wiki
 # links every page and that Documentation/testing.md names every notebook of tests/matrix.yaml.
 #
-# The job commits checks every commit message of the push or the pull request, once with
-# Commitizen as .cz.toml configures it and once with the commit lint of Golem for the rules of
-# the Linux kernel, as CONTRIBUTING.md describes.
+# The job commits checks the message of every commit that the push or the pull request brings,
+# once with Commitizen as .cz.toml configures it and once with the commit lint of Golem for the
+# rules of the Linux kernel, as CONTRIBUTING.md describes. The lint picks the commits from the
+# event: those a pull request adds to its base, those a push adds to main, and on another branch
+# or a tag those that main does not hold.
 #
 # The job rust checks the format of the workspace, lints it with clippy, which denies every
 # warning, builds it and its documentation, all on the toolchain of rust-toolchain.toml and the
@@ -96,22 +98,33 @@ jobs:
         with:
           python-version: "3.14"
 
+      # The commits of the event, which both checks judge. After a push to main, origin/main is the
+      # commit pushed, so the commits that main lacks would be none.
+      - name: Choose the commits of the event
+        id: range
+        run: |
+          range=$(python3 -I .github/scripts/commit_lint.py --event "$GITHUB_EVENT_PATH" --print-range)
+          echo "range=$range" >> "$GITHUB_OUTPUT"
+
       - name: Lint the commit messages
-        run: python3 -I .github/scripts/commit_lint.py
+        env:
+          RANGE: ${{ steps.range.outputs.range }}
+        run: python3 -I .github/scripts/commit_lint.py --range "$RANGE"
 
       - name: Install Commitizen
         run: python3 -m pip install --disable-pip-version-check --no-input commitizen==4.19.2
 
-      # The same range as the commit lint: the commits that main does not hold, or all of
-      # them while main does not exist.
+      # cz check fails on a range that holds no commit, such as the push of a tag on main, where
+      # the lint finds nothing to judge either.
       - name: Check the commit messages with Commitizen
+        env:
+          RANGE: ${{ steps.range.outputs.range }}
         run: |
-          if git rev-parse --verify --quiet origin/main > /dev/null; then
-            range=origin/main..HEAD
+          if [ "$(git rev-list --count "$RANGE")" -eq 0 ]; then
+            echo "cz check: the range $RANGE holds no commit"
           else
-            range=HEAD
+            cz check --rev-range "$RANGE"
           fi
-          cz check --rev-range "$range"
 
   rust:
     name: Rust
