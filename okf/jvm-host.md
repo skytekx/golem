@@ -21,7 +21,8 @@ The reference for every rule on this page is the launcher of JDK 17, the files `
 holds the host to the launcher of Temurin 17.0.21 case by case: 19 argument files, 18 launches, 13
 launches that fail, 35 refused command lines and the real `user_jvm_args.txt` and `unix_args.txt` of
 Forge 47.4.18, each read by `golem-devtool` and run by a probe program under java and in the
-embedded JVM, on 2026-11-07 in the cloud container of the session.
+embedded JVM, on 2026-11-07 in the cloud container of the session. The verdict of the notebook
+checks that this page states its numbers.
 
 ## golem run
 
