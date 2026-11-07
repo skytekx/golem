@@ -5,7 +5,7 @@ type: Spec
 title: Plugins
 description: The plugin runtime of Golem, the handler of the bridge that calls the Rust plugins on the server thread in their order, times every call against a budget, catches their panics and routes their commands.
 tags: [plugins, runtime, budget, commands, bridge]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Plugins
@@ -13,8 +13,9 @@ timestamp: 2026-11-06
 A Golem plugin is Rust code that the plugin runtime calls on the server thread, for the events of
 the [bridge](../bridge.md) and for the commands it declares. The runtime lives in the crate
 `golem-plugin` and is the handler that `golem-bridge` hands every native method to. A plugin that
-only observes the game uses the subscriptions of the GraphQL API instead, since a call on the
-server thread holds up the tick.
+only observes the game will use the subscriptions of the GraphQL API instead, since a call on the
+server thread holds up the tick. The [Plugin API](../api.md) designs that API, and it is not built
+yet.
 
 Forge 47 calls `chat()` on a worker thread and `commandNames()` on the main thread at startup, as
 the bridge page says. The handler sits behind one lock, so the runtime still runs one call at a

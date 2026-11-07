@@ -5,9 +5,9 @@
  *
  * A Golem plugin is Rust code that the runtime calls on the server thread, for the events that
  * can be cancelled or changed and for the commands it declares. Every call is timed against the
- * budget of the runtime, and the runtime keeps the time of every plugin, so the API can report
- * which plugin costs the server how much. A plugin that only observes uses the subscriptions of
- * the GraphQL API instead.
+ * budget of the runtime, and the runtime keeps the time of every plugin, so the GraphQL API can
+ * report which plugin costs the server how much once it is built. A plugin that only observes
+ * will use the subscriptions of that API instead, which okf/api.md designs.
  *
  * The runtime is the handler of golem-bridge. The core plugin answers the command golem.
  */
