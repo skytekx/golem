@@ -5,7 +5,7 @@ type: Spec
 title: JVM host
 description: The JVM host of Golem as it is built, how golem-jvm reads the launch of a Forge server as the java launcher of JDK 17 reads it, the options Golem adds, the thread, the hooks, the stop path, the errors and where golem run finds the host jar.
 tags: [jvm, jni, launcher, forge, host, signals]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # JVM host
@@ -225,12 +225,14 @@ A later signal logs that the stop is already queued and changes nothing.
 A shutdown signal that golem started with ignored stays ignored, as HotSpot leaves it, so a server
 under `nohup` keeps running on a hangup, and golem logs that at the start.
 
-`SIGQUIT` stops nothing. The JVM prints the dump of every thread on it, but `-Xrs` takes that
-signal from the JVM too, and its default action would end the process without saving. So the thread
+`SIGQUIT` stops nothing. The JVM prints the dump of every thread on it, but `-Xrs` takes that signal
+from the JVM too, and its default action would end the process without saving. So the thread
 `golem-signals` takes it as well and prints the dump on standard output itself, from the operation
 `threadPrint` of the bean `DiagnosticCommand`, which is what `jcmd <pid> Thread.print` runs, and
-logs `[golem] SIGQUIT: printed the dump of every thread`. `jcmd` and `jstack` attach as under java,
-since HotSpot starts its attach listener at startup when `-Xrs` is set.
+logs `[golem] SIGQUIT: printed the dump of every thread`. The thread attaches to the JVM under its
+own name, so the dump shows it as `golem-signals` and not as the `Thread-N` that the JNI gives a
+thread that attaches without a name. `jcmd` and `jstack` attach as under java, since HotSpot starts
+its attach listener at startup when `-Xrs` is set.
 
 When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run` exits with 0.
 This replaces the signal stop of Arclight, whose shutdown thread worked on chunks beside the server

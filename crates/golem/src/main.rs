@@ -206,6 +206,43 @@ fn register(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<()> {
     golem_bridge::register_natives(env)
 }
 
+/// Attaches the current thread of the host to `vm` as a daemon, under the name it has in the
+/// process.
+///
+/// The JNI names a thread that attaches without a name `Thread-N`, so a dump of the threads would
+/// show the thread of the host as an anonymous thread of Java. A failure to name it changes
+/// nothing else, so it is cleared and the thread keeps the name of the JVM.
+fn attach(vm: &jni::JavaVM) -> jni::errors::Result<jni::JNIEnv<'_>> {
+    if let Ok(env) = vm.get_env() {
+        return Ok(env);
+    }
+    let mut env = vm.attach_current_thread_as_daemon()?;
+    if let Some(name) = std::thread::current().name() {
+        let named = env.with_local_frame(4, |env| -> jni::errors::Result<()> {
+            let thread = env
+                .call_static_method(
+                    "java/lang/Thread",
+                    "currentThread",
+                    "()Ljava/lang/Thread;",
+                    &[],
+                )?
+                .l()?;
+            let name = env.new_string(name)?;
+            env.call_method(
+                &thread,
+                "setName",
+                "(Ljava/lang/String;)V",
+                &[jni::objects::JValue::Object(&name)],
+            )?;
+            Ok(())
+        });
+        if named.is_err() {
+            let _ = env.exception_clear();
+        }
+    }
+    Ok(env)
+}
+
 /// Ends the JVM as the java launcher does on a signal, with System.exit and the exit status
 /// 128 plus the number of the signal, so the shutdown hook of the server stops it and saves the
 /// worlds. Before the JVM exists there is nothing to save, and golem exits at once.
@@ -216,7 +253,7 @@ fn exit_through_jvm(status: i32) {
         ));
         std::process::exit(status);
     };
-    let exited = vm.attach_current_thread_as_daemon().and_then(|mut env| {
+    let exited = attach(vm).and_then(|mut env| {
         env.call_static_method(
             "java/lang/System",
             "exit",
@@ -287,7 +324,7 @@ fn print_thread_dump() {
         ));
         return;
     };
-    let dump = vm.attach_current_thread_as_daemon().and_then(|mut env| {
+    let dump = attach(vm).and_then(|mut env| {
         // The thread stays attached and never returns to Java, so nothing else frees the local
         // references of a dump, and each would keep its objects, the text of the dump among
         // them, until the process ends. A frame of their own frees them once the text is read.
