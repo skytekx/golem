@@ -136,7 +136,8 @@ until the player leaves, or its clearing without a text, and answers
 Each tool answers `No player <name> is online.` for a player who is not, names a dimension the
 server does not have, and answers its usage for words it cannot read. The tools ask the game on
 the server thread alone, so a tool answers `The game gives no answer now, so try again.` when the
-game cannot answer.
+game cannot answer, also to a player whose operator level the game does not answer, in place of
+the refusal.
 
 ## Help
 

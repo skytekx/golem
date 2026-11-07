@@ -59,14 +59,16 @@ pub fn whoami(sender: &Sender, game: &dyn Game) -> Vec<String> {
 
 /// Answers the refusal of the subcommand `name` for a sender below the operator level, or
 /// `None` when the sender may run it. A player counts at the lower of the level of the source
-/// and their operator level.
+/// and their operator level, and a player whom the game does not answer reads that the game
+/// gives no answer, since that says nothing about their level.
 pub fn refusal(name: &str, sender: &Sender, game: &dyn Game) -> Option<Vec<String>> {
     let allowed = match sender {
         Sender::Console => true,
         Sender::Other { level, .. } => *level >= OPERATOR_LEVEL,
         Sender::Player { player, level } => match game.player(&player.uuid) {
             Some(Some(online)) => online.level.min(*level) >= OPERATOR_LEVEL,
-            Some(None) | None => false,
+            Some(None) => false,
+            None => return Some(vec![NO_ANSWER.to_owned()]),
         },
     };
     (!allowed).then(|| {

@@ -21,7 +21,9 @@
 //! }
 //! ```
 //!
-//! A player without `respawn` has none and one without `mainHand` holds nothing. A dimension
+//! A player without `respawn` has none and one without `mainHand` holds nothing, and
+//! `"players": null` makes the game answer none for the players, as a game that cannot answer
+//! does. A dimension
 //! with `safe` answers that place to every search for a safe place, one with `"safe":
 //! "unloaded"` answers that a chunk the search must read is not loaded, and one without answers
 //! that there is none. A script without `game` asks a game that answers nothing.
@@ -109,8 +111,8 @@ pub fn location_json(location: &Location) -> Value {
 #[derive(Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct GameSpec {
-    #[serde(default)]
-    players: Vec<PlayerSpec>,
+    #[serde(default = "no_players")]
+    players: Option<Vec<PlayerSpec>>,
     #[serde(default)]
     dimensions: Vec<DimensionSpec>,
 }
@@ -134,6 +136,12 @@ struct PlayerSpec {
     location: LocationSpec,
     respawn: Option<BlockSpec>,
     main_hand: Option<ItemSpec>,
+}
+
+/// The players of a script that names none: nobody is online.
+#[allow(clippy::unnecessary_wraps)]
+fn no_players() -> Option<Vec<PlayerSpec>> {
+    Some(Vec::new())
 }
 
 /// The default game mode of a scripted player.
@@ -219,7 +227,11 @@ impl ScriptedGame {
     }
 
     fn of(&self, uuid: &str) -> Option<&PlayerSpec> {
-        self.spec.players.iter().find(|player| player.uuid == uuid)
+        self.spec
+            .players
+            .as_ref()?
+            .iter()
+            .find(|player| player.uuid == uuid)
     }
 
     fn dimension(&self, id: &str) -> Option<&DimensionSpec> {
@@ -234,6 +246,7 @@ impl Game for ScriptedGame {
     fn players(&self) -> Option<Vec<OnlinePlayer>> {
         self.spec
             .players
+            .as_ref()?
             .iter()
             .map(|player| {
                 Some(OnlinePlayer {
