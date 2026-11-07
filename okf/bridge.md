@@ -181,7 +181,9 @@ display name that a mod made, has it replaced by a space.
 | `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block, or the one field `unloaded` when the search met a chunk that is not loaded | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
 
 The game mode is the name of the game, `survival`, `creative`, `adventure` or `spectator`. The
-permission level is the operator level of the profile, 0 to 4, from `getProfilePermissions`. The
+permission level is the operator level of the profile from `getProfilePermissions`, which neither
+`ops.json` nor `op-permission-level` of `server.properties` bounds, so Golem reads a level above 4
+as 4 and one below 0 as 0, with one line on the log, instead of dropping the player. The
 time since the last action is `Util.getMillis()` less `getLastActionTime()`, which the game
 resets when the player moves, chats, uses an item or clicks, so a plugin marks a player who is
 away. The shared spawn of the Nether and the End is the one of the Overworld, since Minecraft

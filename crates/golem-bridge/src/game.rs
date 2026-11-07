@@ -269,10 +269,16 @@ impl Game for NoGame {
 ///
 /// Each function reads the answer of one method of the interface Game of the host jar, which is
 /// not null, and answers `None` when it does not read: a wrong number of fields, a number that
-/// does not read or is not finite, or a game mode the game does not have. The empty answer is
+/// does not read or is not finite, or a game mode the game does not have. An operator level
+/// outside 0 to 4, which the game allows, reads as the nearest of them. The empty answer is
 /// the inner `None` of the answers that may be empty, and [`SafePlace::Nowhere`] for a safe
 /// place.
 pub mod wire {
+    use std::sync::atomic::{
+        AtomicBool,
+        Ordering, //
+    };
+
     use crate::{
         BlockLocation,
         GameMode,
@@ -287,6 +293,9 @@ pub mod wire {
 
     /// The answer of `safeLocation` when the search met a chunk that is not loaded.
     pub const UNLOADED: &str = "unloaded";
+
+    /// Whether an operator level outside 0 to 4 was already logged.
+    static LEVEL_LOGGED: AtomicBool = AtomicBool::new(false);
 
     /// Answers the fields of an answer.
     fn fields(answer: &str) -> Vec<&str> {
@@ -326,12 +335,25 @@ pub mod wire {
             // A ping below 0, which the game never answers, counts as 0.
             ping_ms: u32::try_from(ping.parse::<i64>().ok()?.max(0)).ok()?,
             game_mode: GameMode::from_name(game_mode)?,
-            level: level
-                .parse()
-                .ok()
-                .filter(|level| *level <= crate::MAX_LEVEL)?,
+            level: operator_level(name, level)?,
             idle_ms: idle.parse().ok()?,
         })
+    }
+
+    /// Reads the operator level of the player `name`, held to 0 to 4.
+    ///
+    /// The game takes the level of ops.json and of op-permission-level in server.properties
+    /// without a bound, so `/op` may give a level of 5. The level reads as the nearest level the
+    /// contract knows, and the first such level of the process is logged.
+    fn operator_level(name: &str, field: &str) -> Option<u8> {
+        let level: i64 = field.parse().ok()?;
+        let held = level.clamp(0, i64::from(crate::MAX_LEVEL));
+        if held != level && !LEVEL_LOGGED.swap(true, Ordering::Relaxed) {
+            crate::log(format_args!(
+                "the game answered the operator level {level} for {name}, which lies outside 0 to 4, so Golem reads it as {held}, and later levels like it are not logged"
+            ));
+        }
+        u8::try_from(held).ok()
     }
 
     /// Reads the answer of `location`.
