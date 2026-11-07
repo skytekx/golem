@@ -57,7 +57,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
 | [The bridge](#the-bridge) | 2 | 4 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
-| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 2 | 2 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
+| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 3 | 1 | 3 | 0 | 0 | 0 | 5 | 5 | 0 | 0 | 17 |
 | [The store](#the-store) | 4 | 0 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
@@ -74,7 +74,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 14 | 6 | 12 | 74 | 23 | 25 | 135 | 30 | 6 | 52 | 377 |
+| All | 15 | 5 | 13 | 74 | 23 | 25 | 134 | 31 | 6 | 52 | 378 |
 
 ## The JVM host and macOS
 
@@ -151,9 +151,10 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | The store in `golem run`: opened, seeded with the seed flushed into its file, flushed and closed on every stop path, with exit 1 on a close that fails where the run of the JVM returns, while the exit hook keeps the status of the exit of Java | Store (the place in the program golem), JVM host (the hooks), issues #1, #2 | Built | 03, 04, 07, 08 |
 | Every sender checked for a node: the console holds every node, another source from level 2, a player through `golem-permissions` | Permissions (the check of a sender), issue #1 | Built | 04, 07 |
 | The PermissionAPI of Forge answers every Boolean node of a mod as LuckPerms answered it through Arclight | Commits 2b8ec15 and 9b5749a on port/wiring, issue #105 | Handover | 04, 06, 07 |
-| The commands of LuckPerms 5.5.71: user, group, creategroup, deletegroup, listgroups and 15 subcommands, with `/perm` as an alias | Commits 063b980 and 9b5749a on port/wiring, Plan (LuckPerms 5.5.71) | Handover | 06, 07 |
+| The commands of LuckPerms 5.5.71: user, group, creategroup, deletegroup, listgroups and 15 subcommands, with `/perm` as an alias, ported in the crate, while the plugin that runs them in game follows | Permissions (the commands of LuckPerms), commit 9b5749a on port/wiring, Plan (LuckPerms 5.5.71) | Part | 06, 07 |
 | The cases the bundle lacks: setweight, parent set and clear, permission clear, clear, creategroup of a group that exists, an unknown subcommand, a second page, the aliases g, t and i, UUID versions 3 and 2, `/lp` in game, the level map, the PermissionAPI for an operator and a node that nothing names, a refused write with its log line and the bridge under `golem run` | Permissions, the branch port/wiring of the bundle | Open | 04, 06, 07 |
-| The two quirks of LuckPerms filed as issues before the bundle lands: `/lp deletegroup` leaves `group.<name>` on its members without `--update-parent-lists`, and `commands-allow-op` | Open items on port/wiring | Open | 06 |
+| The quirk of LuckPerms that `/lp deletegroup` leaves `group.<name>` on its members without `--update-parent-lists`, filed as an issue: the port removes the group from every group and player that names it | Permissions (the commands of LuckPerms), issue #231 | Built | 06 |
+| The quirk issue of `commands-allow-op`, the option of LuckPerms that the port does not have | Permissions (the commands of LuckPerms), a decision open with the owner | Held | 06 |
 | A group without a weight ties with `default`, kept and documented | Issue #206, commits e12b336 and d340aec | Part | 06 |
 | A source that is no player needs level 4 for the permission commands and for `/golem` and level 2 for the rest, so a command block cannot grant the group admin | Open items on port/wiring, a decision open with the owner | Held | 06, 07 |
 | The members of the group admin after the switch | Open items (the members of the group admin) | Held | 06 |

@@ -30,6 +30,7 @@ const SUBCOMMANDS: &[Subcommand] = &[
     jvm::JVM_ON_EXIT,
     permissions::CHECK,
     permissions::GROUPS,
+    permissions::COMMAND,
     bridge::PLUGINS,
     bridge::ACTIONS_ENCODE,
     bridge::TICK_STATS,

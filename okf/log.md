@@ -419,3 +419,12 @@ Oldest first. Times are UTC.
   caller. `09_store` holds the bound, the reserve, `room`, the file behind them and a burst through
   that handle in which no call waits, and `04_plugins` holds that a plugin hears the refusal. See
   [Store](store.md#the-threads).
+- `golem-permissions` ports the commands of LuckPerms 5.5.71: `/luckperms` with its aliases `/lp`,
+  `/perm`, `/perms`, `/permission` and `/permissions`, `user` and `group` with their info,
+  permission and parent subcommands and `clear`, the weight and the members of a group, and
+  `creategroup`, `deletegroup` and `listgroups`, with the nodes and the English texts of LuckPerms
+  as plain text. A command edits a configuration and loads the result, so a change that breaks a
+  rule of the format changes nothing, and it names no store and no runtime. The seed grants
+  `luckperms.*` to the group `admin`. `golem-devtool permissions-command` runs the commands on a
+  configuration, and `06_permissions` holds them to their texts. See
+  [Permissions](plugins/permissions.md#the-commands-of-luckperms).

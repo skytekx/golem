@@ -5,7 +5,7 @@ type: Spec
 title: Permissions
 description: The permissions of Golem in place of LuckPerms 5.5.71, with the format of the tracked configuration, the rules of resolution in their order, the seed of SkyTekx and how it maps from LuckPerms, and the quirks of the live server that the one source of truth fixes.
 tags: [plugins, permissions, luckperms, essentials, config, quirks]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Permissions
@@ -163,6 +163,10 @@ it cannot place.
 | `Permissions::groups_of(uuid)` | The groups of a player in the search order, each with weight, depth and rank |
 | `Permissions::group_nodes(name)` | The nodes of a group as the file writes them, a deny with its `-` |
 | `Permissions::group_names()` | The names of the groups, sorted |
+| `Config`, `GroupConfig`, `PlayerConfig` | The configuration as data: every group with its weight, its parents and its nodes, and every player with their groups and nodes |
+| `Permissions::from_config(config)` | The permissions of a `Config`, held to every rule as `from_toml` holds a file |
+| `Permissions::config()` | The `Config` that the permissions were loaded from |
+| `command::execute(permissions, label, arguments, host)` | The `Outcome` of a command of `/luckperms`: its lines, the entries it changed, the permissions after the change and the line of a failed save, see [The commands of LuckPerms](#the-commands-of-luckperms) |
 | `DEFAULT_GROUP` | The name `default` |
 
 `golem-devtool permissions --config <file> --player <uuid> --node <node>...` prints
@@ -213,6 +217,105 @@ checks keep the permissions they hold: <reason>`, and the checks keep the set th
 `golem run` changes the permissions of the store or calls `refresh` yet, so a running server keeps
 the set of its start.
 
+## The commands of LuckPerms
+
+The module `command` of this crate is the port of the command `/luckperms` of LuckPerms 5.5.71 with
+its aliases `/lp`, `/perm`, `/perms`, `/permission` and `/permissions`, as the `plugin.yml` of
+LuckPerms names them, by which operators read and change the permissions in game and on the
+console. The wiki of the live server names `lp group default permission set <node>` and `unset
+<node>` over RCON and `/lp editor` in game as the ways its operators change the set. The commands
+keep their names, the convenience aliases of LuckPerms, such as `/lp u Alex p set <node>` for
+`/lp user Alex permission set <node>`, their nodes and their English texts, those of
+`luckperms_en.properties` and `Message.java`, behind the prefix `[LP] `.
+
+| Command | Node | What it does |
+| --- | --- | --- |
+| `/lp` | Any of them | The version, and the way to the help or why the sender may use none |
+| `/lp help` and an unknown word | Any of them | The main commands the sender holds |
+| `/lp user <user> info` | `luckperms.user.info` | The UUID, its kind, whether the player is online, and their parents |
+| `/lp user <user> permission info [page]` | `luckperms.user.permission.info` | The nodes of the player, 19 to a page |
+| `/lp user <user> permission set <node> [true\|false]` | `luckperms.user.permission.set` | Sets a node, in place of the node of the other value |
+| `/lp user <user> permission unset <node>` | `luckperms.user.permission.unset` | Unsets a node, of either value |
+| `/lp user <user> permission check <node>` | `luckperms.user.permission.check` | The nodes that name it, directly, inherited and as a wildcard, and the decision with its reason |
+| `/lp user <user> permission clear` | `luckperms.user.permission.clear` | Unsets every node of the player |
+| `/lp user <user> parent info [page]` | `luckperms.user.parent.info` | The groups of the player, `default` last |
+| `/lp user <user> parent set <group>` | `luckperms.user.parent.set` | Leaves the player in that group alone, beside `default` |
+| `/lp user <user> parent add <group>` | `luckperms.user.parent.add` | Adds a group |
+| `/lp user <user> parent remove <group>` | `luckperms.user.parent.remove` | Removes a group |
+| `/lp user <user> parent clear` | `luckperms.user.parent.clear` | Removes every group but `default` |
+| `/lp user <user> clear` | `luckperms.user.clear` | Removes every node and every group |
+| `/lp group <group> ...` | `luckperms.group.<subcommand>` | `info`, `permission`, `parent` and `clear` as for a user |
+| `/lp group <group> setweight <weight>` | `luckperms.group.setweight` | Sets the weight |
+| `/lp group <group> listmembers [page]` | `luckperms.group.listmembers` | The players and groups that inherit from the group, 15 to a page |
+| `/lp creategroup <group> [weight]` | `luckperms.creategroup` | Creates a group, in lower case |
+| `/lp deletegroup <group>` | `luckperms.deletegroup` | Deletes a group but `default` |
+| `/lp listgroups [page]` | `luckperms.listgroups` | The groups by weight, then by name |
+
+A sender may run a command when they hold its node by [the check of a
+sender](#the-check-of-a-sender), so the console runs every command. The group `admin` of the seed
+grants `luckperms.*`, so the console puts an operator into it with `lp user <name> parent add
+admin`, and from then on that operator changes the permissions in game.
+
+A command builds the change on the configuration that it is given, loads the result into this
+crate with `Permissions::from_config`, which checks every rule of the format, and answers the
+entries it changed and the permissions to install, so its caller writes the entries to the store
+and installs the result at once. A change that breaks a rule changes nothing and answers `The
+permissions of Golem refuse the change, so nothing changed: <reason>.`, such as a parent that closes
+a cycle of inheritance. The module names no store and no runtime, so the crate keeps its license
+and its callers. No plugin of the runtime runs the commands yet, so `golem run` answers no `/lp`.
+
+Where the port differs from LuckPerms:
+
+- Golem has no contexts, no expiry, no meta, no tracks, no log, no web editor and no import or
+  export of LuckPerms, so a context in the arguments, such as `server=survival`, answers `The
+  permissions of Golem have no contexts, so the port takes no server=survival.`, a node of meta,
+  such as `prefix.10.x`, says that Golem does not hold it, a display name of `creategroup` answers
+  that the groups of Golem have none, and every other command of LuckPerms, such as `/lp editor`,
+  `/lp user <user> meta` or `permission settemp`, answers `Golem does not port /lp editor of
+  LuckPerms 5.5.71, see okf/plugins/permissions.md.`. Every text names the context `global`, as
+  LuckPerms names an empty set of contexts.
+- The port has no option `commands-allow-op`, so a player runs a command by its node alone, whatever
+  their operator level.
+- The bridge sends a line as plain text, so the colors of LuckPerms are gone, and an entry of
+  `permission info` writes a denied node with its leading `-`, as the configuration writes it, where
+  LuckPerms shows it in red. The help and the usage name only the arguments that the port takes, so
+  `[context...]` and the sort mode are gone.
+- `user info` and `group info` show no contextual data, the prefix, the suffix and the meta of
+  LuckPerms, which Golem does not hold, and a group without a weight shows the weight 0, where
+  LuckPerms shows `None`, since the format holds a weight for every group.
+- A node is held to [the format](#the-configuration), so a node that it refuses, such as
+  `Essentials.Fly`, answers why, where LuckPerms takes any text. A node `group.<name>` adds or
+  removes a parent, as in LuckPerms, but the group must exist, and a denied parent does not exist in
+  Golem and is refused.
+- The name of a group is one segment of the format, where LuckPerms takes any text of 1 to 36
+  characters without a space, so `creategroup bad.name` answers `bad.name is not a valid group
+  name.`. Every other command that names such a group answers as LuckPerms answers for a group that
+  does not exist.
+- The port asks for the subcommand of `permission` and of `parent` before it looks for the user or
+  the group that the command names. So for a player whom the server does not know, `/lp user Steve
+  permission`, `/lp user Steve permission nothing` and `/lp user Steve permission set` answer the
+  list of the subcommands, `Command not recognised.` and the usage, where LuckPerms looks for the
+  user first and answers that it could not be found, and the same holds for a group that does not
+  exist. The name of a group has no bound of 36 characters, so `creategroup` makes a group with a
+  longer name. And the help and the usage list the commands that the port takes and no other.
+- Every player is in the group `default`, so `parent remove default` keeps it and says so, `parent
+  info` names it last, and `listmembers` of `default` names every player with an entry of the
+  configuration.
+- `deletegroup` removes the group from every group and player that names it, since the store keeps
+  no entry that names a group that is gone, where LuckPerms leaves such entries behind unless its
+  flag `--update-parent-lists` is given. The port takes the flag and does the same without it, see
+  issue [#231](https://github.com/skytekx/golem/issues/231).
+- A user is a UUID, with or without its dashes, or the name of a player who is online or whom the
+  store knows. The store knows a player once the port of EssentialsX records their join, so until
+  then the command takes the UUID of a player who is offline.
+- `/lp` names `Running LuckPerms v5.5.71, as ported to Golem.`, and `permission check` names the
+  processor `golem-permissions` and the reason of the decision as its cause.
+
+`golem-devtool permissions-command <script.json>` runs commands on a configuration with a sender
+and the players a server knows, and prints for each its lines, its changes, the configuration
+after it and the line of a failed save, so `06_permissions` holds the commands to their texts
+without a store and without a JVM.
+
 ## The cost of a check
 
 Loading builds one table per source, with the exact nodes, the prefixes of the wildcards and `*`
@@ -240,10 +343,12 @@ that chain took about 2.4 seconds on the same machine and day.
 of a player is player data, which stays out of the repository, so the store says who is in the
 group `admin`.
 
-The nodes keep the names of EssentialsX, such as `essentials.home`, so that a node of a LuckPerms
-export maps one to one and every ported command keeps the node a player and an operator know. The
-commands of Golem itself take nodes under `golem.`, named after the command, such as `golem.perm`
-for the command `perm` that will change the permissions.
+The nodes keep the names of EssentialsX, such as `essentials.home`, and of LuckPerms, such as
+`luckperms.user.permission.set`, so that a node of a LuckPerms export maps one to one and every
+ported command keeps the node a player and an operator know. The commands of Golem itself take
+nodes under `golem.`, named after the command, such as `golem.player` for `/golem player`. The
+command `perm` that changes the permissions is the alias `/perm` of the port of LuckPerms, so it
+takes the nodes of LuckPerms.
 
 The group `default` holds the 39 nodes that the group `default` of LuckPerms on the Mac mini holds,
 as the wiki of the server lists them in
@@ -264,7 +369,8 @@ each with the prefix `essentials.`.
 | Economy | `balance`, `balancetop`, `pay`, `worth` |
 | Signs | `signs.use.*` |
 
-The group `admin` has the weight 100, inherits `default` and grants `essentials.*` and `golem.*`.
+The group `admin` has the weight 100, inherits `default` and grants `essentials.*`, `golem.*` and
+`luckperms.*`, the nodes of the commands of LuckPerms that change the permissions.
 The live server has no such group. Its admin commands stay with the operators, who hold them
 through the defaults of Bukkit, as the same page says. An operator there holds none of the 23
 nodes that the `plugin.yml` of EssentialsX 2.22.0 marks `default: false`, switches that a player
@@ -276,7 +382,8 @@ which the group `default` grants. They are `afk.auto`, `balancetop.exclude`, `ba
 `tempban.exempt` and `vanish.pickup`, each with the prefix `essentials.`. Golem has no child
 permissions, so the children of `essentials.exempt` stand in the list by name. The notebook
 checks that a player of the group `default` holds each of the 39 nodes and none of the admin
-commands, such as `essentials.setspawn`, `essentials.eco`, `essentials.gamemode` and `golem.perm`,
+commands, such as `essentials.setspawn`, `essentials.eco`, `essentials.gamemode`, `golem.player`
+and `luckperms.user.permission.set`,
 that a player of the group `admin` holds them, and that the admin holds none of the 22 switches.
 
 What nobody knows yet, and the comments of the file say so too:

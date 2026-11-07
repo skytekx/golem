@@ -5,7 +5,7 @@ type: Decisions
 title: Decisions
 description: Every ruling of the owner on Golem, with its day, its status and the page or file where it lives.
 tags: [decisions, rulings, owner]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Decisions
@@ -54,7 +54,7 @@ blocking questions instead of asking. Each stands until the owner rules otherwis
 | Where does the version of the bridge jars come from? | `[workspace.package]` of `Cargo.toml`, so Golem has one version | [Bridge](bridge.md) |
 | Does a player's own node win over a group's? | Yes. The player's nodes decide before every group, so a player's wildcard deny takes away what a group grants by name, unlike LuckPerms | [Permissions](plugins/permissions.md) |
 | How do groups of the same rank disagree? | The deny wins. A wildcard `a.*` matches below `a` and not `a` itself, as in LuckPerms | [Permissions](plugins/permissions.md) |
-| What does the seed grant? | The 39 nodes of the live group default to every player, and `essentials.*` and `golem.*` to the group admin, which has no members yet | [Permissions](plugins/permissions.md) |
+| What does the seed grant? | The 39 nodes of the live group default to every player, and `essentials.*`, `golem.*` and `luckperms.*` to the group admin, which has no members yet | [Permissions](plugins/permissions.md) |
 | In which order do the two branches of the bundle land, and may they be rebased? | The branch `port/wiring` first, then `port/bridge`, each rebased with its fixups and the unfinished `ca30d08` split in four. Neither branch is pushed, so the rebase rewrites no pushed history | [Features](features.md#the-tooling-ci-lints-and-pages) |
 | Where do the ports of EssentialsX live? | In one crate `golem-essentials` for teleport, social, economy and admin, with `golem-essentials-spawn` beside it, both under GPL-3.0-or-later as `ports.toml` holds them | [Features](features.md#the-foundation-of-the-port-of-essentialsx) |
 | Which sea level does `/depth` count from? | The value of the generator per dimension, 63 in the Overworld, 32 in the Nether and 0 in the End, until the bridge checks it against the sources of Minecraft 1.20.1 | [Features](features.md#the-bridge) |
@@ -96,4 +96,7 @@ blocking questions instead of asking. Each stands until the owner rules otherwis
 | Where does the resolver of the permissions live? | In `golem-plugin`, under the AGPL, which names the store and `golem-permissions`, so the port of LuckPerms in `golem-permissions` keeps its MIT license and names neither the store nor the runtime | [Permissions](plugins/permissions.md#the-check-of-a-sender) |
 | Who holds a node in a check of a sender? | The console every node, another source every node from the level 2 and none below it, never one of the player it runs as, and a player what `golem-permissions` grants them, whatever their operator level. A node that no rule names is not held, and `set` tells a port with a default of its own | [Permissions](plugins/permissions.md#the-check-of-a-sender) |
 | Do the tools of `/golem` keep the operator level? | Yes, where no rule of the permissions names their node. A rule decides first: the nodes `golem.<name>`, which the seed grants to the group `admin`, give a player the tools without an operator level, and a deny takes them from an operator. Where no rule names the node, an operator of level 2 and more keeps the tool, so no operator loses one to the permissions | [Core plugin](plugins/core.md#the-command-golem) |
+| Which nodes do the commands of LuckPerms take? | The nodes of LuckPerms 5.5.71, such as `luckperms.user.permission.set`, as every port keeps the nodes of its upstream, and the group `admin` of the seed grants `luckperms.*`. The alias `/perm` is the command that changes the permissions, so it takes the nodes of LuckPerms. `commands-allow-op` is not kept, so a player runs them by their node alone, whatever their operator level | [Permissions](plugins/permissions.md#the-commands-of-luckperms) |
+| What do the commands of LuckPerms answer where Golem holds no data? | The texts of LuckPerms as plain text with the context `global`, a line that names what Golem does not hold for a context, meta and a denied parent, and `Golem does not port /lp <command> of LuckPerms 5.5.71` for every command of the editor, the log, the tracks, meta, an expiry, import, export and the other tools | [Permissions](plugins/permissions.md#the-commands-of-luckperms) |
+| What does `deletegroup` do with the members of the group? | It removes the group from every group and player that names it, since the store keeps no entry that names a group that is gone, where LuckPerms leaves the nodes behind | [Permissions](plugins/permissions.md#the-commands-of-luckperms) |
 | What does a remote subscriber get when its events overflow? | Every remote stream of events, chat and commands included, closes with `EVENTS_LOST` and the count of the lost events, and the streams of state, the tick and the positions keep the newest | [Features](features.md#the-graphql-api-of-golem) |

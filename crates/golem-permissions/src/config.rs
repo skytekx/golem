@@ -17,7 +17,10 @@ use std::{
     sync::Arc, //
 };
 
-use serde::Deserialize;
+use serde::{
+    Deserialize,
+    Serialize, //
+};
 
 use crate::{
     ConfigError,
@@ -31,39 +34,73 @@ use crate::{
     table::Table, //
 };
 
-/// The file as TOML holds it. Every table refuses a key it does not know.
-#[derive(Deserialize)]
+/// A configuration as the TOML of `config/permissions.toml` holds it, before its rules are checked.
+/// Every table refuses a key it does not know.
+///
+/// The commands of the port edit this form and load it with
+/// [`Permissions::from_config`](crate::Permissions::from_config), which checks every rule, so a
+/// change that breaks one is refused before it reaches the store.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct File {
+pub struct Config {
+    /// The groups by name.
     #[serde(default)]
-    groups: BTreeMap<String, GroupFile>,
-    #[serde(default)]
-    players: BTreeMap<String, PlayerFile>,
+    pub groups: BTreeMap<String, GroupConfig>,
+    /// The players with groups or nodes of their own, by their UUID in lower case.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub players: BTreeMap<String, PlayerConfig>,
 }
 
 /// What a player key that is not a UUID gets told.
 const NOT_A_UUID: &str = "the key is not a UUID in lower case with its four dashes, such as 00000000-0000-4000-8000-000000000001";
 
 /// A table `[groups.<name>]`.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct GroupFile {
+pub struct GroupConfig {
+    /// The rank of the group, a higher weight first.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub weight: i32,
+    /// The groups whose nodes the group takes on.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inherits: Vec<String>,
+    /// What the group grants and denies, a deny with its leading `-`.
     #[serde(default)]
-    weight: i32,
-    #[serde(default)]
-    inherits: Vec<String>,
-    #[serde(default)]
-    nodes: Vec<String>,
+    pub nodes: Vec<String>,
 }
 
 /// A table `[players.<uuid>]`.
-#[derive(Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct PlayerFile {
-    #[serde(default)]
-    groups: Vec<String>,
-    #[serde(default)]
-    nodes: Vec<String>,
+pub struct PlayerConfig {
+    /// The groups of the player besides the default group.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub groups: Vec<String>,
+    /// What the player holds of their own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<String>,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn is_zero(weight: &i32) -> bool {
+    *weight == 0
+}
+
+impl Config {
+    /// Reads the TOML of a configuration, without checking its rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ConfigError`] with the line and the column where the TOML breaks.
+    pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
+        toml::from_str(text).map_err(|error| syntax_error(text, &error))
+    }
+
+    /// Writes the configuration as TOML, which [`Config::from_toml`] reads back as it was.
+    pub fn to_toml(&self) -> String {
+        // A map of strings to tables of strings, numbers and lists always serializes.
+        toml::to_string_pretty(self).unwrap_or_default()
+    }
 }
 
 /// A group as the checks read it.
@@ -86,7 +123,11 @@ pub(crate) struct Player {
 
 /// Reads and validates a configuration.
 pub(crate) fn load(text: &str) -> Result<Permissions, ConfigError> {
-    let file: File = toml::from_str(text).map_err(|error| syntax_error(text, &error))?;
+    build(Config::from_toml(text)?)
+}
+
+/// Validates a configuration and builds the tables of its checks.
+pub(crate) fn build(file: Config) -> Result<Permissions, ConfigError> {
     let names = group_names(&file.groups)?;
     let Some(&default) = names.get(DEFAULT_GROUP) else {
         return Err(error(
@@ -133,6 +174,7 @@ pub(crate) fn load(text: &str) -> Result<Permissions, ConfigError> {
         names,
         players,
         everyone,
+        config: Arc::new(file),
     })
 }
 
@@ -181,7 +223,7 @@ fn syntax_error(text: &str, failure: &toml::de::Error) -> ConfigError {
 
 /// The index of every group by name, after checking the names.
 fn group_names(
-    groups: &BTreeMap<String, GroupFile>,
+    groups: &BTreeMap<String, GroupConfig>,
 ) -> Result<HashMap<String, usize>, ConfigError> {
     let mut names = HashMap::with_capacity(groups.len());
     for (index, name) in groups.keys().enumerate() {

@@ -98,6 +98,8 @@
 //! name, which is the form for the server thread.
 //! [`Permissions::check`] adds the sentence of the reason.
 
+/// The command `/luckperms` of the port, with its aliases, which reads and changes a configuration.
+pub mod command;
 mod config;
 mod node;
 mod resolve;
@@ -108,6 +110,11 @@ use std::{
     sync::Arc, //
 };
 
+pub use crate::config::{
+    Config,
+    GroupConfig,
+    PlayerConfig, //
+};
 use crate::{
     config::{
         Group,
@@ -174,6 +181,8 @@ pub struct Permissions {
     pub(crate) players: HashMap<u128, Player>,
     /// The search order of a player that the configuration does not name.
     pub(crate) everyone: Arc<Chain>,
+    /// The configuration as it was loaded, for the commands that read and change it.
+    pub(crate) config: Arc<Config>,
 }
 
 impl Permissions {
@@ -185,6 +194,23 @@ impl Permissions {
     /// format, see the documentation of the crate.
     pub fn from_toml(text: &str) -> Result<Self, ConfigError> {
         config::load(text)
+    }
+
+    /// Checks a configuration that is already read, such as one that a command changed, and
+    /// builds its permissions.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ConfigError`] that names where the configuration breaks a rule of the
+    /// format, as [`Permissions::from_toml`] does.
+    pub fn from_config(config: Config) -> Result<Self, ConfigError> {
+        config::build(config)
+    }
+
+    /// The configuration as it was loaded, the groups and the players with their lists as the
+    /// file writes them.
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     /// Whether the player with `uuid` holds `node`, with the rule that decided.
