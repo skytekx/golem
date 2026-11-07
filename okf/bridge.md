@@ -214,7 +214,9 @@ public interface Game {
 	String mainHand(String uuid);
 	String[] inventory(String uuid);
 	String heights(String dimension);
+	String[] dimensions();
 	String flight(String uuid);
+	String maxPlayers();
 	String safeLocation(String dimension, double x, double y, double z, int radius);
 	void log(String line);
 }
@@ -234,7 +236,9 @@ display name that a mod made, has it replaced by a space.
 | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
 | `inventory(uuid)` | One answer per stack in the order of the slots, empty slots left out: the slot, 0 to 8 the hotbar, 9 to 35 the rest, 36 to 39 the armor from the boots to the helmet and 40 the off hand, as the game and Bukkit number them, the registry id of the item, the count, the damage, held at 0 at least, and whether the item places a block, `true` or `false` | The player is not online | No stack, an empty array |
 | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
+| `dimensions()` | One answer per dimension, the Overworld first and the others in the order of their ids, since the server holds the levels behind the Overworld in an order that changes from run to run: the id, the id of its dimension type, the lowest y of a block, the y above the highest, the logical height of the type, the sea level of its generator, 63 in the Overworld, 32 in the Nether and 0 in the End, where `Level.getSeaLevel` of Minecraft 1.20.1 and so `World.getSeaLevel` of Bukkit answer 63 for every dimension, and the time of day in ticks, which `getDayTime` of the level answers and the dimensions of a server share | Never on the server thread | Never |
 | `flight(uuid)` | Whether the player may fly and whether they fly now, each `true` or `false`, from the abilities of the player | The player is not online | Never |
+| `maxPlayers()` | The most players the server takes, `max-players` of `server.properties` | Never on the server thread | Never |
 | `safeLocation(dimension, x, y, z, radius)` | `x`, `y`, `z` of the feet in the middle of the block, or the one field `unloaded` when the search met a chunk that is not loaded | The server has no such dimension, or the target is no finite number | No place within the radius is safe |
 
 `log(line)` is no question. Golem calls it for every line that it logs while a native runs, on the
@@ -649,7 +653,7 @@ jars against this page.
   `java.lang` alone. Its manifest names the module, the version of Golem and the license. The
   public methods of `Host` are the 18 natives of the first Java block above, each with the
   descriptor that the notebook derives from that block and that `javap` confirms, and the plain
-  `available()`, and those of `Game` are the 11 abstract methods of the block of
+  `available()`, and those of `Game` are the 13 abstract methods of the block of
   [The game](#the-game).
 - The mod jar holds the mods.toml and the `pack.mcmeta` of above, no class of the host package and
   no `.license` file. It listens for every event of the table and calls every native but

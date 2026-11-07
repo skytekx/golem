@@ -270,6 +270,8 @@ outer one.
 | `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
 | `inventory(uuid)` | Every `Stack` of the inventory, the armor and the off hand included, with its slot, id, count, damage and whether it places a block |
 | `flight(uuid)` | The `Flight` of the player: whether they may fly and fly now |
+| `dimensions()` | Every `Dimension` of the server with its type, heights, logical height, sea level and time of day |
+| `max_players()` | The most players the server takes |
 | `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |
 | `safe_location(target, radius)` | The `SafePlace` of the search within the radius, at most 8: `Found` with the nearest safe place, with the dimension and the rotation of the target, `Nowhere`, or `Unloaded` when a chunk it must read is not loaded, since a question loads no chunk |
 

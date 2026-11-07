@@ -139,6 +139,26 @@ pub struct Stack {
     pub block: bool,
 }
 
+/// A dimension of the server, a level of the game.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Dimension {
+    /// The id, such as `minecraft:the_nether`.
+    pub id: String,
+    /// The id of its dimension type, such as `minecraft:the_nether`, which a dimension of a mod may
+    /// share with one of the game.
+    pub kind: String,
+    /// The heights of its blocks.
+    pub heights: Heights,
+    /// The logical height of its dimension type, how many blocks above the lowest a portal or a
+    /// chorus fruit may bring a player, such as 128 in the Nether.
+    pub logical_height: i32,
+    /// The sea level of its generator, such as 63 in the Overworld and 32 in the Nether.
+    pub sea_level: i32,
+    /// The time of day in ticks, the counter that `time set` and a night of sleep move, which a
+    /// day of 24000 ticks repeats.
+    pub day_time: i64,
+}
+
 /// The shared spawn of a dimension.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spawn {
@@ -293,6 +313,18 @@ pub trait Game {
         None
     }
 
+    /// Answers every dimension of the server, the Overworld first and the others in the order of
+    /// their ids. The default answers none.
+    fn dimensions(&self) -> Option<Vec<Dimension>> {
+        None
+    }
+
+    /// Answers how many players the server takes at most, `max-players` of
+    /// `server.properties`. The default answers none.
+    fn max_players(&self) -> Option<u32> {
+        None
+    }
+
     /// Answers the player online whose name or UUID is `who`, in any case, or `Some(None)` when
     /// nobody online has it.
     fn player(&self, who: &str) -> Option<Option<OnlinePlayer>> {
@@ -354,6 +386,7 @@ pub mod wire {
 
     use crate::{
         BlockLocation,
+        Dimension,
         Flight,
         GameMode,
         Heights,
@@ -521,6 +554,29 @@ pub mod wire {
             damage: damage.parse().ok()?,
             block: boolean(block)?,
         })
+    }
+
+    /// Reads one answer of `dimensions`.
+    pub fn dimension(answer: &str) -> Option<Dimension> {
+        let [id, kind, min, max, logical_height, sea_level, day_time] = fields(answer)[..] else {
+            return None;
+        };
+        Some(Dimension {
+            id: id.to_owned(),
+            kind: kind.to_owned(),
+            heights: Heights {
+                min: min.parse().ok()?,
+                max: max.parse().ok()?,
+            },
+            logical_height: logical_height.parse().ok()?,
+            sea_level: sea_level.parse().ok()?,
+            day_time: day_time.parse().ok()?,
+        })
+    }
+
+    /// Reads the answer of `maxPlayers`.
+    pub fn max_players(answer: &str) -> Option<u32> {
+        answer.parse().ok()
     }
 
     /// Reads the answer of `spawn` for `dimension`.

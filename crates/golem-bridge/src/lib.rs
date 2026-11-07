@@ -55,6 +55,7 @@ pub use crate::{
     },
     game::{
         BlockLocation,
+        Dimension,
         Flight,
         Game,
         GameMode,

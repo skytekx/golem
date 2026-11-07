@@ -17,6 +17,7 @@ package com.skytekx.golem.bridge;
 import com.skytekx.golem.host.Game;
 import com.skytekx.golem.host.Host;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
@@ -169,6 +170,43 @@ final class GameQueries implements Game {
 				}
 			}
 			return stacks.toArray(new String[0]);
+		}, null);
+	}
+
+	@Override
+	public String[] dimensions() {
+		return guard.ask("Game.dimensions", () -> {
+			MinecraftServer server = server();
+			if (server == null) {
+				return null;
+			}
+			// The server holds its levels behind the Overworld in an order that changes from
+			// run to run, so the answer orders them by their ids.
+			List<ServerLevel> levels = new ArrayList<>();
+			server.getAllLevels().forEach(levels::add);
+			levels.sort(Comparator.comparing((ServerLevel level) -> level != server.overworld())
+					.thenComparing(GameQueries::dimension));
+			List<String> answer = new ArrayList<>();
+			// The sea level is the one of the generator, since Level.getSeaLevel answers 63
+			// for every dimension of Minecraft 1.20.1.
+			for (ServerLevel level : levels) {
+				answer.add(join(dimension(level), level.dimensionTypeId().location().toString(),
+						Integer.toString(level.getMinBuildHeight()),
+						Integer.toString(level.getMaxBuildHeight()),
+						Integer.toString(level.getLogicalHeight()),
+						Integer.toString(level.getChunkSource().getGenerator().getSeaLevel()),
+						Long.toString(level.getDayTime())));
+			}
+			return answer.toArray(new String[0]);
+		}, null);
+	}
+
+	@Override
+	public String maxPlayers() {
+		return guard.ask("Game.maxPlayers", () -> {
+			MinecraftServer server = server();
+			return server == null ? null
+					: Integer.toString(server.getPlayerList().getMaxPlayers());
 		}, null);
 	}
 

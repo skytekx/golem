@@ -544,3 +544,9 @@ Oldest first. Times are UTC.
   player may fly and flies now. `04_plugins` holds both answers of a scripted game and their wire
   form, and `05_bridge_build` the stacks that the console gave a player, one with a damage below 0
   among them, and their flight on a stock Forge server. See [Bridge](bridge.md#the-game).
+- The game answers the dimensions and the most players. `Game::dimensions` answers every dimension
+  of the server, the Overworld first and the others by their ids, with the id of its type, the
+  heights of its blocks, its logical height, the sea level of its generator and the time of day, and
+  `Game::max_players` the most players the server takes. `04_plugins` holds both answers of a
+  scripted game and their wire form, and `05_bridge_build` the three dimensions and the 20 players
+  of a stock Forge server. See [Bridge](bridge.md#the-game).

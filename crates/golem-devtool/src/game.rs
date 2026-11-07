@@ -21,8 +21,11 @@
 //!                "flight": {"allowed": true, "flying": false},
 //!                "inventory": [{"slot": 0, "id": "minecraft:stone", "count": 2, "block": true}],
 //!                "mainHand": null}],
+//!   "maxPlayers": 20,
 //!   "dimensions": [{"id": "minecraft:overworld", "spawn": {"x": 0, "y": 64, "z": 0, "angle": 0},
-//!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5}}]
+//!                   "minY": -64, "maxY": 320, "safe": {"x": 0.5, "y": 65, "z": 0.5},
+//!                   "type": "minecraft:overworld", "logicalHeight": 384, "seaLevel": 63,
+//!                   "dayTime": 1000}]
 //! }
 //! ```
 //!
@@ -33,15 +36,18 @@
 //! `respawnPlace` respawns at the world spawn and `"respawnPlace": "unloaded"` answers that a
 //! chunk around the point is not loaded, one without `flight` may not fly and one without
 //! `inventory` holds nothing, and `"players": null` makes the game answer none for the players,
-//! as a game that cannot answer does. A dimension with `safe` answers that place to a search
-//! whose radius, held to 8 as the natives hold it, reaches the block of the place from the
-//! block of the target, one with `"safe": "unloaded"` answers that a chunk the search must read
-//! is not loaded, and one without answers that there is none. A target that is no finite number
-//! gets no answer, as from the natives. A script without `game` asks a game that answers
-//! nothing.
+//! as a game that cannot answer does. A game without `maxPlayers` answers none for it, and a
+//! dimension without `type` has the type of its id, without `logicalHeight` the height of its
+//! blocks, and without `seaLevel` and `dayTime` 0. A dimension with `safe` answers that place
+//! to a search whose radius, held to 8 as the natives hold it, reaches the block of the place
+//! from the block of the target, one with `"safe": "unloaded"` answers that a chunk the search
+//! must read is not loaded, and one without answers that there is none. A target that is no
+//! finite number gets no answer, as from the natives. A script without `game` asks a game that
+//! answers nothing.
 
 use golem_bridge::{
     BlockLocation,
+    Dimension,
     Event,
     Flight,
     Game,
@@ -134,6 +140,7 @@ pub struct GameSpec {
     players: Option<Vec<PlayerSpec>>,
     #[serde(default)]
     dimensions: Vec<DimensionSpec>,
+    max_players: Option<u32>,
 }
 
 /// A player of the scripted game.
@@ -244,6 +251,13 @@ struct DimensionSpec {
     min_y: i32,
     max_y: i32,
     safe: Option<SafeSpec>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    logical_height: Option<i32>,
+    #[serde(default)]
+    sea_level: i32,
+    #[serde(default)]
+    day_time: i64,
 }
 
 /// What every search for a safe place in a scripted dimension answers.
@@ -393,6 +407,35 @@ impl Game for ScriptedGame {
         Some(stacks)
     }
 
+    fn dimensions(&self) -> Option<Vec<Dimension>> {
+        Some(
+            self.spec
+                .dimensions
+                .iter()
+                .map(|dimension| Dimension {
+                    id: dimension.id.clone(),
+                    kind: dimension
+                        .kind
+                        .clone()
+                        .unwrap_or_else(|| dimension.id.clone()),
+                    heights: Heights {
+                        min: dimension.min_y,
+                        max: dimension.max_y,
+                    },
+                    logical_height: dimension
+                        .logical_height
+                        .unwrap_or(dimension.max_y - dimension.min_y),
+                    sea_level: dimension.sea_level,
+                    day_time: dimension.day_time,
+                })
+                .collect(),
+        )
+    }
+
+    fn max_players(&self) -> Option<u32> {
+        self.spec.max_players
+    }
+
     fn spawn(&self, dimension: &str) -> Option<Spawn> {
         let spawn = &self.dimension(dimension)?.spawn;
         Some(Spawn {
@@ -499,6 +542,13 @@ fn stack_json(stack: &Stack) -> Value {
            "block": stack.block})
 }
 
+/// Answers a dimension as JSON.
+fn dimension_json(dimension: &Dimension) -> Value {
+    json!({"id": dimension.id, "type": dimension.kind, "minY": dimension.heights.min,
+           "maxY": dimension.heights.max, "logicalHeight": dimension.logical_height,
+           "seaLevel": dimension.sea_level, "dayTime": dimension.day_time})
+}
+
 /// Answers a spawn as JSON.
 fn spawn_json(spawn: &Spawn) -> Value {
     let mut value = block_json(&spawn.block);
@@ -544,9 +594,9 @@ fn maybe<T>(answer: Option<Option<T>>, json: impl Fn(&T) -> Value) -> Value {
 ///
 /// A command answers one line, the JSON of the answer: `players`, `player <who>`,
 /// `location <uuid>`, `respawn <uuid>`, `respawnplace <uuid>`, `spawn <dimension>`,
-/// `hand <uuid>`, `inventory <uuid>`, `flight <uuid>`, `heights <dimension>` and
-/// `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it asks for the players and
-/// broadcasts how many it got, or that the game did not answer.
+/// `hand <uuid>`, `inventory <uuid>`, `flight <uuid>`, `heights <dimension>`, `dimensions`,
+/// `maxplayers` and `safe <dimension> <x> <y> <z> <radius>`. On an event of `on` it
+/// asks for the players and broadcasts how many it got, or that the game did not answer.
 pub struct Ask {
     pub name: String,
     pub commands: Vec<String>,
@@ -572,6 +622,10 @@ impl Ask {
             ["inventory", uuid] => game.inventory(uuid).map_or(Value::Null, |stacks| {
                 json!(stacks.iter().map(stack_json).collect::<Vec<_>>())
             }),
+            ["dimensions"] => game.dimensions().map_or(Value::Null, |dimensions| {
+                json!(dimensions.iter().map(dimension_json).collect::<Vec<_>>())
+            }),
+            ["maxplayers"] => game.max_players().map_or(Value::Null, |count| json!(count)),
             ["spawn", dimension] => game
                 .spawn(dimension)
                 .as_ref()
@@ -672,6 +726,10 @@ fn read_wire(entry: WireEntry) -> Result<Value, String> {
         "respawnPlace" => place_json(wire::respawn_place(answer)),
         "flight" => wire::flight(answer).map_or(Value::Null, flight_json),
         "inventory" => wire::stack(answer).as_ref().map_or(Value::Null, stack_json),
+        "dimensions" => wire::dimension(answer)
+            .as_ref()
+            .map_or(Value::Null, dimension_json),
+        "maxPlayers" => wire::max_players(answer).map_or(Value::Null, |count| json!(count)),
         "spawn" => {
             let dimension = entry.dimension.as_deref().unwrap_or("minecraft:overworld");
             wire::spawn(dimension, answer)

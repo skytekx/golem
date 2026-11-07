@@ -30,6 +30,7 @@ use jni::{
 };
 
 use crate::{
+    Dimension,
     Flight,
     Game,
     Heights,
@@ -264,6 +265,28 @@ impl Game for JniGame<'_, '_> {
                 .filter_map(|line| wire::stack(line).or_else(|| unread("inventory", line)))
                 .collect(),
         )
+    }
+
+    fn dimensions(&self) -> Option<Vec<Dimension>> {
+        let lines = self.strings("dimensions", None)?;
+        Some(
+            lines
+                .iter()
+                .filter_map(|line| wire::dimension(line).or_else(|| unread("dimensions", line)))
+                .collect(),
+        )
+    }
+
+    fn max_players(&self) -> Option<u32> {
+        let answer = self
+            .ask("maxPlayers", |env, game| {
+                let answer = env
+                    .call_method(game, "maxPlayers", "()Ljava/lang/String;", &[])?
+                    .l()?;
+                text(env, &JString::from(answer))
+            })
+            .flatten()?;
+        wire::max_players(&answer).or_else(|| unread("maxPlayers", &answer))
     }
 
     fn spawn(&self, dimension: &str) -> Option<Spawn> {

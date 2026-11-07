@@ -66,6 +66,7 @@ use std::{
 use crate::{
     Action,
     Actions,
+    Dimension,
     Event,
     Flight,
     Game,
@@ -272,6 +273,18 @@ impl Game for ServerThread<'_> {
     fn inventory(&self, uuid: &str) -> Option<Vec<Stack>> {
         Self::allowed("inventory")
             .then(|| self.0.inventory(uuid))
+            .flatten()
+    }
+
+    fn dimensions(&self) -> Option<Vec<Dimension>> {
+        Self::allowed("dimensions")
+            .then(|| self.0.dimensions())
+            .flatten()
+    }
+
+    fn max_players(&self) -> Option<u32> {
+        Self::allowed("maxPlayers")
+            .then(|| self.0.max_players())
             .flatten()
     }
 

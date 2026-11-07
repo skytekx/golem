@@ -97,12 +97,28 @@ public interface Game {
 	String heights(String dimension);
 
 	/**
+	 * Answers every dimension of the server, the Overworld first and the others in the order of
+	 * their ids, each as its id, the id of its dimension type, the lowest y of a block, the y
+	 * above the highest, the logical height, the sea level and the time of day.
+	 *
+	 * @return one answer per dimension, or null
+	 */
+	String[] dimensions();
+
+	/**
 	 * Answers whether a player may fly and whether they fly now.
 	 *
 	 * @param uuid the UUID of the player in its usual form with dashes
 	 * @return the two fields, true or false, or null when the player is not online
 	 */
 	String flight(String uuid);
+
+	/**
+	 * Answers how many players the server takes at most.
+	 *
+	 * @return the number, or null
+	 */
+	String maxPlayers();
 
 	/**
 	 * Answers the nearest place near a target where a player stands safely: x, y and z of the
