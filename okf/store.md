@@ -490,6 +490,25 @@ coordinate or an angle of -0.0 as 0.0, since SQLite writes a REAL without a frac
 and the file gives the zero back without its sign. A read then answers the same before a restart
 and after it.
 
+## Data from EssentialsX
+
+The migration tool of the [plan](plan.md#data-migration) writes the store from the data of
+EssentialsX 2.22.0, which holds values that the store does not take as they are. The rules below say
+what the tool does with them, and its report names every value it changed.
+
+### Balances
+
+EssentialsX keeps a balance as a decimal number. In the defaults of its `config.yml`, `/pay` takes
+amounts down to the `minimum-pay-amount` of 0.001, and a player with `essentials.eco.loan`, which
+the `essentials.*` of the group admin of the seed includes, may go down to the `min-money` of
+-10000. The store keeps whole cents of zero or more, so the tool rounds a balance with a fraction of
+a cent half to even to whole cents, opens the account with the rounded balance as its starting
+balance, so the log sums to it, and names in its report every account it rounded with the balance
+before and after. A balance below zero has no place in the store, so the tool refuses it, as it
+refuses every entry it cannot place, and names the player and the debt, which an operator settles in
+EssentialsX, such as with `eco set`, before the migration runs again. The port of the economy takes
+every amount in whole cents, as the store does, so a payment below one cent is refused there.
+
 ## The place in the program golem
 
 The store is not wired into `golem run` yet. The ports wire it in this way.
