@@ -271,7 +271,9 @@ separator, which no field may hold. The first field is the kind.
 | `listName` | The UUID of a player, the name | Shows the name for the player in the player list, if they are online, or clears it when the name is empty |
 
 A number travels as the shortest decimal that reads back as the same number, which `Display` of
-Rust writes and `Double.parseDouble` and `Float.parseFloat` of Java read. A teleport does what the
+Rust writes and `Double.parseDouble` and `Float.parseFloat` of Java read, and an infinity as Java
+spells it, `Infinity` or `-Infinity`, since `Display` writes `inf`, which Java does not read. A
+teleport does what the
 command `tp` does, step by step as `TeleportCommand.performTeleport` of Minecraft 1.20.1: it posts
 `EntityTeleportEvent.TeleportCommand` of Forge, so a mod may cancel it or move its target, skips a
 place outside the bounds of the world, `Level.isInSpawnableBounds`, which are x and z from
@@ -287,8 +289,8 @@ to every client. It holds until Golem clears it or the player leaves.
 
 The mod logs an action of an unknown kind, or of a known kind with the wrong number of fields,
 once and skips it, and so a teleport into a dimension the server does not have, once per
-dimension, to a place that is no finite number or lies outside the bounds of the world, and a
-teleport that a mod cancelled. Each action runs on its own, so an action that
+dimension, to a place whose numbers do not read, that is no finite number or that lies outside
+the bounds of the world, and a teleport that a mod cancelled. Each action runs on its own, so an action that
 throws, such as a message to a UUID that does not parse, is logged and the next action runs. The
 host stops the server with the actions `command save-all flush` and `command stop`, so the stop
 path is the same as an operator's at the console.

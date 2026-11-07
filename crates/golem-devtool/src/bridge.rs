@@ -1084,12 +1084,23 @@ impl Handler for Panicking {
     }
 }
 
-/// An entry of the input of actions-encode: an action to encode, or a wire form to decode.
+/// An entry of the input of actions-encode: an action to encode, a wire form to decode, or a
+/// teleport with numbers that are not finite, which JSON cannot carry.
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum EncodeEntry {
     Wire { wire: String },
+    Infinite { infinite: InfiniteSpec },
     Action(ActionSpec),
+}
+
+/// A teleport of a player into a dimension whose x is infinity, y minus infinity, z 0, yaw
+/// infinity and pitch NaN.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InfiniteSpec {
+    uuid: String,
+    dimension: String,
 }
 
 fn actions_encode(arguments: &[String]) -> i32 {
@@ -1106,6 +1117,18 @@ fn actions_encode(arguments: &[String]) -> i32 {
 fn encode_entry(entry: EncodeEntry) -> Value {
     let wire = match entry {
         EncodeEntry::Wire { wire } => wire,
+        EncodeEntry::Infinite { infinite } => Action::Teleport {
+            uuid: infinite.uuid,
+            location: Location {
+                dimension: infinite.dimension,
+                x: f64::INFINITY,
+                y: f64::NEG_INFINITY,
+                z: 0.0,
+                yaw: f32::INFINITY,
+                pitch: f32::NAN,
+            },
+        }
+        .encode(),
         EncodeEntry::Action(spec) => Action::from(spec).encode(),
     };
     let fields: Vec<&str> = wire.split(golem_bridge::SEPARATOR).collect();

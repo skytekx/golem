@@ -7,8 +7,8 @@
  * okf/bridge.md specifies. An action of a kind the bridge does not know, or with the wrong number
  * of fields, comes from a Golem that is newer or broken. The bridge logs it once and skips it,
  * since the same fault would otherwise repeat on every tick. So does a teleport into a dimension
- * the server does not have, to a place that is no finite number or lies outside the bounds of the
- * world, and a teleport that a mod cancelled.
+ * the server does not have, to a place whose numbers do not read, that is no finite number or
+ * that lies outside the bounds of the world, and a teleport that a mod cancelled.
  */
 package com.skytekx.golem.bridge;
 
@@ -116,12 +116,23 @@ final class Actions {
 		if (player == null) {
 			return;
 		}
+		double x;
+		double y;
+		double z;
+		float yaw;
+		float pitch;
+		try {
+			x = Double.parseDouble(fields[3]);
+			y = Double.parseDouble(fields[4]);
+			z = Double.parseDouble(fields[5]);
+			yaw = Float.parseFloat(fields[6]);
+			pitch = Float.parseFloat(fields[7]);
+		} catch (NumberFormatException notNumber) {
+			skip("teleport/number", "Golem queued a teleport whose numbers do not read, so the"
+					+ " bridge skips it");
+			return;
+		}
 		ServerLevel level = level(server, fields[2]);
-		double x = Double.parseDouble(fields[3]);
-		double y = Double.parseDouble(fields[4]);
-		double z = Double.parseDouble(fields[5]);
-		float yaw = Float.parseFloat(fields[6]);
-		float pitch = Float.parseFloat(fields[7]);
 		if (level == null) {
 			skip("teleport/" + fields[2], "Golem queued a teleport into the dimension " + fields[2]
 					+ ", which the server does not have, so the bridge skips it");

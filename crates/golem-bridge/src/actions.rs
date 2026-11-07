@@ -5,7 +5,8 @@
  * at the end of every server tick, and the wire form in which drain() hands each action to Java.
  *
  * A number of an action travels as the shortest decimal that reads back as the same number,
- * which Display of Rust writes and Double.parseDouble of Java reads.
+ * which Display of Rust writes and Double.parseDouble of Java reads, and an infinity as Java
+ * spells it, Infinity or -Infinity, since Display writes inf, which Java does not read.
  */
 
 use std::{
@@ -82,11 +83,11 @@ impl Action {
             Self::Teleport { uuid, location } => vec![
                 uuid.clone(),
                 location.dimension.clone(),
-                location.x.to_string(),
-                location.y.to_string(),
-                location.z.to_string(),
-                location.yaw.to_string(),
-                location.pitch.to_string(),
+                number(location.x),
+                number(location.y),
+                number(location.z),
+                angle(location.yaw),
+                angle(location.pitch),
             ],
             Self::ListName { uuid, name } => vec![uuid.clone(), name.clone().unwrap_or_default()],
         }
@@ -143,6 +144,31 @@ impl Action {
             _ => None,
         }
     }
+}
+
+/// Answers a coordinate in the wire form: the shortest decimal that reads back as the same
+/// number, which Display writes, or an infinity as Java spells it, since Display writes inf. NaN
+/// is spelt alike in both.
+fn number(value: f64) -> String {
+    if value.is_infinite() {
+        infinity(value.is_sign_negative())
+    } else {
+        value.to_string()
+    }
+}
+
+/// Answers an angle in the wire form, as [`number`] answers a coordinate.
+fn angle(value: f32) -> String {
+    if value.is_infinite() {
+        infinity(value.is_sign_negative())
+    } else {
+        value.to_string()
+    }
+}
+
+/// Answers an infinity as `Double.toString` of Java writes it.
+fn infinity(negative: bool) -> String {
+    if negative { "-Infinity" } else { "Infinity" }.to_owned()
 }
 
 /// Logs the first field of the process that held the separator.
