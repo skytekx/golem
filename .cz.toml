@@ -43,14 +43,18 @@ ci, chore and revert. The scope is the crate without its golem- prefix or a top 
 The body follows an empty line, is wrapped at 72 columns and explains the problem first, then why
 the change solves it, then how. The trailers close the message, and the last of them is
 Signed-off-by."""
-bump_pattern = "^(feat|fix|perf|refactor)(\\(.+\\))?(!)?:"
+# The increment of cz bump. Commitizen matches each line of a message against the pattern and
+# the first group of a match against the keys of the map in their order, so a type with its ! is
+# a breaking change, as is a line that opens with BREAKING CHANGE, as Conventional Commits says.
+bump_pattern = "^((BREAKING[\\-\\ ]CHANGE|feat|fix|perf|refactor)(\\(.+\\))?!?):"
 
 [tool.commitizen.customize.bump_map]
-"!" = "MAJOR"
-feat = "MINOR"
-fix = "PATCH"
-perf = "PATCH"
-refactor = "PATCH"
+"^.+!$" = "MAJOR"
+"^BREAKING[\\-\\ ]CHANGE" = "MAJOR"
+"^feat" = "MINOR"
+"^fix" = "PATCH"
+"^perf" = "PATCH"
+"^refactor" = "PATCH"
 
 [[tool.commitizen.customize.questions]]
 type = "list"
