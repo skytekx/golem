@@ -40,8 +40,9 @@ the log, since it would wait for itself.
 
 The program golem builds one runtime, adds its plugins and installs it before the JVM starts.
 Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
-the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from `git rev-parse HEAD`, so a
-build of a checkout names its commit. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
+the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the git checkout of
+Golem itself, with `-dirty` behind it when the files that make the binary differ from HEAD, as
+[JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
 alone and names the commit unknown without it.
 
 ```rust
