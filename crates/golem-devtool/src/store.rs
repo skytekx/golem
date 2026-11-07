@@ -76,6 +76,7 @@ use golem_store::{
     Description,
     Durability,
     Location,
+    MAX_PENDING,
     Mail,
     PermissionGroup,
     PermissionSet,
@@ -1525,6 +1526,55 @@ fn time_reloads(store: &Store, count: usize) -> Result<Value, String> {
     Ok(summary(nanos))
 }
 
+/// The calls of the burst of the bench, three times [`MAX_PENDING`], so one thread that changes
+/// the store as fast as it can meets the bound of the queue of the writer again and again.
+// 49152 fits the usize of every target, also of 16 bits.
+#[allow(clippy::cast_possible_truncation)]
+const BURST: usize = 3 * MAX_PENDING as usize;
+
+/// Makes [`BURST`] calls of the ten changes of [`CALLS`] in turn from one thread as fast as it
+/// can, each timed on its own, and waits for the writer behind them, so the writer meets the mix
+/// of changes a plugin makes. It answers the summary of the calls, whose longest is a change that
+/// waited for room, the changes they queued, since a call such as a second `mark_mail_read`
+/// changes nothing, the changes that waited, the most changes that were pending at once since the
+/// open, the transactions of the writer for the burst, the most changes in one transaction since
+/// the open, and the time the writer spent on the burst.
+fn time_burst(store: &Store, players: usize) -> Result<Value, StoreError> {
+    let first = CALLS
+        .iter()
+        .position(|&(name, _)| name == "join")
+        .unwrap_or(0);
+    let changes = &CALLS[first..];
+    let before = store.stats();
+    let mut nanos = Vec::with_capacity(BURST);
+    for index in 0..BURST {
+        let (_, call) = changes[index % changes.len()];
+        let turn = index / changes.len();
+        let round = Round {
+            index: turn,
+            number: turn % players,
+            player: bench_uuid(turn % players),
+            other: bench_uuid((turn + 1) % players),
+            pass: turn / players,
+        };
+        let started = Instant::now();
+        call(store, &round);
+        nanos.push(u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX));
+    }
+    store.flush()?;
+    let after = store.stats();
+    let busy = Duration::from_nanos(after.busy_nanos - before.busy_nanos);
+    Ok(json!({
+        "calls": summary(nanos),
+        "changes": after.queued - before.queued,
+        "waits": after.waits - before.waits,
+        "largest_pending": after.largest_pending,
+        "batches": after.batches - before.batches,
+        "largest_batch": after.largest_batch,
+        "busy_ms": busy.as_secs_f64() * 1000.0,
+    }))
+}
+
 /// Runs `work` while a second thread reads a balance in a loop, as the server thread would, and
 /// answers the answer of `work`, the longest read meanwhile in nanoseconds and the reads.
 fn while_reading<T>(store: &Store, work: impl FnOnce() -> T) -> (T, u64, u64) {
@@ -1593,7 +1643,8 @@ fn resident_kib() -> Option<u64> {
 }
 
 /// Fills a new store, opens it again, times the calls of the server thread and the writer
-/// behind them, and prints the summary of each kind in microseconds.
+/// behind them, the reloads of the permissions, the checks and a burst of changes that meets the
+/// bound of the queue of the writer, and prints the summary of each in microseconds.
 fn bench(arguments: &[String]) -> i32 {
     let name = BENCH.0;
     let options = match bench_options(arguments) {
@@ -1620,6 +1671,7 @@ fn bench(arguments: &[String]) -> i32 {
         let after = store.stats();
         let reload = time_reloads(&store, (options.repeat / 20).max(1))?;
         let check = check_stall(&store, 5)?;
+        let burst = time_burst(&store, options.players)?;
         store.close()?;
         let file_bytes = fs::metadata(&options.path).map_or(0, |metadata| metadata.len());
         let millis = |duration: Duration| duration.as_secs_f64() * 1000.0;
@@ -1639,6 +1691,7 @@ fn bench(arguments: &[String]) -> i32 {
                 "busy_ms": millis(Duration::from_nanos(after.busy_nanos - before.busy_nanos)),
             },
             "check": check,
+            "burst": burst,
             "file_bytes": file_bytes,
             "resident_kib_after_open": resident,
         }))

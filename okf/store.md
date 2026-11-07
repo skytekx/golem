@@ -78,13 +78,17 @@ the server thread never waits for the writer, with one exception.
 
 At most `MAX_PENDING`, 16384 changes or four batches, wait for the writer. A change that finds that
 many pending waits until the writer took its next batch, before it takes the lock of the cache, so
-every read and every other thread goes on meanwhile. So a thread that changes the store faster
-than the writer commits, such as a plugin in a loop or an import, goes at the pace of the writer,
-and the memory of the queue and the lag of the file stay bounded. The first such wait of a store
-logs `[golem] store: the writer of <path> is 16384 changes behind, so a change waits until it takes
-the next batch`, and `stats()` counts the waits and the most changes that were pending at once,
-which stays at `MAX_PENDING` or below while one thread at a time changes the store. On the server
-thread such a wait costs a tick, and only a burst of more than 16384 changes meets it.
+every read and every other thread goes on meanwhile. So a thread that changes the store faster than
+the writer commits, such as a plugin in a loop or an import, goes at the pace of the writer, and the
+memory of the queue and the lag of the file stay bounded. The first such wait of a store logs
+`[golem] store: the writer of <path> is 16384 changes behind, so a change waits until it takes the
+next batch`, and `stats()` counts the waits and the most changes that were pending at once, which
+stays at `MAX_PENDING` or below while one thread at a time changes the store. A wait lasts until the
+writer committed the batch it works on, up to 4096 changes in one transaction, and only a burst of
+more than 16384 changes meets it. Such a wait costs several ticks of 50 ms: in the burst of
+`golem-devtool store-bench` the longest change took up to 274 ms in the debug build and 151 ms in
+the release build, see [The cost on the server thread](#the-cost-on-the-server-thread). So a port
+that makes such a burst, such as an import, makes it on a thread of its own.
 
 `check` copies the cache under that lock, so that it compares the file with the cache as the call
 found it, and every other call waits for that copy. Every table of the cache sits behind an `Arc`,
@@ -622,6 +626,18 @@ the release build on its own thread, while they cost the server thread 122 ms in
 The open of the store of 5000 players took 130 ms in the debug build and 49 ms in the release build,
 and the release process held 35 MB resident with the store open, which bounds the cache from above.
 The file was 7.9 MB.
+
+The bench ends with a burst from one thread that calls the ten changes of the table in turn 49152
+times, three times `MAX_PENDING`, as fast as it can, so the writer falls behind by `MAX_PENDING`
+changes again and again. In three runs of each build of `golem-devtool store-bench --players 5000
+--repeat 2000` on 2026-11-07 on the machine above, the 49152 calls queued 47152 changes, since a
+call such as a second `mark_mail_read` changes nothing, and 8 or 9 of them waited for room. The
+writer committed the burst in 13 or 14 transactions of up to 4096 changes, which took 158 to 182 ms
+each in the mean of a run of the debug build and 70 to 108 ms in the release build. The longest
+change of the burst, one that waited, took 196 to 274 ms in the debug build and 79 to 151 ms in the
+release build, so a wait lasts about one transaction of the writer, which is several ticks, while
+the 99th percentile of the changes of the burst stayed at 16 microseconds or below. `09_store` holds
+the longest change of the burst in the debug build below 2000 ms.
 
 ## Tests
 
