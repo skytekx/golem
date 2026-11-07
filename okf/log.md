@@ -145,3 +145,7 @@ Oldest first. Times are UTC.
   [EssentialsX social port](plugins/essentials/social.md) and
   [EssentialsX bridge needs](plugins/essentials/bridge-needs.md), held against the bridge as it is
   after the fixes of the game access.
+- The docs lint, `.github/scripts/docs_lint.py`, holds the wiki, `Documentation/`, CONTRIBUTING.md
+  and README.md to the prose rules of CONTRIBUTING.md and checks that the index links every page
+  and that [Testing](../Documentation/testing.md) names every notebook. CI runs it in the job of
+  the licenses, and `10_docs_lint` holds it to each of its seven rules.

@@ -54,3 +54,7 @@ entries:
   # The store of the plugins: the schema, every call and refusal, a kill, a failed writer and the cost.
   - notebook: 09_store
     cell_timeout: 1800
+
+  # The docs lint of Golem, rule by rule, on the tree and on trees that break one rule each.
+  - notebook: 10_docs_lint
+    cell_timeout: 300
