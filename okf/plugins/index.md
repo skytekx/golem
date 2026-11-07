@@ -120,7 +120,9 @@ The runtime reads the commands of a plugin once, when the plugin is added. The f
 declares a name owns it. A later plugin that declares the same name is logged and refused, and so
 is a name that is empty or holds a space, a control character or a slash, since the mod registers
 every name as a literal of Brigadier. `commandNames()` answers the names in the order of the
-plugins and of their declarations.
+plugins and of their declarations. A name that the game or a mod holds goes to the plugin, and the
+command it replaces stays as `minecraft:<name>`, but for `setblock`, `summon`, `testforblock` and
+`tellraw`, which keep the command of the game, as [Bridge](../bridge.md#commands) says.
 
 | Case | Answer of `command()` |
 | --- | --- |

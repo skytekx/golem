@@ -5,7 +5,9 @@
  *
  * Every name that Golem answers becomes a literal that runs on its own and the same literal with
  * one greedy string argument, so the plugin parses its arguments itself. Brigadier asks for no
- * permission level: the plugin checks the sender through golem-permissions. The natives learn who
+ * permission level: the plugin checks the sender through golem-permissions. A name that the game
+ * or a mod holds already goes to the plugin, and CommandTree moves the command it replaces to
+ * minecraft:<name>, but for the commands of the game that Spigot keeps. The natives learn who
  * runs a command and at which permission level, so a command block or a function never passes for
  * the console, and a source that runs a command as a player through execute as never passes for
  * that player, as okf/bridge.md specifies.
@@ -17,13 +19,16 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.tree.RootCommandNode;
 import com.skytekx.golem.host.Host;
+import java.util.Set;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 /** Registers the commands of the plugins and hands every run of one to the natives of Golem. */
@@ -32,6 +37,14 @@ public final class PluginCommands {
 
 	/** The name of the one argument, which holds everything after the name and one space. */
 	private static final String ARGUMENTS = "arguments";
+
+	/**
+	 * The commands of the game that keep their names when a plugin names one of them, the list
+	 * commands.replace-commands of spigot.yml as the live server holds it, the default of Spigot.
+	 * Minecraft 1.20.1 has no testforblock, so that name is free for a plugin.
+	 */
+	private static final Set<String> KEPT = Set.of("setblock", "summon", "testforblock",
+			"tellraw");
 
 	private final Guard guard;
 
@@ -42,20 +55,39 @@ public final class PluginCommands {
 	/**
 	 * Registers every command of the plugins, at the start and on every reload of the data.
 	 *
+	 * <p>The bridge listens last, after the mods registered their commands, so the rule below and
+	 * not the order of the listeners decides a name that the game or a mod holds too. A plugin
+	 * command takes the plain name and the command it replaces stays as minecraft:<name>, as
+	 * CraftBukkit orders them, but for the names of {@link #KEPT}, which keep the command of the
+	 * game.
+	 *
 	 * @param event the event of Forge
 	 */
-	@SubscribeEvent
+	@SubscribeEvent(priority = EventPriority.LOWEST)
 	public void register(RegisterCommandsEvent event) {
 		String[] names = guard.ask("Host.commandNames", Host::commandNames, NONE);
 		if (names == null) {
 			return;
 		}
+		RootCommandNode<CommandSourceStack> root = event.getDispatcher().getRoot();
 		for (String name : names) {
-			if (parses(name)) {
-				event.getDispatcher().register(literal(name));
-			} else {
+			if (!parses(name)) {
 				GolemBridge.LOG.warn("Golem names the command '{}', which Brigadier"
 						+ " cannot parse, so the bridge skips it", name);
+			} else if (root.getChild(name) == null) {
+				event.getDispatcher().register(literal(name));
+			} else if (KEPT.contains(name)) {
+				GolemBridge.LOG.warn("Golem names the command '{}', which the game keeps, as"
+						+ " replace-commands of Spigot keeps it, so the bridge skips it", name);
+			} else if (CommandTree.moveAside(root, name)) {
+				event.getDispatcher().register(literal(name));
+				GolemBridge.LOG.info("The command '{}' of Golem takes the name of a command of"
+						+ " the game or a mod, which stays as '{}{}'", name, CommandTree.PREFIX,
+						name);
+			} else {
+				GolemBridge.LOG.warn("Golem names the command '{}', which the game or a mod"
+						+ " holds and the bridge cannot move to '{}{}', so the bridge skips it",
+						name, CommandTree.PREFIX, name);
 			}
 		}
 	}

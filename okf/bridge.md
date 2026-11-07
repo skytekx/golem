@@ -147,6 +147,25 @@ whitespace cannot be typed as the first word of a command, so the mod skips it w
 When `command` throws, the sender reads that the command failed and the log of the
 server holds the exception.
 
+The mod registers the commands of the plugins last, at the lowest priority of
+`RegisterCommandsEvent`, so the commands of the game and of the mods are in the tree by then. A
+plugin command named like one of them takes the plain name, as CraftBukkit orders them and as
+[Plugin API](api.md#98-commands-and-tab-completion) designs it. The mod moves the command it
+replaces to `minecraft:<name>` with its permission level, its arguments and its redirect, points
+every alias of the root that redirects to it, such as `tell` to `msg`, at the moved command, and
+logs one line. A mod command moves the same way, as on the live server, where Arclight wrapped every
+command of the tree, those of the mods included, under the prefix `minecraft`. The names of
+`commands.replace-commands` of `spigot.yml`, as Spigot sets them by default and the live server
+keeps them, `setblock`, `summon`, `testforblock` and `tellraw`, keep the command of the game, and
+the mod skips the plugin command with a warning. Brigadier merges a literal into the node of the
+same name, which keeps the permission level and the arguments of that node, so a plugin command
+merged into `/seed` would answer no player below level 2 and lose every call with arguments to the
+arguments of the game. So the mod removes the node from the tree first, through the two private
+maps of the root of Brigadier, which has no call for it. When it cannot, or when the tree holds
+`minecraft:<name>` already, it skips the plugin command with a warning and the game keeps its
+command. A mod that registers a command at the lowest priority after the bridge still merges it
+into the node of the plugin.
+
 ## The game
 
 While a native of the server thread runs, the handler in Rust may ask the game. The mod hands
@@ -446,7 +465,11 @@ armor stand. The stand in natives ask the object of `connect` every question of 
 server thread and once from the worker thread of a chat message, where it answers null. While a
 second client is online, the natives take the game mode from the first player for one question of
 the players, so that the answer of that player throws, and `players()` must answer the second
-player alone, with one error of the guard. The notebook records the thread of every call, and the
-threads of [the rules of the server thread](#the-rules-of-the-server-thread) come from it.
+player alone, with one error of the guard. The natives name `seed` and `teleport`, which the game
+holds, and `setblock`, which it keeps: the player runs the `seed` of the plugin below the level of
+the game, the console reaches the commands of the game as `minecraft:seed` and
+`minecraft:teleport` and through the alias `tp`, and `setblock` stays the command of the game with
+a warning. The notebook records the thread of every call, and the threads of
+[the rules of the server thread](#the-rules-of-the-server-thread) come from it.
 
 Related: [JVM host](jvm-host.md), [Plugins](plugins/index.md), [Index](index.md).
