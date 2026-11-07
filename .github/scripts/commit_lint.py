@@ -34,9 +34,13 @@ judged as git will store it, as git commit and git merge hand it to the commit-m
 cut line of git commit --verbose, which the diff follows, and without the lines that open with the
 comment character of core.commentChar, # unless it is set, which git drops from a message that was
 edited unless commit.cleanup keeps them. Git tells the hook that no editor ran with GIT_EDITOR set
-to :, and then keeps those lines. Merge commits are left out, since git writes their message. A
+to :, and then keeps those lines.
+
+Merge commits are left out, since git writes their message: a range holds no merge, and the hook
+judges no message while git makes a merge, in git merge or in a git commit that concludes one. A
 shallow clone cuts the parents of the commits at its edge, so there a commit whose message git
 writes for a merge, such as the merge of a pull request that CI checks out, is left out as well.
+
 With no range, the commits are those of HEAD that origin/main does not hold, or every commit of
 HEAD while origin/main does not exist. Every failure is printed with the short hash and the
 subject, and the exit status is 1 when any rule fails.
@@ -93,6 +97,16 @@ def default_range(root: Path) -> str:
 
 #: The subject git gives a merge commit, and GitHub the merge of a pull request.
 MERGE_SUBJECT = re.compile(r"^Merge (branch |remote-tracking branch |tag |pull request |commit |[0-9a-f]{7,40} into )")
+
+
+def merging(root: Path, message_file: Path) -> bool:
+    """Whether git makes a merge, so that the hook judges no message: git merge hands the hook its
+    MERGE_MSG, and a git commit that concludes a merge runs while MERGE_HEAD exists."""
+    if message_file.name == "MERGE_MSG":
+        return True
+    probe = subprocess.run(["git", "-C", str(root), "rev-parse", "--quiet", "--verify", "MERGE_HEAD"],
+                           capture_output=True, text=True, check=False)
+    return probe.returncode == 0
 
 
 def shallow_edge(root: Path) -> set[str]:
@@ -337,6 +351,8 @@ def main(argv=None) -> int:
 
     subject_of = resolver(args.root)
     if args.message_file:
+        if merging(args.root, args.message_file):
+            return 0
         text = args.message_file.read_text(encoding="utf-8")
         failures = check_message(stored(text, args.root, os.environ), subject_of)
         for failure in failures:
