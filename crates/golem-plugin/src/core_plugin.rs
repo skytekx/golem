@@ -24,6 +24,10 @@ use crate::{
 /// What a [`Source`] names when the commit of the build is not known.
 pub const UNKNOWN_COMMIT: &str = "unknown";
 
+/// The end of the commit of a build whose files differ from that commit, as the build script of
+/// the program golem names it.
+pub const DIRTY_SUFFIX: &str = "-dirty";
+
 /// The command of the core plugin.
 pub const COMMAND: &str = "golem";
 
@@ -70,12 +74,19 @@ impl Source {
         !commit.is_empty() && commit != UNKNOWN_COMMIT
     }
 
+    /// Answers whether the build holds changes that its commit does not, so that the tree of the
+    /// commit is not its source.
+    pub fn dirty(&self) -> bool {
+        self.commit.trim().ends_with(DIRTY_SUFFIX)
+    }
+
     /// Answers the link to the source of the commit, the repository followed by `/tree/` and
-    /// the commit, or the repository alone when the commit is unknown.
+    /// the commit, or the repository alone when the commit is unknown or the build is dirty, since
+    /// no tree of the repository holds that source.
     pub fn link(&self) -> String {
         let repository = self.repository.trim_end_matches('/');
         let repository = repository.strip_suffix(".git").unwrap_or(repository);
-        if self.commit_known() {
+        if self.commit_known() && !self.dirty() {
             format!("{repository}/tree/{}", self.commit.trim())
         } else {
             repository.to_owned()

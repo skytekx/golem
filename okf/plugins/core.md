@@ -5,7 +5,7 @@ type: Spec
 title: Core plugin
 description: The core plugin of Golem and its command golem, which names the license and the source of the running build as section 13 of the AGPL asks, the TPS and MSPT of the server, the budget of every plugin, who runs a command, and the tools of operators that read the game, teleport a player to a safe place and name them in the player list.
 tags: [plugins, core, command, agpl, source, status, operators, game]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Core plugin
@@ -58,7 +58,9 @@ Source of this build: https://github.com/skytekx/golem/tree/4b825dc642cb6eb9a060
 
 The link is the repository followed by `/tree/` and the commit, with a trailing slash or `.git` of
 the repository dropped. While the commit is unknown, the line `Commit: unknown` stands and the link
-is the repository alone.
+is the repository alone. A commit that ends in `-dirty` names a build whose files differ from that
+commit, as the build script of the program golem names it, so the tree of the commit is not its
+source and the link is the repository alone as well.
 
 `Source::of_build()` gives the core plugin the version and the repository of the workspace and the
 commit that the environment variable `GOLEM_COMMIT` names when the crate is built, so a release
@@ -175,7 +177,7 @@ A later `ServerStarting` logs nothing. Every event passes.
 ## Tests
 
 The notebook `tests/notebooks/04_plugins.ipynb` checks every answer above in its section on the
-core plugin: the five lines of the source with a known commit, with an unknown commit and of the
+core plugin: the five lines of the source with a known, an unknown and a dirty commit and of the
 build, the help of `/golem` and `/golem help`, the error of an unknown subcommand, the first line
 of the status against the statistics of the bridge, and the single line of the log. Its section on
 the tools of operators checks `whoami` for every sender, the refusal below level 2 and every

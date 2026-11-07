@@ -48,9 +48,13 @@ server directory, since the paths of `unix_args.txt` are relative to it, and rea
 module path, installs the plugin runtime with the core plugin as the handler of the bridge, starts
 the watch of the signals and runs the JVM. It exits with 0 when main returned and `DestroyJavaVM`
 answered 0, and with 1 otherwise. `golem source` prints the version, the repository and the commit
-of the binary, which `build.rs` takes from the variable `GOLEM_COMMIT`, else from
-`git rev-parse HEAD`, else names unknown. `golem version` and `golem help` print the version and the
-usage.
+of the binary, which `build.rs` takes from the variable `GOLEM_COMMIT`, else from HEAD of the git
+checkout of Golem, else names unknown. The checkout counts only when its work tree is the workspace
+and tracks `crates/golem/build.rs`, since a copy of Golem inside the checkout of another project
+would name a commit of that project, and while the crates, `Cargo.toml`, `Cargo.lock` or
+`rust-toolchain.toml` differ from HEAD, also by a file that git does not track, the commit ends in
+`-dirty`, for the tree of HEAD is not the source that runs. `golem version` and `golem help` print
+the version and the usage.
 
 ## The launch
 
