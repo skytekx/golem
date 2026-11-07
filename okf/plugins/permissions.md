@@ -301,4 +301,6 @@ server, a node that nothing names included, unless the owner decides and records
 back to the defaults of their mods. The notebook `04_plugins` holds a plugin that answers that way
 to its answers, beside one that leaves the node to the default resolver.
 
+Issue: [#105](https://github.com/skytekx/golem/issues/105).
+
 Related: [Plan](../plan.md#luckperms-5571), [Bridge](../bridge.md), [Index](../index.md).
