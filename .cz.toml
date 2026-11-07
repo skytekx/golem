@@ -83,12 +83,16 @@ type = "input"
 name = "summary"
 message = "The summary, imperative and in lower case, without a full stop:"
 
+# The body and the trailers take several lines, which Enter separates and Esc and then Enter, or
+# Alt and Enter, end.
 [[tool.commitizen.customize.questions]]
 type = "input"
 name = "body"
 message = "The body, wrapped at 72 columns: the problem, why the change solves it, how:"
+multiline = true
 
 [[tool.commitizen.customize.questions]]
 type = "input"
 name = "trailers"
-message = "The trailers besides Signed-off-by, such as Closes: or Fixes: (may be empty):"
+message = "The trailers besides Signed-off-by, one per line, such as Closes: or Fixes: (may be empty):"
+multiline = true

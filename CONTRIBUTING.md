@@ -85,7 +85,8 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
   so that `git bisect` works. A refactor never rides along with a change of behaviour.
 
 [.cz.toml](.cz.toml) gives Commitizen the subject, so `cz commit -- -s` writes a message through
-its questions and `cz check` checks one. The commit lint,
+its questions and `cz check` checks one. The questions of the body and of the trailers take several
+lines, which Esc and then Enter end. The commit lint,
 [.github/scripts/commit_lint.py](.github/scripts/commit_lint.py), checks the rules of the kernel
 that Commitizen does not know. CI runs both on every commit of a push and of a pull request.
 
