@@ -225,8 +225,10 @@ impl Plugin for CorePlugin {
             Some("player") => operator::player,
             Some("world") => operator::world,
             Some("teleport") => operator::teleport,
-            Some(other) => {
-                let mut lines = vec![format!("The subcommand {other} of /golem is unknown.")];
+            Some(_) => {
+                // The match ignores the case, but the answer names the word as it was typed.
+                let typed = words.first().copied().unwrap_or_default();
+                let mut lines = vec![format!("The subcommand {typed} of /golem is unknown.")];
                 lines.extend(self.help());
                 return lines;
             }
