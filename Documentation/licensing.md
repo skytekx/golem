@@ -3,9 +3,10 @@
 # Licensing
 
 Golem is licensed under the GNU Affero General Public License 3.0 only, SPDX `AGPL-3.0-only`,
-whose text is in [LICENSE](../LICENSE). This page explains why, who holds the copyright, how every
-file of the repository states its license, where the license texts live, and which files carry
-work of other projects.
+whose text is in [LICENSE](../LICENSE). The ports of Bukkit plugins that [ports.toml](../ports.toml)
+lists keep the licenses of the plugins they port, see section 6. This page explains why, who holds
+the copyright, how every file of the repository states its license, where the license texts live,
+and which files carry work of other projects.
 
 Golem states licenses in [SPDX](https://spdx.dev/) identifiers first of all, and its tree is
 compliant with [REUSE](https://reuse.software/), the specification of the FSFE that builds on
@@ -100,10 +101,10 @@ them. The exceptions are these.
 - `LICENSE` and the texts under `LICENSES/` carry no tags, since they are the license texts
   themselves, and REUSE leaves them out.
 
-A manifest also states the license in its own field. The `license` field of every `Cargo.toml`
-says `AGPL-3.0-only`, in the workspace once and inherited by every crate with
-`license.workspace = true`, and the Gradle build of the bridge mod sets the same identifier in the
-license of its published metadata.
+A manifest also states the license in its own field. The `license` field of the workspace says
+`AGPL-3.0-only`, and every crate that is no port inherits it with `license.workspace = true`. The
+`Cargo.toml` of a port states the license of its upstream itself, see section 6. The Gradle build
+of the bridge mod sets `AGPL-3.0-only` in the license of its published metadata.
 
 ## 4. The license texts
 
@@ -112,8 +113,9 @@ names, one file per license named by its SPDX identifier, as REUSE specifies.
 
 | Text | Why it is here |
 | --- | --- |
-| `LICENSES/AGPL-3.0-only.txt` | The license of Golem. A new file always takes it |
-| `LICENSES/MIT.txt` | Aosabi, from which the license lint is derived. No new file takes it alone |
+| `LICENSES/AGPL-3.0-only.txt` | The license of Golem. A new file outside a port takes it |
+| `LICENSES/GPL-3.0-or-later.txt` | EssentialsX, whose ports `golem-essentials` and `golem-essentials-spawn` and their spec under `okf/plugins/essentials` take it alone |
+| `LICENSES/MIT.txt` | Aosabi, whose code the license lint takes beside the AGPL, and LuckPerms, whose port `golem-permissions` takes it alone |
 
 `LICENSES/AGPL-3.0-only.txt` and `LICENSE` are the same bytes, the file `agpl-3.0.txt` of gnu.org
 unchanged. `LICENSE` stays at the root so that GitHub reads the license of the repository.
@@ -179,9 +181,10 @@ of an upstream and stays under the AGPL 3 only.
 
 The GPL 3 and the AGPL 3 each allow, in their section 13, to combine a work under one with a work
 under the other into one program, and the MIT license combines with both. The program `golem`
-links its own crates with the ports that way. Each part keeps its license, and since the
-combination holds AGPL code, whoever runs it for players must offer them the source of all of it,
-which `/golem source` does.
+links no port yet, and `golem-devtool`, the tool of the notebooks, links one, `golem-permissions`.
+Once `golem` links the ports, it combines them with its own crates that way. Each part keeps its
+license, and since the combination holds AGPL code, whoever runs it for players must offer them
+the source of all of it, which `/golem source` does.
 
 Golem never carries these:
 
@@ -232,7 +235,9 @@ reads.
 
 ## 10. Contributing
 
-A contribution is licensed under the license of the file it changes, and a new file takes the
+A contribution is licensed under the license of the file it changes. A new file below the path of
+a port in `ports.toml` takes the license of its upstream and a copyright line for each holder of
+the upstream beside the one of Florian Kleber, as section 6 shows. Every other new file takes the
 AGPL 3 only with its SPDX lines. A file derived from another project keeps its credit, and the
 project stays in NOTICE.
 

@@ -15,9 +15,10 @@ copyright lines of the project's license file.
 
 The AGPL 3 and the GPL 3 each allow, in their section 13, to combine a work
 under one of them with a work under the other into one program. The program
-golem combines its own code under the AGPL 3 only with the ports under the
-GPL 3 or later and under the MIT license that way. Each part keeps its
-license, and the program as a whole is offered under section 13 of the AGPL.
+golem links no port yet. Once it does, it combines its own code under the
+AGPL 3 only with the ports under the GPL 3 or later and under the MIT license
+that way. Each part keeps its license, and the program as a whole is offered
+under section 13 of the AGPL.
 
 Golem does not carry Minecraft, Forge, Arclight or CraftBukkit code. The
 server jar of Minecraft comes from Mojang's download and is never part of
