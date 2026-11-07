@@ -36,8 +36,8 @@ pub(crate) struct Chain {
 pub(crate) enum Outcome<'a> {
     /// The player is not a UUID.
     BadPlayer,
-    /// The node is not a node a check may name.
-    BadNode,
+    /// The node is not a node a check may name, and why.
+    BadNode(node::Flaw<'a>),
     /// No source names the node.
     Undefined,
     /// The nodes of the player decided.
@@ -55,7 +55,7 @@ impl Outcome<'_> {
     pub fn value(self) -> Option<bool> {
         match self {
             Self::Player(hit) | Self::Group { hit, .. } => Some(hit.value.granted()),
-            Self::BadPlayer | Self::BadNode | Self::Undefined => None,
+            Self::BadPlayer | Self::BadNode(_) | Self::Undefined => None,
         }
     }
 }
@@ -65,8 +65,8 @@ pub(crate) fn resolve<'a>(permissions: &Permissions, uuid: &str, node: &'a str) 
     let Some(id) = node::parse_uuid(uuid) else {
         return Outcome::BadPlayer;
     };
-    if node::check_node(node).is_err() {
-        return Outcome::BadNode;
+    if let Err(flaw) = node::check_node(node) {
+        return Outcome::BadNode(flaw);
     }
     let (own, chain) = match permissions.players.get(&id) {
         Some(player) => (Some(&player.table), &*player.chain),
@@ -126,10 +126,7 @@ pub(crate) fn reason(
 ) -> String {
     match outcome {
         Outcome::BadPlayer => format!("The player {uuid:?} is not a UUID"),
-        Outcome::BadNode => {
-            let why = node::check_node(node).err().unwrap_or_default();
-            format!("The node {node:?} {why}")
-        }
+        Outcome::BadNode(flaw) => format!("The node {node:?} {flaw}"),
         Outcome::Undefined => format!("No rule names {node}"),
         Outcome::Player(hit) => format!("The player {}", says(hit)),
         Outcome::Group { group, hit, rival } => {

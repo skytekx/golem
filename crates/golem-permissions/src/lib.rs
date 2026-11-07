@@ -94,7 +94,8 @@
 //! Loading builds a table per source and the search order of every player, shared by the
 //! players with the same groups. A check then reads the UUID, looks the player up and asks each
 //! source at most one question per segment of the node until one matches.
-//! [`Permissions::value`] allocates nothing, which is the form for the server thread.
+//! [`Permissions::value`] allocates nothing, also for a player or a node that a check may not
+//! name, which is the form for the server thread.
 //! [`Permissions::check`] adds the sentence of the reason.
 
 mod config;

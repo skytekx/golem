@@ -40,12 +40,58 @@ pub(crate) struct Rule<'a> {
 /// The characters a segment may hold, for the messages.
 const SEGMENT_CHARACTERS: &str = "a to z, 0 to 9, _ and -";
 
+/// Why a text is no node or no name of a group. It borrows from the text, so a check finds it
+/// without allocating, and it prints as the end of a sentence that names the text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Flaw<'a> {
+    /// The text is empty.
+    Empty,
+    /// A segment is empty, as in `a..b`.
+    EmptySegment,
+    /// A segment starts with `-`.
+    DashSegment(&'a str),
+    /// A `*` stands where no wildcard may.
+    Star,
+    /// A segment holds a character it does not take.
+    Character(char),
+    /// A node of a check starts with `-`.
+    Deny,
+    /// A node of a check is a wildcard.
+    Wildcard,
+    /// A name of a group holds a dot.
+    Dot,
+}
+
+impl std::fmt::Display for Flaw<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => formatter.write_str("is empty"),
+            Self::EmptySegment => formatter.write_str("holds an empty segment"),
+            Self::DashSegment(segment) => write!(
+                formatter,
+                "holds the segment {segment}, which starts with -, but a segment starts with a to z, 0 to 9 or _"
+            ),
+            Self::Star => formatter
+                .write_str("holds a * that is not a wildcard, which is * alone or .* at the end"),
+            Self::Character(bad) => write!(
+                formatter,
+                "holds the character {bad:?}, but a segment takes only {SEGMENT_CHARACTERS}"
+            ),
+            Self::Deny => {
+                formatter.write_str("starts with -, which marks a deny in the configuration")
+            }
+            Self::Wildcard => formatter.write_str("is a wildcard, and a check names one node"),
+            Self::Dot => formatter.write_str("holds a dot, and a group name is one segment"),
+        }
+    }
+}
+
 /// Reads a node of the configuration, such as `essentials.home`, `-essentials.*` or `*`.
 ///
 /// # Errors
 ///
-/// Returns why `text` is no node, as the end of a sentence that names it.
-pub(crate) fn parse_rule(text: &str) -> Result<Rule<'_>, String> {
+/// Returns why `text` is no node.
+pub(crate) fn parse_rule(text: &str) -> Result<Rule<'_>, Flaw<'_>> {
     let (deny, body) = match text.strip_prefix('-') {
         Some(body) => (true, body),
         None => (false, text),
@@ -58,7 +104,7 @@ pub(crate) fn parse_rule(text: &str) -> Result<Rule<'_>, String> {
     }
     if let Some(prefix) = body.strip_suffix(".*") {
         if prefix.is_empty() {
-            return Err("holds an empty segment".to_owned());
+            return Err(Flaw::EmptySegment);
         }
         check_segments(prefix)?;
         return Ok(Rule {
@@ -74,16 +120,17 @@ pub(crate) fn parse_rule(text: &str) -> Result<Rule<'_>, String> {
 }
 
 /// Checks that `text` is a node a check may name: segments alone, with no wildcard and no deny.
+/// It allocates nothing, since every check of the server thread runs it.
 ///
 /// # Errors
 ///
-/// Returns why `text` is no such node, as the end of a sentence that names it.
-pub(crate) fn check_node(text: &str) -> Result<(), String> {
+/// Returns why `text` is no such node.
+pub(crate) fn check_node(text: &str) -> Result<(), Flaw<'_>> {
     if text.starts_with('-') {
-        return Err("starts with -, which marks a deny in the configuration".to_owned());
+        return Err(Flaw::Deny);
     }
     if text == "*" || text.ends_with(".*") {
-        return Err("is a wildcard, and a check names one node".to_owned());
+        return Err(Flaw::Wildcard);
     }
     check_segments(text)
 }
@@ -92,36 +139,32 @@ pub(crate) fn check_node(text: &str) -> Result<(), String> {
 ///
 /// # Errors
 ///
-/// Returns why `text` is no name, as the end of a sentence that names it.
-pub(crate) fn check_name(text: &str) -> Result<(), String> {
+/// Returns why `text` is no name.
+pub(crate) fn check_name(text: &str) -> Result<(), Flaw<'_>> {
     if text.contains('.') {
-        return Err("holds a dot, and a group name is one segment".to_owned());
+        return Err(Flaw::Dot);
     }
     check_segments(text)
 }
 
 /// Checks that `text` is segments joined by dots, each of [a-z0-9_-] and starting with one of
 /// [a-z0-9_], since a leading `-` marks a deny.
-fn check_segments(text: &str) -> Result<(), String> {
+fn check_segments(text: &str) -> Result<(), Flaw<'_>> {
     if text.is_empty() {
-        return Err("is empty".to_owned());
+        return Err(Flaw::Empty);
     }
     for segment in text.split('.') {
         let Some(first) = segment.chars().next() else {
-            return Err("holds an empty segment".to_owned());
+            return Err(Flaw::EmptySegment);
         };
         if first == '-' {
-            return Err(format!(
-                "holds the segment {segment}, which starts with -, but a segment starts with a to z, 0 to 9 or _"
-            ));
+            return Err(Flaw::DashSegment(segment));
         }
         if let Some(bad) = segment.chars().find(|&c| !is_segment_character(c)) {
             return Err(if bad == '*' {
-                "holds a * that is not a wildcard, which is * alone or .* at the end".to_owned()
+                Flaw::Star
             } else {
-                format!(
-                    "holds the character {bad:?}, but a segment takes only {SEGMENT_CHARACTERS}"
-                )
+                Flaw::Character(bad)
             });
         }
     }

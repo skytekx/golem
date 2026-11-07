@@ -171,7 +171,9 @@ broken configuration goes to standard error with the exit status 1.
 Loading builds one table per source, with the exact nodes, the prefixes of the wildcards and `*`
 apart, and the search order of every player, shared by the players with the same groups. A check
 then reads the UUID, finds the player in a hash map and asks each source at most one lookup per
-segment of the node, until a source matches. `value` allocates nothing.
+segment of the node, until a source matches. `value` allocates nothing, also for a player or a
+node that a check may not name, and the notebook counts the allocations of its checks to hold it to
+that.
 
 The notebook times the same check of a player in three groups in a configuration with that player
 alone and in one with 200 groups and 5000 players. In two runs on 2026-11-06, in the cloud
