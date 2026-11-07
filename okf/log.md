@@ -5,7 +5,7 @@ type: Log
 title: Change log
 description: Chronological change log of Golem from the plan of 2026-11-06 on.
 tags: [log, history]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # Change log
@@ -65,3 +65,78 @@ Oldest first. Times are UTC.
   hid, `-J-server` and a source file in upper case, a merge commit at the edge of a shallow clone,
   the target directory of cargo, the include of macOS, the missing steps of CI and the pages that
   said what was no longer true.
+- Three parts went onto the branch `integrate/foundation`, each built by an agent of its own:
+  - The check of the modpack: `tests/fetch.py --only modpack` builds the SkyTekx 3 modpack of the
+    live server from a pinned commit of its repository, and `08_modpack_boot` boots it under java,
+    golem and Arclight and then under golem on the world that Arclight wrote. Golem booted the 289
+    mods as java did, so nothing of Golem needed a fix. See [Modpack](modpack.md).
+  - The game access: the bridge passes the permission level of the source of a command, reports
+    where a player died, teleports players and names them in the player list, answers the
+    PermissionAPI of Forge through the handler `golem:permissions`, and lets the plugins ask the
+    game on the server thread, with the natives `connect` and `permission`, 16 in all. The core
+    plugin gives operators the tools of `/golem` that ask the game. See [Bridge](bridge.md) and
+    [Core plugin](plugins/core.md).
+  - The store: `golem-store` keeps the data of the plugins in one SQLite file, `golem-devtool
+    store` drives it from a JSON script, and `09_store` holds it to its schema, its refusals and
+    its crashes. See [Store](store.md).
+- The owner ruled that plugins call the Golem API in process through the executor of Aosabi, and
+  that Bukkit and Spigot plugins run unchanged through a Bukkit layer on the API. See
+  [Decisions](decisions.md). A design panel on Opus and Fable wrote the plugin API and the format
+  of its coverage check. See [Plugin API](api.md) and [API coverage](api-coverage.md).
+- A survey of 503 plugins that run on Spigot 1.20.1 measured the three levels of the Bukkit layer,
+  and `tools/plugin-survey/` rebuilds it. See [Bukkit layer](bukkit-layer.md).
+- An adversarial review of the three parts, reviewers on Opus and on Fable and a judge for each
+  part, confirmed 29 findings of the check of the modpack, 22 of the game access and 26 of the
+  store, and refuted 4, 5 and 4.
+- The fixes of the check of the modpack went in, each with its notebook case: the fetch starts a
+  broken resume over, refuses a malformed index with one line, follows redirects only over https
+  to known hosts, keeps only what the pin names and fetches the 31 libraries of Arclight, so its
+  boot downloads nothing, and CI saves the downloads and the pack right after the fetch. Notebook
+  08 asserts that java loads every jar, pins the lines of golem itself and its warnings on the
+  world of Arclight, takes a fixed count of samples of the TPS, reads a decimal comma, gives the
+  voice chat of each copy a free port, keeps the logs of a failed boot, scans the coremods and
+  mixin configs, finds the native handlers of signals, fails every boot on a failure of the
+  storage of the world and checks the stop of every boot by its saves.
+- The issues [#99](https://github.com/skytekx/golem/issues/99) to
+  [#104](https://github.com/skytekx/golem/issues/104) record the quirks that the check found: the
+  two conflicts of mixins of Arclight with Apothic Attributes and Apotheosis, the libraries that
+  Arclight downloads from a third party mirror, the pack of the server repository that differs
+  from the mods of the live server, the save of Arclight that skips the tail of vanilla, and the
+  key of TiCEX that Forge corrects at every start.
+
+## 2026-11-07
+
+- The fixes of the game access went in, each with its notebook case: the search for a safe place
+  reads loaded chunks alone and keeps out portals, cobwebs, the bedrock roof of the Nether and the
+  edge of the world border, a teleport runs as the command `tp` runs it, an infinite number
+  travels as Java reads it, a call of another thread waits at most one second for the handler, a
+  failing question prints its stack trace once, a command run as a player is judged by the source
+  that ran it, the game answers nothing from `serverStopped` on, an operator level beyond 0 to 4
+  reads as the nearest one, a player whose answer throws leaves the others, and the mod warns when
+  Forge takes another permission handler. The core plugin says that the game gives no answer
+  instead of refusing, and `/golem listname` keeps the text as the operator typed it. The
+  scripted game of the devtool answers as the game of the mod. The pages name the respawn point
+  as the point that the player holds, say that a permission answer holds in every context and
+  record that Arclight hands every Boolean node of a mod to LuckPerms.
+- The fixes of the store went in, each with its notebook case: the permissions and their
+  generation are one read, a check copies the cache and queues its read under one lock, copies
+  pointers instead of rows and sums the log of an account without an overflow, every close answers
+  as the first, a second open in the same process is named, the open reads what a file is before
+  it may write to it, a coordinate of -0.0 is 0.0, the changes that wait for the writer are
+  bounded, a failed writer says which changes it loses and gives its reason to every later call,
+  `PermissionSet::from_toml` refuses a key that `golem-permissions` refuses, and
+  `libsqlite3-sys` is pinned exactly. The devtool refuses a weight that is no integer, stops
+  without a panic when its output closes and closes a store once. The page states how the
+  migration carries the balances and the names of EssentialsX and what a change costs the server
+  thread, a burst that waits for the writer included.
+- Open in the game access stays that `/golem status` does not name the permission handler that
+  Forge took. See [Open items](open-items.md).
+- The issues [#105](https://github.com/skytekx/golem/issues/105) to
+  [#107](https://github.com/skytekx/golem/issues/107) record the quirks that the reviews of the
+  game access and of the store found: Arclight hands every Boolean permission of a mod to
+  LuckPerms, and EssentialsX keeps balances with fractions of a cent and below zero and folds the
+  names of homes, warps and spawn groups, which the store holds otherwise. The issues #102 to #104
+  now say what notebook 08 checks.
+- The shared pages follow the merge: [Testing](../Documentation/testing.md) names what every
+  notebook needs and asks, and the index, the open items and this log name the parts that are
+  built.
