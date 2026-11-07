@@ -199,8 +199,10 @@ pub trait Game {
     /// Answers where the player with `uuid` is.
     fn location(&self, uuid: &str) -> Option<Location>;
 
-    /// Answers the respawn point of the player with `uuid`, a bed or a respawn anchor, or
-    /// `Some(None)` when they have none.
+    /// Answers the respawn point that the player with `uuid` holds, which a bed, a respawn
+    /// anchor or `/spawnpoint` set, as Minecraft stores it, or `Some(None)` when they have none.
+    /// Minecraft checks the block only when the player respawns, so the point may name a bed
+    /// that is gone.
     fn respawn(&self, uuid: &str) -> Option<Option<BlockLocation>>;
 
     /// Answers the shared spawn of a dimension.

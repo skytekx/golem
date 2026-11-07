@@ -192,7 +192,7 @@ outer one.
 | `players()` | Every player online as `OnlinePlayer`: the UUID, the name, the display name, the name in the player list, the ping in milliseconds, the `GameMode`, the operator level and the milliseconds since the last action |
 | `player(who)` | The player online of that name or UUID in any case, or `Some(None)` |
 | `location(uuid)` | The `Location` of an online player |
-| `respawn(uuid)` | The bed or the respawn anchor as a `BlockLocation`, or `Some(None)` |
+| `respawn(uuid)` | The respawn point that the player holds as a `BlockLocation`, which a bed, a respawn anchor or `/spawnpoint` set and which Minecraft checks only on a respawn, or `Some(None)` |
 | `spawn(dimension)` | The shared spawn of a dimension as a `Spawn`, its block and angle |
 | `main_hand(uuid)` | The `Item` in the main hand, its id and count, or `Some(None)` for an empty hand |
 | `heights(dimension)` | The `Heights` of a dimension, the lowest block and the y above the highest |

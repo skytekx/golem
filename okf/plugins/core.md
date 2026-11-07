@@ -110,6 +110,11 @@ Respawn point: minecraft:overworld 10 64 10
 Main hand: 3 minecraft:diamond
 ```
 
+The respawn point is the one that the player holds, which a bed, a respawn anchor or `/spawnpoint`
+set, as Minecraft stores it. Minecraft checks its block only when the player respawns, so the line
+may name a bed that is gone, and a respawn that finds the block gone or blocked clears the point,
+which the line then names `none`.
+
 `/golem world [<dimension>]` answers the shared spawn with its angle and the heights of the blocks,
 the lowest y and the y above the highest:
 

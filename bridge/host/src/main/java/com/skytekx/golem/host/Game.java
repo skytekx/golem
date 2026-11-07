@@ -38,8 +38,10 @@ public interface Game {
 	String location(String uuid);
 
 	/**
-	 * Answers the respawn point of a player, a bed or a respawn anchor: the dimension and x, y
-	 * and z of the block.
+	 * Answers the respawn point that a player holds, which a bed, a respawn anchor or the command
+	 * spawnpoint set: the dimension and x, y and z of the block, as Minecraft stores it.
+	 * Minecraft checks the block only when the player respawns, so the point may name a bed that
+	 * is gone.
 	 *
 	 * @param uuid the UUID of the player in its usual form with dashes
 	 * @return the point, the empty string when the player has none, or null when the player is

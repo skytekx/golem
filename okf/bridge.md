@@ -174,7 +174,7 @@ display name that a mod made, has it replaced by a space.
 | --- | --- | --- | --- |
 | `players()` | One answer per player: the UUID, the name of the profile, the display name, the ping in milliseconds, the game mode, the permission level, the milliseconds since the last action, the name in the player list | Never on the server thread | The name in the list, while the client shows the name of the profile |
 | `location(uuid)` | The dimension, `x`, `y`, `z` of the feet, `yaw`, `pitch` | The player is not online | Never |
-| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the bed or the respawn anchor | The player is not online | The player has no respawn point |
+| `respawn(uuid)` | The dimension and `x`, `y`, `z` of the respawn point that the player holds, which a bed, a respawn anchor or `/spawnpoint` set, as it is stored, since Minecraft checks its block only when the player respawns | The player is not online | The player has no respawn point |
 | `spawn(dimension)` | `x`, `y`, `z` of the shared spawn and its angle | The server has no such dimension | Never |
 | `mainHand(uuid)` | The registry id of the item and the count | The player is not online | The hand is empty |
 | `heights(dimension)` | The lowest y of a block and the y above the highest | The server has no such dimension | Never |
