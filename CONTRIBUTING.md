@@ -104,6 +104,13 @@ the present tense and says what is, never how it came to be. It uses no dashes a
 semicolons and no exclamation marks. People are they and them. Markdown is wrapped at 100 columns.
 A measured number names how it was measured: the notebook, the machine and the day.
 
+The docs lint, [.github/scripts/docs_lint.py](.github/scripts/docs_lint.py), holds the Markdown of
+the wiki, of `Documentation/`, this file and README.md to these rules of punctuation, pronouns and
+width. It also checks that the index of the wiki links every page and that
+[Documentation/testing.md](Documentation/testing.md) names every notebook of the matrix. CI runs
+it on every push and every pull request, and `python3 -I .github/scripts/docs_lint.py` runs it on
+a tree.
+
 ## 5. Tests are notebooks
 
 Every test of Golem is a Jupyter notebook in Python under [tests/notebooks/](tests/notebooks/), run

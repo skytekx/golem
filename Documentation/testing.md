@@ -102,9 +102,10 @@ A notebook is committed without outputs, writes only below `tests/notebooks/out/
 directory, and prints repository relative paths, so no machine path enters a committed file. The
 builds it runs are the exception: cargo writes its target directory, `target/` unless
 `CARGO_TARGET_DIR` moves it, and Gradle fills its cache in `~/.gradle` unless `GRADLE_USER_HOME`
-moves it, as every build of the tree does. It
-gets an entry in `tests/matrix.yaml`. A notebook is JSON and cannot hold a comment, so its SPDX
-tags stand in a `.license` file beside it, as [licensing.md](licensing.md) describes.
+moves it, as every build of the tree does. It gets an entry in `tests/matrix.yaml` and a row in the
+table of section 4, which the docs lint `.github/scripts/docs_lint.py` checks beside the prose of
+this page. A notebook is JSON and cannot hold a comment, so its SPDX tags stand in a `.license` file
+beside it, as [licensing.md](licensing.md) describes.
 
 A fix or a feature adds or extends the notebook cell that proves it.
 

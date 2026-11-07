@@ -5,7 +5,10 @@
 #
 # The job licenses checks that every file states its license and its holder and that every
 # license has its text, as Documentation/licensing.md describes: once with the license lint of
-# Golem and once with reuse lint, the tool of the REUSE specification, pinned by version.
+# Golem and once with reuse lint, the tool of the REUSE specification, pinned by version. It also
+# runs the docs lint of Golem, which holds the prose of the wiki, Documentation/, CONTRIBUTING.md
+# and README.md to the rules of CONTRIBUTING.md section 4, and checks that the index of the wiki
+# links every page and that Documentation/testing.md names every notebook of tests/matrix.yaml.
 #
 # The job commits checks every commit message of the push or the pull request, once with
 # Commitizen as .cz.toml configures it and once with the commit lint of Golem for the rules of
@@ -66,6 +69,9 @@ jobs:
 
       - name: Lint the licenses
         run: python3 -I .github/scripts/license_lint.py
+
+      - name: Lint the documentation
+        run: python3 -I .github/scripts/docs_lint.py
 
       - name: Install reuse
         run: python3 -m pip install --disable-pip-version-check --no-input reuse==6.3.0
