@@ -456,6 +456,15 @@ The tool prints counts per kind and fails on any entry it cannot place. The play
 personal data, so it stays out of git as today, see
 [Secrets](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/secrets.md).
 
+EssentialsX holds values that the store does not take as they are, and
+[Store](store.md#data-from-essentialsx) gives the rules for them. A balance with a fraction of a
+cent rounds half to even to whole cents, the account opens with the rounded balance as its starting
+balance, and the report names every account that changed. A balance below zero is refused and named
+with its debt, which an operator settles in EssentialsX before the migration runs again, see issue
+[#106](https://github.com/skytekx/golem/issues/106). The names of homes, warps and spawn groups that
+EssentialsX folded go over as they are, and each port folds a name as its plugin does, see issue
+[#107](https://github.com/skytekx/golem/issues/107).
+
 ## Spigot world settings
 
 Arclight applies `spigot.yml` and `bukkit.yml`. Most values there equal vanilla and need no port.
