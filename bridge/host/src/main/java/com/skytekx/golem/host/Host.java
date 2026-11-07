@@ -145,13 +145,16 @@ public final class Host {
 			double x, double y, double z, float yaw, float pitch);
 
 	/**
-	 * Reports the respawn of a player.
+	 * Reports the respawn of a player, after a death or on the way out of the End.
 	 *
 	 * @param uuid the UUID of the player in its usual form with dashes
 	 * @param name the name of the profile of the player
 	 * @param dimension the id of the dimension of the respawn, such as minecraft:overworld
+	 * @param endConquered true when the player left the End through its exit portal and did not
+	 *        die, as isEndConquered of the event of Forge answers
 	 */
-	public static native void respawn(String uuid, String name, String dimension);
+	public static native void respawn(String uuid, String name, String dimension,
+			boolean endConquered);
 
 	/**
 	 * Answers the names of the commands of the plugins, which the mod registers with Brigadier.

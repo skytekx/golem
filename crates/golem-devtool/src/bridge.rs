@@ -30,17 +30,17 @@
 //! the script names none, and the natives hand it to the plugins behind the guard of the server
 //! thread, as they do the game of the mod.
 //!
-//! A step is a native method by its Java name with its Java parameters, where a missing
-//! parameter is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`,
-//! `serverStopped`, `tick` (with `nanos`, and `repeat` and `sleepMs` of the devtool),
-//! `playerJoined`, `playerLeft`, `chat`, `death`, `respawn`, `commandNames`, `command` (with
-//! `level`, 4 when left out), `permission` and `drain`. A `death` step takes the `dimension`,
-//! `x`, `y`, `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands
-//! for null. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue),
-//! `install` (a fresh handler of the same script), `sleep` and `together`, which runs its
-//! `steps` each on a thread of its own, the next one `staggerMs` after the one before, as Forge
-//! calls `chat` on a worker thread beside the server thread. A step of `together` is a native
-//! method, `stats` or `sleep`.
+//! A step is a native method by its Java name with its Java parameters, where a missing parameter
+//! is null: `version`, `serverStarting`, `serverStarted`, `serverStopping`, `serverStopped`, `tick`
+//! (with `nanos`, and `repeat` and `sleepMs` of the devtool), `playerJoined`, `playerLeft`, `chat`,
+//! `death`, `respawn` (with `endConquered`, false when left out), `commandNames`, `command` (with
+//! `level`, 4 when left out), `permission` and `drain`. A `death` step takes the `dimension`, `x`,
+//! `y`, `z`, `yaw` and `pitch` of the place, each 0 when left out, and no dimension stands for
+//! null. The devtool adds `stats`, `budgets`, `push` (an action straight into the queue), `install`
+//! (a fresh handler of the same script), `sleep` and `together`, which runs its `steps` each on a
+//! thread of its own, the next one `staggerMs` after the one before, as Forge calls `chat` on a
+//! worker thread beside the server thread. A step of `together` is a native method, `stats` or
+//! `sleep`.
 //!
 //! The test plugins are these. `echo` broadcasts the name of every event but a tick, and the
 //! location of a death, unless it is `quiet`, and answers its `commands` with a line, a message
@@ -304,6 +304,8 @@ enum Step {
         uuid: Option<String>,
         name: Option<String>,
         dimension: Option<String>,
+        #[serde(default)]
+        end_conquered: bool,
     },
     CommandNames,
     Command {
@@ -632,8 +634,15 @@ fn native(step: &Step, game: &(dyn Game + Sync)) -> Option<Value> {
             uuid,
             name,
             dimension,
+            end_conquered,
         } => done("respawn", || {
-            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref(), game);
+            host::respawn(
+                uuid.as_deref(),
+                name.as_deref(),
+                dimension.as_deref(),
+                *end_conquered,
+                game,
+            );
         }),
         Step::CommandNames => answer("commandNames", host::command_names()),
         Step::Command {
@@ -821,6 +830,10 @@ impl Plugin for Echo {
             Event::Death { location, .. } => {
                 context.broadcast(&format!("{} death at {location}", self.name));
             }
+            Event::Respawn {
+                end_conquered: true,
+                ..
+            } => context.broadcast(&format!("{} respawn from the End", self.name)),
             _ => context.broadcast(&format!("{} {}", self.name, event.name())),
         }
         Verdict::Pass

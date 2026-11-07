@@ -57,7 +57,8 @@ public final class Host {
 	public static native boolean chat(String uuid, String name, String message);
 	public static native void death(String uuid, String name, String cause, String dimension,
 			double x, double y, double z, float yaw, float pitch);
-	public static native void respawn(String uuid, String name, String dimension);
+	public static native void respawn(String uuid, String name, String dimension,
+			boolean endConquered);
 	public static native String[] commandNames();
 	public static native String[] command(String name, String senderUuid, String senderName,
 			int level, String arguments);
@@ -87,7 +88,7 @@ does not run, instead of failing on every event.
 | `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
 | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
 | `death(uuid, name, cause, dimension, x, y, z, yaw, pitch)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type and where the player died | None |
-| `respawn(uuid, name, dimension)` | On `PlayerRespawnEvent`, with the id of the dimension | None |
+| `respawn(uuid, name, dimension, endConquered)` | On `PlayerRespawnEvent`, with the id of the dimension and `isEndConquered` of the event, which is true when the player left the End through its exit portal and did not die | None |
 | `commandNames()` | On every `RegisterCommandsEvent`, the first before `serverStarting` | The names of the commands of the plugins |
 | `command(name, uuid, senderName, level, arguments)` | When a command of `commandNames()` runs | The lines the sender sees |
 | `permission(uuid, node)` | When a mod asks the PermissionAPI of Forge for a node of the type Boolean, on any thread | `PERMISSION_TRUE`, `PERMISSION_FALSE`, or `PERMISSION_NONE` for the default resolver of the node |

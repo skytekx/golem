@@ -113,7 +113,7 @@ fn table() -> [(&'static str, &'static str, *mut c_void); 16] {
         ),
         (
             "respawn",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V",
             respawn as *mut c_void,
         ),
         (
@@ -434,13 +434,20 @@ extern "system" fn respawn<'local>(
     uuid: JString<'local>,
     name: JString<'local>,
     dimension: JString<'local>,
+    end_conquered: jboolean,
 ) {
     answer(&mut env, "respawn", nothing, |env| {
         let uuid = string(env, &uuid)?;
         let name = string(env, &name)?;
         let dimension = string(env, &dimension)?;
         with_game(env, |game| {
-            host::respawn(uuid.as_deref(), name.as_deref(), dimension.as_deref(), game);
+            host::respawn(
+                uuid.as_deref(),
+                name.as_deref(),
+                dimension.as_deref(),
+                end_conquered != JNI_FALSE,
+                game,
+            );
         });
         Ok(())
     });

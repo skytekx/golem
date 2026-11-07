@@ -157,12 +157,15 @@ pub enum Event {
         /// Where they died.
         location: Location,
     },
-    /// A player respawned.
+    /// A player respawned, after a death or on the way out of the End.
     Respawn {
         /// Who respawned.
         player: Player,
         /// The dimension of the respawn, such as minecraft:overworld.
         dimension: String,
+        /// Whether the player left the End through its exit portal, which the game handles as a
+        /// respawn without a death, so a plugin that acts after a death leaves such a player be.
+        end_conquered: bool,
     },
 }
 

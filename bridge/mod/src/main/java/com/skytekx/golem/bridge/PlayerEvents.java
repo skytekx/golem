@@ -90,16 +90,19 @@ public final class PlayerEvents {
 	}
 
 	/**
-	 * Reports the respawn of a player with the id of the dimension they respawn in.
+	 * Reports the respawn of a player with the id of the dimension they respawn in. Forge fires
+	 * the event after a death and when a player leaves the End through its exit portal, which
+	 * the game handles as a respawn too, so the bridge says which of the two it is.
 	 *
 	 * @param event the event of Forge
 	 */
 	@SubscribeEvent
 	public void respawn(PlayerEvent.PlayerRespawnEvent event) {
 		Player player = event.getEntity();
+		boolean endConquered = event.isEndConquered();
 		guard.run("Host.respawn", () -> {
 			String dimension = player.level().dimension().location().toString();
-			Host.respawn(player.getStringUUID(), name(player), dimension);
+			Host.respawn(player.getStringUUID(), name(player), dimension, endConquered);
 		});
 	}
 

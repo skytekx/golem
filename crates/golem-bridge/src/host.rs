@@ -435,8 +435,15 @@ pub fn death(
     });
 }
 
-/// Reports `PlayerRespawnEvent` with the id of the dimension.
-pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>, game: &dyn Game) {
+/// Reports `PlayerRespawnEvent` with the id of the dimension and whether the player left the
+/// End through its exit portal, `isEndConquered` of the event.
+pub fn respawn(
+    uuid: Option<&str>,
+    name: Option<&str>,
+    dimension: Option<&str>,
+    end_conquered: bool,
+    game: &dyn Game,
+) {
     const NATIVE: &str = "respawn";
     guard(NATIVE, (), || {
         let (Some(player), Some(dimension)) = (
@@ -445,7 +452,12 @@ pub fn respawn(uuid: Option<&str>, name: Option<&str>, dimension: Option<&str>, 
         ) else {
             return;
         };
-        dispatch(NATIVE, &Event::Respawn { player, dimension }, game);
+        let event = Event::Respawn {
+            player,
+            dimension,
+            end_conquered,
+        };
+        dispatch(NATIVE, &event, game);
     });
 }
 
