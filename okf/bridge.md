@@ -87,7 +87,7 @@ does not run, instead of failing on every event.
 | `serverStopped()` | On `ServerStoppedEvent` | None |
 | `tick(nanos)` | At the end of every server tick, with the nanoseconds since its start and the time the bridge took after the report of the tick before, see [Plugins](plugins/index.md#tick-statistics) | None |
 | `playerJoined(uuid, name)` | On `PlayerLoggedInEvent` | None |
-| `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent` | None |
+| `playerLeft(uuid, name)` | On `PlayerLoggedOutEvent`, while the player is still in the list of the server, so the game answers every question about them | None |
 | `chat(uuid, name, message)` | On `ServerChatEvent`, with the raw text, on a worker thread | True cancels the event |
 | `death(uuid, name, cause, dimension, x, y, z, yaw, pitch)` | On `LivingDeathEvent` of a `ServerPlayer`, with the id of the damage type and where the player died | None |
 | `respawn(uuid, name, dimension, endConquered)` | On `PlayerRespawnEvent`, with the id of the dimension and `isEndConquered` of the event, which is true when the player left the End through its exit portal and did not die | None |
@@ -271,6 +271,14 @@ there, as the game lifts a player after a respawn. The question reads the blocks
 of the point alone, and answers `unloaded` when a chunk of them is not loaded, since a question
 never loads a chunk. So the port of EssentialsX tells a bed that is gone from one that stands, as
 `getBedSpawnLocation` of Bukkit does, without a respawn.
+
+A player who leaves is still in the list of the server while Forge posts `PlayerLoggedOutEvent`,
+which `PlayerList.remove` posts before it removes them, so every question about the player answers
+during `playerLeft`, their place among them, as `PlayerQuitEvent` of Bukkit finds the player still
+online, and `players()` still names them. The place where a player logged out needs no field of its
+own. A player who is still online when the server stops may get no `playerLeft` from Forge 47.4.18:
+the game ends their connection at the stop and posts the event only when the connection has closed
+by the time it looks. Notebook 05 prints whether one came.
 
 `safeLocation` answers the nearest place near the block of the target where a player stands safely,
 with the search that the mod writes itself and copies from no plugin. A place is safe when the block

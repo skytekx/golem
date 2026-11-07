@@ -550,3 +550,8 @@ Oldest first. Times are UTC.
   `Game::max_players` the most players the server takes. `04_plugins` holds both answers of a
   scripted game and their wire form, and `05_bridge_build` the three dimensions and the 20 players
   of a stock Forge server. See [Bridge](bridge.md#the-game).
+- The game answers while a player leaves. Forge posts `PlayerLoggedOutEvent` while the player is
+  still in the list of the server, so every question about them answers during `playerLeft`, their
+  place among them, and the place where a player logged out needs no field of its own.
+  `05_bridge_build` holds it: the stand in native `playerLeft` asks the game where the player who
+  leaves is. See [Bridge](bridge.md#the-game).
