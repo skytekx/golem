@@ -1,7 +1,5 @@
-<!--
-SPDX-License-Identifier: AGPL-3.0-only
-SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
--->
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com> -->
 
 # Hand over
 
