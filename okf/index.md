@@ -12,9 +12,9 @@ timestamp: 2026-11-07
 
 Golem is the Rust hybrid server of SkyTekx. It owns the server process, starts the JVM inside
 itself and boots Minecraft 1.20.1 with Forge 47.4.18 and every mod unchanged, and it replaces
-Arclight. Around the game it adds plugins in Rust, a GraphQL API and native code for world
-generation. This wiki holds the design and the operation of Golem itself. The pages about the
-SkyTekx 3 server and its modpack stay in the
+Arclight. Around the game it adds plugins in Rust, and it will add a GraphQL API and native code
+for world generation. This wiki holds the design and the operation of Golem itself. The pages about
+the SkyTekx 3 server and its modpack stay in the
 [wiki of the server](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/index.md), but
 for [Modpack](modpack.md), which answers whether Golem runs that pack.
 
@@ -25,8 +25,8 @@ for [Modpack](modpack.md), which answers whether Golem runs that pack.
 | License | AGPL 3 only, holder Florian Kleber, REUSE compliant, checked in CI. The ports keep the licenses of their upstreams | [Licensing](../Documentation/licensing.md) |
 | Commits | Conventional Commits in the form of the kernel, checked in CI | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Tests | Jupyter notebooks run by papermill, as in Aosabi, the whole matrix in CI | [Testing](../Documentation/testing.md) |
-| JVM host | Built: `golem run` boots Forge 47.4.18 unchanged in its embedded JVM and stops it through the server thread, held by `03_launch_args` and `07_forge_boot` | [JVM host](jvm-host.md) |
-| Bridge | Built: the host jar, the Forge mod and the 16 natives in Rust. The plugins ask the game on the server thread for the players, where a player is, the respawn point, the spawn, the held item, the heights and a safe place, queue commands, messages, teleports and names of the player list, decide the PermissionAPI of Forge through the handler `golem:permissions`, and judge a command by the permission level of its source. Held by `04_plugins`, `05_bridge_build` and `07_forge_boot` | [Bridge](bridge.md) |
+| JVM host | Built: `golem run` boots Forge 47.4.18 unchanged in its embedded JVM and on a signal stops it through the server thread while it ticks and through `System.exit`, as java does, at every other stage, held by `03_launch_args` and `07_forge_boot` | [JVM host](jvm-host.md) |
+| Bridge | Built: the host jar, the Forge mod and the 16 natives in Rust. The plugins ask the game on the server thread for the players, where a player is, the respawn point, the spawn, the held item, the heights and a safe place, queue commands, messages, teleports and names of the player list, decide the PermissionAPI of Forge through the handler `golem:permissions`, and judge a command by the permission level of its source. A plugin command named like a command of the game or of a mod takes the plain name, the lines of the natives and the plugins go to the log of the server through the logger `golem`, and a respawn says whether the player left the End. Held by `04_plugins`, `05_bridge_build` and `07_forge_boot` | [Bridge](bridge.md) |
 | Plugin runtime | Built with the core plugin and its command `golem`, whose tools of operators read the game, teleport a player to a safe place and name them in the player list, held by `04_plugins` and `07_forge_boot` | [Plugins](plugins/index.md) |
 | Permissions | Built as the crate `golem-permissions` with the seed of SkyTekx, held by `06_permissions`. The store holds the groups, nodes and players and hands them to the crate as the same TOML, held by `09_store`. No plugin answers the PermissionAPI with them yet, and `golem run` loads neither | [Permissions](plugins/permissions.md) |
 | Store | Built: `golem-store` keeps the data of the plugins in one SQLite file, answers the server thread from its cache and writes on a thread of its own, held by `09_store`. `golem run` does not open it yet | [Store](store.md) |
