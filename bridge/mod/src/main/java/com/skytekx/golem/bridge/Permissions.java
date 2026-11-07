@@ -14,7 +14,10 @@
  * without Golem keeps a forge-server.toml that names forge:default_handler. So the mod warns on
  * ServerStartingEvent when Forge took another handler, since the plugins would decide nothing.
  *
- * Mods ask Forge on any thread, so the native may be called beside the server thread.
+ * Mods ask Forge on any thread, so the native may be called beside the server thread. The native
+ * takes the UUID and the name of the node alone, so the answer of a plugin holds in every dynamic
+ * context of the check, as the answer of LuckPerms through Arclight did, and only the default
+ * resolver gets the context.
  */
 package com.skytekx.golem.bridge;
 

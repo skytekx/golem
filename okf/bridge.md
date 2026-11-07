@@ -273,7 +273,12 @@ the handler and the file of the world, since no plugin decides a permission of a
 The handler asks for an online player with `getPermission` and for an offline one with
 `getOfflinePermission`, both by the UUID, and the name of the node is that of `getNodeName()`,
 such as `forge.use_entity_selectors`, which Forge asks for a player below level 2 who uses a
-selector. Mods ask on any thread, so the native runs beside the server thread as well.
+selector. Mods ask on any thread, so the native runs beside the server thread as well. A mod may
+ask a node with a dynamic context of Forge, such as the dimension or the block that the check is
+about, and the native takes the UUID and the name of the node alone. So the answer of a plugin
+holds in every context, as the answer of LuckPerms through Arclight did on the live server, which
+asked `hasPermission` with the name of the node alone, and only the default resolver of a node
+that no plugin decides gets the context.
 
 ## Actions
 

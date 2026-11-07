@@ -153,7 +153,9 @@ answers `Some` decides. A plugin that answers `None` leaves the node to the next
 plugin that panics is logged, counted and passed over. When no plugin answers, the node falls to
 its default resolver, which is what the default handler of Forge would answer. Every call is
 timed into the budget of its plugin, as a command is. Mods ask on any thread, so a plugin answers
-a permission from what it holds and never waits for the game.
+a permission from what it holds and never waits for the game. The native carries no dynamic
+context of Forge, such as the dimension of a check, so the answer of a plugin holds in every
+context in which a mod asks the node, and only the default resolver sees the context.
 
 ## The context of a call
 
