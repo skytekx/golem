@@ -18,7 +18,9 @@ publish = false
 [dependencies]
 golem-bridge.workspace = true
 golem-jvm.workspace = true
+golem-permissions.workspace = true
 golem-plugin.workspace = true
+golem-store.workspace = true
 jni.workspace = true
 signal-hook.workspace = true
 

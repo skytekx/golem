@@ -5,7 +5,7 @@ type: Report
 title: The SkyTekx 3 modpack under Golem
 description: Whether golem run boots the real SkyTekx 3 modpack of the live server, every mod unchanged, as the java launcher and Arclight boot it, whether it opens the world of Arclight, what notebook 08 checks, the numbers it measured and every difference it found.
 tags: [modpack, skytekx3, forge, arclight, mods, boot, tests]
-timestamp: 2026-11-06
+timestamp: 2026-11-15
 ---
 
 # The SkyTekx 3 modpack under Golem
@@ -91,7 +91,7 @@ seed. Every boot runs with a heap of 6 GiB.
 | The same mods | Java loads every jar of the pack from `mods/`, but the jar of Kotlin for Forge, a library of jars of JarJar that `forge mods` does not list, and 289 mods beside Minecraft and Forge. Golem loads every mod of java in the same version from the same file, and only its bridge `golem` beside them. The server list names the same mods and marks `golem` as needed on the server alone. Arclight adds only `arclight` |
 | Errors and warnings | No crash report and no FATAL line. Every ERROR line of the other boots also appears under java or stands in the list of known lines with its reason. The WARN lines of the loader, Forge loading, JarJar, the registries, ModLauncher and Mixin, are the same under golem as under java, but for the version check of Forge, which asks the network |
 | Idle, stop and world | 19 TPS or more in the idle under java and golem, the same spawn and the same datapacks, with `mod:golem` and `mod:arclight` as the only additions, the same folders of the dimensions in the world, every dimension saved at the stop, where every boot logs the save of each level that java saves and writes `level.dat` after the command to stop, and no failure of the storage of the world under any boot, the 35 messages of 10 classes of Minecraft that the notebook pins against the jars of the server |
-| Golem itself | Golem logs the lines of a clean boot alone, in their order: on standard error its banner, the stop on `SIGTERM` and the end, and with the logger `golem` in `latest.log` that the mod connected the game, that the bridge is on and that the bridge is connected, since the natives log through the game while they run. A panic of a plugin or a native, or a call over its budget, fails the boot |
+| Golem itself | Golem logs the lines of a clean boot alone, in their order: on standard error its banner, the line that names the seed of a store that the copy lacked, the stop on `SIGTERM`, the close of the store and the end, and with the logger `golem` in `latest.log` that the mod connected the game, that the bridge is on and that the bridge is connected, since the natives log through the game while they run. A panic of a plugin or a native, or a call over its budget, fails the boot |
 | Golem on the world of Arclight | `Done`, the bridge connected, the lines of a clean boot of golem alone, the mods of the golem boot, the spawn of the world, no ERROR line that java does not log, and exit 0 |
 | Arclight | It downloads no library, its two conflicts with mixins of the pack appear under Arclight and not under golem, its stop logs no line of the flush, and its two mixins of the save hold what makes it skip those lines |
 

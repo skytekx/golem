@@ -86,7 +86,9 @@ version = "0.1.0"
 dependencies = [
  "golem-bridge",
  "golem-jvm",
+ "golem-permissions",
  "golem-plugin",
+ "golem-store",
  "jni",
  "signal-hook",
 ]

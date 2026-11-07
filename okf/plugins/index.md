@@ -38,8 +38,9 @@ the log, since it would wait for itself.
 
 ## Wiring
 
-The program golem builds one runtime, adds its plugins and installs it before the JVM starts.
-Its budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
+The program golem builds one runtime, gives it the store of the plugins, adds its plugins and
+installs it before the JVM starts, as [Store](../store.md#the-place-in-the-program-golem) says. Its
+budget is `DEFAULT_BUDGET` unless `golem run --budget-ms` names another, and its source names
 the commit that `build.rs` of golem reads from `GOLEM_COMMIT` or from HEAD of the git checkout of
 Golem itself, with `-dirty` behind it when the files that make the binary differ from HEAD, as
 [JVM host](../jvm-host.md#golem-run) says. `Source::of_build()` of this crate reads `GOLEM_COMMIT`
@@ -47,6 +48,7 @@ alone and names the commit unknown without it.
 
 ```rust
 let mut runtime = Runtime::new(budget);
+runtime.set_store(store.clone());
 runtime.add(Box::new(CorePlugin::new(Source {
     version: VERSION.to_owned(),
     repository: REPOSITORY.to_owned(),
@@ -189,8 +191,7 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 
 Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
 plugin, so every change of the plugins is in the file before the JVM ends, also when nothing closes
-the store after it. A flush that fails is logged. The program `golem` gives the runtime no store
-yet, see [Store](../store.md#the-place-in-the-program-golem).
+the store after it. A flush that fails is logged.
 
 A field of an action that holds U+001F, the separator of the wire form, has it replaced by a space,
 and the first such replacement of the process is logged.

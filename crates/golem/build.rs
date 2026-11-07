@@ -8,9 +8,9 @@
  * uses. Else it is HEAD of the git checkout of Golem itself, and only when the work tree of that
  * checkout is the workspace and tracks this script: a copy of Golem inside the checkout of
  * another project would name a commit of that project. When the files that make the binary, the
- * crates, the manifest, the lock file and the toolchain file, differ from HEAD, the commit ends
- * in -dirty, since the tree of HEAD is not the source that runs, and the core plugin then gives
- * no link to that tree. Else the commit is unknown.
+ * crates, the manifest, the lock file, the toolchain file and the seed of the permissions, differ
+ * from HEAD, the commit ends in -dirty, since the tree of HEAD is not the source that runs, and
+ * the core plugin then gives no link to that tree. Else the commit is unknown.
  *
  * Cargo runs the script again when the variable, HEAD, a ref, the packed refs, the index or a
  * file that makes the binary change, so a new commit or a change never keeps the old name.
@@ -26,8 +26,15 @@ use std::{
     process::Command,
 };
 
-/// The files and directories of the workspace that make the binary.
-const BUILT_FROM: [&str; 4] = ["crates", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml"];
+/// The files and directories of the workspace that make the binary, the seed of the permissions
+/// among them, which the binary holds for a server without one of its own.
+const BUILT_FROM: [&str; 5] = [
+    "crates",
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    "config/permissions.toml",
+];
 
 /// The output of a git command in `directory`, trimmed, or None when git fails or is missing.
 fn git_output(directory: &Path, arguments: &[&str]) -> Option<String> {

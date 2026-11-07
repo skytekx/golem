@@ -181,10 +181,11 @@ texts of that upstream into Golem. The code of Golem itself, the crates `golem`,
 
 The GPL 3 and the AGPL 3 each allow, in their section 13, to combine a work under one with a work
 under the other into one program, and the MIT license combines with both. The program `golem`
-links no port yet, and `golem-devtool`, the tool of the notebooks, links one, `golem-permissions`.
-Once `golem` links the ports, it combines them with its own crates that way. Each part keeps its
-license, and since the combination holds AGPL code, whoever runs it for players must offer them
-the source of all of it, which `/golem source` does.
+links one port, `golem-permissions`, and so does `golem-devtool`, the tool of the notebooks, so
+`golem` combines the MIT code of that port with its own crates that way, and it will combine the
+ports of EssentialsX the same way once it links them. Each part keeps its license, and since the
+combination holds AGPL code, whoever runs it for players must offer them the source of all of it,
+which `/golem source` does.
 
 Golem never carries these:
 

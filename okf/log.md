@@ -324,3 +324,15 @@ Oldest first. Times are UTC.
   that sets and reads a setting, a change that waits for a writer held still until the flush, a
   change that the plugin makes when it sees `ServerStopped` itself, behind a held writer, and
   the file after the close. See [Plugins](plugins/index.md#the-context-of-a-call).
+- The store went into `golem run`. It opens `golem-store.db` beside `world/` before its banner and
+  refuses to start without it, seeds the permissions of a store without a group from
+  `config/permissions.toml` of the server or from the seed of the Golem repository, which the
+  binary holds, and names the seed in the line behind its banner. It gives the store to the runtime
+  of the plugins and closes it once the JVM ended, also in the callback of the exit hook when the
+  JVM ends through `System.exit` and before it exits on a signal that comes before the JVM, and it
+  exits with 1 when the store does not close cleanly behind a JVM that ended. The seed is flushed
+  into the file before its line is logged, so a store that cannot write it refuses the start.
+  `03_launch_args` holds the refused starts and a JVM that does not start, `07_forge_boot` the
+  store beside the world, the lines of the seed and of each close, the seed in the file after both
+  stops, a signal during the start and a close that fails, and `08_modpack_boot` the lines of a
+  clean boot of the pack. See [Store](store.md#the-place-in-the-program-golem).

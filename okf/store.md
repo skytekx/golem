@@ -542,31 +542,53 @@ Issue: [#107](https://github.com/skytekx/golem/issues/107).
 
 ## The place in the program golem
 
-The store is not wired into `golem run` yet. The runtime of the plugins takes a store and flushes
-it, as steps 3 and 4 say, and `04_plugins` holds both. `golem run` wires the store in this way.
+`golem run` wires the store in with these steps, and `03_launch_args`, `04_plugins` and
+`07_forge_boot` hold them.
 
-1. `golem run` opens `golem-store.db` in the server directory, beside `world/`, with
-   `Store::open` after it has resolved the server directory and before `install_plugins`, so a
-   store that does not open stops the start with `golem: cannot open the store ...` before the JVM
-   exists.
-2. It seeds the permissions with `replace_permissions(PermissionSet::from_toml(...))` of
-   `config/permissions.toml` when the store has no group yet.
+1. It opens `golem-store.db` in the server directory, beside `world/`, with `Store::open` after it
+   has resolved the server directory and read the launch, and before it installs the plugins and
+   logs its banner, so a store that does not open stops the start with `golem: cannot open the store
+   ...` before the JVM exists and before any banner. A file that is no store stays as it was.
+2. When the store holds no group of the permissions, it seeds them with
+   `replace_permissions(PermissionSet::from_toml(...))` of `config/permissions.toml` of the server
+   directory, or of the seed of the Golem repository, which the binary holds, when the server has no
+   such file. It loads the seed into `golem-permissions` first, so a seed that breaks a rule of the
+   permissions stops the start, with the store closed again and no line of the host. It then flushes
+   the seed into the file, so a store that cannot write it, as on a full disk, stops the start as
+   well, with `golem: the store <path> did not write the permissions of ...` behind the line of the
+   writer of the store and with no banner, and no server runs on a store that never took its seed.
+   It logs where the seed came from behind its banner, such as `the store <path> held no group of
+   the permissions, so golem seeded them from the seed of the Golem repository, since the server has
+   no config/permissions.toml`. A store that holds a group keeps its permissions, so a change of the
+   file seeds nothing on a store that was seeded once.
 3. It gives the runtime a clone of the `Store` with `Runtime::set_store`, and every plugin reaches
    it through `Context::store` of its call, see [Plugins](plugins/index.md#the-context-of-a-call).
 4. Once every plugin saw `ServerStopped`, the last event of the server thread, where a wait costs
    no tick, the runtime calls `flush`, so every change of the plugins is in the file before the JVM
    ends, also when no close follows, such as when a thread of a mod keeps the JVM from ending until
    a kill. The wait counts in the budget of no plugin, and a flush that fails is logged.
-5. It calls `close` after `golem_jvm::run` returns, before `report`. A JVM that ends through
-   `System.exit`, as the stop of a server without the bridge does on a signal, never returns from
-   `golem_jvm::run`, so `close` runs there in the callback that the host sets with
-   `golem_jvm::on_exit` and that the exit hook of `golem-jvm` runs, see
-   [JVM host](jvm-host.md#the-hooks).
+5. It calls `close` after `golem_jvm::run` returns and logs `the JVM ended, so golem closed the
+   store <path> with every change in the file` before the line of `report`. A JVM that did not start
+   logs its reason first, and the line of the close then reads `the JVM did not run, so golem closed
+   the store ...`. A store that does not close cleanly on this path is logged with its reason, `the
+   JVM ended, and the store <path> did not close cleanly: ...`, and ends golem with the status 1.
+   The log of SQLite still holds every change that the close could not fold into the file, so the
+   next open finds it.
+6. A JVM that ends through `System.exit`, as the stop of a server without the bridge does on a
+   signal, never returns from `golem_jvm::run`, so `golem run` sets a callback with
+   `golem_jvm::on_exit`, which the exit hook of `golem-jvm` runs after the shutdown hooks of Java,
+   see [JVM host](jvm-host.md#the-hooks). It closes the store and logs `the JVM exits with status
+   143, so golem closed the store <path> with every change in the file`. The exit hook cannot change
+   the status, so a close that fails there is logged and golem still ends with the status of the
+   exit of Java. A shutdown signal before the JVM exists closes the store before golem exits with
+   128 plus the number of the signal, see [JVM host](jvm-host.md#the-stop-path). Every close after
+   the first answers as the first, so the two paths never close one store twice.
 
-The file holds player data, so the repository of the server ignores `golem-store.db`, its log
+The file holds player data, so the repository of the server must ignore `golem-store.db`, its log
 `golem-store.db-wal` and the index of the log `golem-store.db-shm`, which the open leaves beside the
 file when it reads what the file is. That fixes the quirk of the plan that the player data of
-Essentials sits in a tracked folder.
+Essentials sits in a tracked folder, once the `.gitignore` of `skytekx3-1201-server` names the three
+files, which is open, see [Open items](open-items.md#open-in-what-is-built).
 
 ## The cost on the server thread
 

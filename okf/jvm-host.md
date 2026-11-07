@@ -45,20 +45,30 @@ the module path and the arguments of main as text, and one that is not is an err
 resolves the server directory, the Java home and the host jar to absolute paths, changes into the
 server directory, since the paths of `unix_args.txt` are relative to it, and reads the launch as
 [The launch](#the-launch) describes. It puts `-Xrs` in front of the options and the host jar on the
-module path, installs the plugin runtime with the core plugin as the handler of the bridge and the
-handlers of the signals, logs its banner, starts the thread that takes the signals and runs the JVM.
-The banner, `[golem] Golem <version> at <commit> runs <main class> of <server directory> in the JVM
-of <Java home>`, is the first line that golem logs on every host. The handlers of the signals stand
-before it, so a signal that follows the banner never meets its default action, and every line about
-a signal follows it, see [The stop path](#the-stop-path). It exits with 0 when main returned and
-`DestroyJavaVM` answered 0, and with 1 otherwise. `golem source` prints the version, the repository
-and the commit of the binary, which `build.rs` takes from the variable `GOLEM_COMMIT`, else from
-HEAD of the git checkout of Golem, else names unknown. The checkout counts only when its work tree
-is the workspace and tracks `crates/golem/build.rs`, since a copy of Golem inside the checkout of
-another project would name a commit of that project, and while the crates, `Cargo.toml`,
-`Cargo.lock` or `rust-toolchain.toml` differ from HEAD, also by a file that git does not track, the
-commit ends in `-dirty`, for the tree of HEAD is not the source that runs. `golem version` and
-`golem help` print the version and the usage.
+module path, installs the handlers of the signals, opens the store `golem-store.db` in the server
+directory and seeds its permissions, as [Store](store.md#the-place-in-the-program-golem) says,
+installs the plugin runtime with the store and the core plugin as the handler of the bridge, logs
+its banner, starts the thread that takes the signals and runs the JVM. The banner, `[golem] Golem
+<version> at <commit> runs <main class> of <server directory> in the JVM of <Java home>`, is the
+first line that golem logs on every host. The handlers of the signals stand before it, so a signal
+that follows the banner never meets its default action, and every line about a signal follows it,
+see [The stop path](#the-stop-path). The store opens before the banner as well, so a store that does
+not open stops the start with `golem: cannot open the store ...` before the JVM exists and before
+any banner, as does a seed that the store cannot write into its file, and the line that names the
+seed of a new store follows the banner. A line that the writer thread of the store logs at the
+moment it fails is no line of the start and is not held back, since a line held back could hide the
+failure. Once the JVM ended, `golem run` closes the store, or the exit hook does when the JVM ends
+through `System.exit`. Where the run of the JVM returns, `golem run` exits with 0 when main
+returned, `DestroyJavaVM` answered 0 and the store closed with every change in its file, and with 1
+otherwise. A JVM that does not start logs `the JVM did not run: <reason>`, and the line of the close
+behind it names that as its reason. `golem source` prints the version, the repository and the commit
+of the binary, which `build.rs` takes from the variable `GOLEM_COMMIT`, else from HEAD of the git
+checkout of Golem, else names unknown. The checkout counts only when its work tree is the workspace
+and tracks `crates/golem/build.rs`, since a copy of Golem inside the checkout of another project
+would name a commit of that project, and while the crates, `Cargo.toml`, `Cargo.lock`,
+`rust-toolchain.toml` or the seed `config/permissions.toml`, which the binary holds, differ from
+HEAD, also by a file that git does not track, the commit ends in `-dirty`, for the tree of HEAD is
+not the source that runs. `golem version` and `golem help` print the version and the usage.
 
 ## The launch
 
@@ -220,21 +230,22 @@ A process holds one JVM, so `run` runs once.
 
 | Hook | When HotSpot calls it | What the host does |
 | --- | --- | --- |
-| `exit` | `System.exit`, after the shutdown hooks of Java, or `Runtime.halt`, which runs none of them, each with the status | Logs `[golem] the JVM exits with status N` on standard error and runs the callback that the host set with `golem_jvm::on_exit`, then HotSpot ends the process with that status |
+| `exit` | `System.exit`, after the shutdown hooks of Java, or `Runtime.halt`, which runs none of them, each with the status | Logs `[golem] the JVM exits with status N` on standard error and runs the callback that the host set with `golem_jvm::on_exit`, which closes the store in `golem run`, then HotSpot ends the process with that status |
 | `abort` | A fatal error, or an error of the options that HotSpot finds while `JNI_CreateJavaVM` runs, before HotSpot aborts the process | Logs `[golem] the JVM aborts on a fatal error`, or `[golem] the JVM could not start, see its message above` while `JNI_CreateJavaVM` runs |
 
 Both hooks catch every panic, so none unwinds into the JVM, and a callback of the exit hook that
 panics is logged as `[golem] the callback of the exit hook panicked, so the process ends without
 it`. `run` does not return after a hook, since the process ends, so a host closes what it opened in
-the callback of the exit hook. `golem_jvm::on_exit` sets that callback once and answers false for a
-second one, which it drops. After `System.exit` the shutdown hooks of Java have run before the exit
-hook, so a server that ends that way has stopped and saved, while after `Runtime.halt` none of them
-ran. HotSpot calls the exit hook on its own thread while the threads that run Java wait at a
-safepoint, and a thread of Java inside native code runs on until it returns to Java. So the callback
-calls nothing of the JVM and waits for no thread of Java and for no lock that such a thread may
-hold. A JVM that ends because main returned calls no hook, and `run` returns. `golem-devtool
-jvm-on-exit` sets callbacks that print or panic before a launch, and `03_launch_args` holds the hook
-to these rules with them.
+the callback of the exit hook, as `golem run` closes the store of the plugins there, see
+[Store](store.md#the-place-in-the-program-golem). `golem_jvm::on_exit` sets that callback once and
+answers false for a second one, which it drops. After `System.exit` the shutdown hooks of Java have
+run before the exit hook, so a server that ends that way has stopped and saved, while after
+`Runtime.halt` none of them ran. HotSpot calls the exit hook on its own thread while the threads
+that run Java wait at a safepoint, and a thread of Java inside native code runs on until it returns
+to Java. So the callback calls nothing of the JVM and waits for no thread of Java and for no lock
+that such a thread may hold. A JVM that ends because main returned calls no hook, and `run` returns.
+`golem-devtool jvm-on-exit` sets callbacks that print or panic before a launch, and `03_launch_args`
+holds the hook to these rules with them.
 
 Before it creates the JVM, the host puts `SIGSEGV` and `SIGBUS` back to their default action. The
 standard library of Rust holds both with its handler for stack overflows, and HotSpot keeps a
@@ -262,9 +273,9 @@ is ignored, as the process started with it ignored, so it does not stop the serv
 arrives during the start waits from the moment the handlers are installed. Behind the banner the
 main thread takes it, before it creates the JVM, so a signal of the start never meets a JVM that is
 half made: a shutdown signal logs `[golem] SIGTERM: came during the start, so golem starts no JVM`
-and `[golem] the JVM does not run yet, so golem exits with 143`, and golem exits with 128 plus the
-number of the signal, as the java launcher would end, while a `SIGQUIT` of the start logs that there
-is no thread to dump.
+and `[golem] the JVM does not run yet, so golem exits with 143`, and golem closes the store and
+exits with 128 plus the number of the signal, as the java launcher would end, while a `SIGQUIT` of
+the start logs that there is no thread to dump.
 
 `SIGQUIT` stops nothing. The JVM prints the dump of every thread on it, but `-Xrs` takes that signal
 from the JVM too, and its default action would end the process without saving. So the thread

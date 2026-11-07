@@ -4,16 +4,19 @@
  * golem: the Rust hybrid server of SkyTekx.
  *
  * golem run starts the JVM inside this process, boots the Forge server of a directory unchanged
- * and runs the plugins around it. A signal never stops the server: the first SIGINT, SIGTERM or
- * SIGHUP queues save-all flush and stop on the server thread, and golem waits until the JVM has
- * returned. golem source names the repository and the commit of the running binary, as section
- * 13 of the AGPL asks.
+ * and runs the plugins around it, with the store of the plugins beside the world, which it opens
+ * before the JVM and closes after it. A signal never stops the server: the first SIGINT, SIGTERM
+ * or SIGHUP queues save-all flush and stop on the server thread, and golem waits until the JVM
+ * has returned. golem source names the repository and the commit of the running binary, as
+ * section 13 of the AGPL asks.
  *
  * The arguments are read by hand, since four options do not need a crate. okf/jvm-host.md
  * describes the launch, the stop path and where the host jar is found.
  */
 
 //! The program golem.
+
+mod store;
 
 use std::{
     ffi::{
@@ -47,6 +50,7 @@ use golem_plugin::{
     Runtime,
     Source, //
 };
+use golem_store::Store;
 
 /// The version of the crates.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -71,7 +75,7 @@ const USAGE: &str = "usage: golem <command>
   help        prints this help";
 
 /// Logs a line of the host on standard error.
-fn log(line: std::fmt::Arguments<'_>) {
+pub(crate) fn log(line: std::fmt::Arguments<'_>) {
     let _ = writeln!(std::io::stderr(), "[golem] {line}");
 }
 
@@ -217,16 +221,28 @@ fn source() -> Source {
     }
 }
 
-/// Installs the plugin runtime with the core plugin as the handler of the bridge, and answers
-/// the queue of actions the mod drains on the server thread.
-fn install_plugins(budget: Duration) -> Actions {
+/// Installs the plugin runtime with the store and the core plugin as the handler of the bridge,
+/// and answers the queue of actions the mod drains on the server thread.
+fn install_plugins(budget: Duration, store: &Store) -> Actions {
     let mut runtime = Runtime::new(budget);
+    runtime.set_store(store.clone());
     runtime.add(Box::new(CorePlugin::new(source())));
     golem_bridge::install(Box::new(runtime))
 }
 
 /// The JVM once it exists, for the stop of a server that the bridge does not reach.
 static JVM: OnceLock<jni::JavaVM> = OnceLock::new();
+
+/// The store of the plugins once golem run opened it, for the paths that end the process without
+/// returning to golem run: the exit hook of the JVM and a signal before the JVM exists.
+static STORE: OnceLock<Store> = OnceLock::new();
+
+/// Closes the store of golem run, if it is open, on a path that ends the process.
+fn close_store_on_exit(why: &str) {
+    if let Some(store) = STORE.get() {
+        store::close(store, why);
+    }
+}
 
 /// Registers the natives of the bridge and keeps the JVM, on the thread of the JVM before the
 /// main class runs.
@@ -272,12 +288,14 @@ fn attach(vm: &jni::JavaVM) -> jni::errors::Result<jni::JNIEnv<'_>> {
     Ok(env)
 }
 
-/// Ends golem on a shutdown signal while no JVM runs. There is nothing to save, so golem exits at
-/// once with `status`, 128 plus the number of the signal, as the java launcher would end.
+/// Ends golem on a shutdown signal while no JVM runs. There is nothing of the game to save, so
+/// golem closes the store and exits at once with `status`, 128 plus the number of the signal, as
+/// the java launcher would end.
 fn exit_before_jvm(status: i32) -> ! {
     log(format_args!(
         "the JVM does not run yet, so golem exits with {status}"
     ));
+    close_store_on_exit(&format!("golem exits with status {status}"));
     std::process::exit(status);
 }
 
@@ -650,18 +668,47 @@ fn run(arguments: &[OsString]) -> Result<ExitCode, String> {
     spec.add_module_path(&host_jar);
     spec.arguments.extend(options.arguments);
 
-    let actions = install_plugins(options.budget);
-    // The handlers of the signals stand before the banner, so a signal that follows the banner
-    // never meets its default action, and every line about a signal follows the banner.
+    // The handlers of the signals stand before the store opens and before the banner, so a signal
+    // from then on never meets its default action, and every line about a signal follows the
+    // banner.
     let watch = install_signals()?;
+    let store = store::open(&server)?;
+    // A seed that stops the start leaves nothing else to close the store.
+    let seeded = store::seed(&store, &server).inspect_err(|_| {
+        let _ = store.close();
+    })?;
+    let actions = install_plugins(options.budget, &store);
+    let _ = STORE.set(store.clone());
+    // A JVM that ends through System.exit never returns from golem_jvm::run, so its exit hook
+    // closes the store instead.
+    golem_jvm::on_exit(Box::new(|status| {
+        close_store_on_exit(&format!("the JVM exits with status {status}"));
+    }));
     log(format_args!(
         "Golem {VERSION} at {COMMIT} runs {} of {} in the JVM of {}",
         spec.main_class,
         server.display(),
         java_home.0.display()
     ));
-    watch_signals(watch, actions)?;
-    Ok(report(golem_jvm::run(&java_home, &spec, register)))
+    // The store opened and seeded before the banner, so a start that it refuses logs no banner,
+    // and the line of the seed follows the banner, which stays the first line of golem.
+    if let Some(line) = seeded {
+        log(format_args!("{line}"));
+    }
+    // The banner is out, so a thread of the signals that does not start leaves the line of a close.
+    watch_signals(watch, actions).inspect_err(|_| {
+        store::close(&store, "the thread of the signals did not start");
+    })?;
+    let outcome = golem_jvm::run(&java_home, &spec, register);
+    let (code, closed) = if outcome.is_err() {
+        // A JVM that did not start says so before the line of the close, which names it.
+        let code = report(outcome);
+        (code, store::close(&store, "the JVM did not run"))
+    } else {
+        let closed = store::close(&store, "the JVM ended");
+        (report(outcome), closed)
+    };
+    Ok(if closed { code } else { ExitCode::FAILURE })
 }
 
 fn main() -> ExitCode {
