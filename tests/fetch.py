@@ -45,8 +45,11 @@ The script accepts the EULA of Minecraft in that test server, with eula=true in 
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
 localhost only and runs in offline mode, so no account of Mojang is involved.
 
-A pin that is already in place is kept, so a second run downloads nothing. The exit status is 1
-when a download fails or its hash differs.
+A pin that is already in place is kept, so a second run downloads nothing. The JDK, the Forge
+server and Gradle are installed into a folder beside their place, which takes the name of the pin
+once the install is complete, so a run that failed or broke off leaves nothing that a later run
+takes for a pin in place. The exit status is 1 when a download or an install fails or a hash
+differs.
 
 The jars of the pack are the work of their authors under their own licenses, the files of the
 server repository are the work of SkyTekx. The script only puts them where the notebooks find
@@ -271,17 +274,23 @@ def fetch_jdk(cache: Path) -> Path:
 def fetch_forge(cache: Path, java_home: Path) -> Path:
     """The Forge server under `cache`, installed by the installer on Temurin 17."""
     server = cache / FORGE_DIRECTORY
-    marker = server / "libraries" / "net" / "minecraftforge" / "forge" / FORGE_VERSION / "unix_args.txt"
-    if not marker.is_file():
+    arguments = Path("libraries") / "net" / "minecraftforge" / "forge" / FORGE_VERSION / "unix_args.txt"
+    if not (server / arguments).is_file():
         installer = cache / ("forge-%s-installer.jar" % FORGE_VERSION)
         download(FORGE_INSTALLER, installer, FORGE_SHA256)
-        shutil.rmtree(server, ignore_errors=True)
-        server.mkdir(parents=True)
+        # The installer writes unix_args.txt before its processors build the patched jars of the
+        # server, so it installs into a folder beside, which takes the name of the server once the
+        # installer succeeded. The paths of the install are relative, so it may move.
+        staged = cache / ("install-" + FORGE_DIRECTORY)
+        shutil.rmtree(staged, ignore_errors=True)
+        staged.mkdir(parents=True)
         print("fetch: installing Forge %s" % FORGE_VERSION, flush=True)
         result = subprocess.run([str(java_home / "bin" / "java"), "-jar", str(installer), "--installServer", "."],
-                                cwd=server, capture_output=True, text=True, check=False)
-        if result.returncode != 0 or not marker.is_file():
+                                cwd=staged, capture_output=True, text=True, check=False)
+        if result.returncode != 0 or not (staged / arguments).is_file():
             raise Failure("the Forge installer failed:\n%s" % result.stdout[-4000:])
+        shutil.rmtree(server, ignore_errors=True)
+        staged.rename(server)
     (server / "eula.txt").write_text(
         "# Accepted for this test server on behalf of the owner of SkyTekx, see tests/fetch.py.\n"
         "eula=true\n", encoding="utf-8")
@@ -296,11 +305,20 @@ def fetch_gradle(cache: Path) -> Path:
         return home
     archive = cache / ("gradle-%s-bin.zip" % GRADLE_VERSION)
     download(GRADLE_URL, archive, GRADLE_SHA256)
+    # The zip holds bin/gradle long before the last jar of lib/, so it unpacks into a folder beside,
+    # whose Gradle takes its name once every file and mode is in place.
+    unpacked = cache / ("unpack-" + GRADLE_DIRECTORY)
+    shutil.rmtree(unpacked, ignore_errors=True)
+    unpacked.mkdir(parents=True)
     with zipfile.ZipFile(archive) as bundle:
-        bundle.extractall(cache)
+        bundle.extractall(unpacked)
+    inner = unpacked / GRADLE_DIRECTORY
     # The zip format of the standard library keeps no file modes, so the scripts need theirs back.
-    for script in (home / "bin").iterdir():
+    for script in (inner / "bin").iterdir():
         script.chmod(0o755)
+    shutil.rmtree(home, ignore_errors=True)
+    inner.rename(home)
+    shutil.rmtree(unpacked, ignore_errors=True)
     return home
 
 
