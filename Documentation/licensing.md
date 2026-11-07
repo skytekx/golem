@@ -201,10 +201,10 @@ carried in this tree, so it adds no text to `LICENSES/`. Once the first crate la
 
 ## 8. Making the source available
 
-Golem follows its own license on the SkyTekx server. The command `/golem source`, the text of the
-server list and the field `server.source` of the GraphQL API name this repository and the exact
-commit that runs, so every player can get the source of the running version, as section 13 of
-the AGPL asks.
+Golem follows its own license on the SkyTekx server. The command `/golem source` names this
+repository and the exact commit that runs, so every player can get the source of the running
+version, as section 13 of the AGPL asks. The text of the server list and the field `server.source`
+of the GraphQL API will name them as well once they exist, and neither does today.
 
 ## 9. The lints
 

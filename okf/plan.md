@@ -148,9 +148,10 @@ rules as they are built.
 - "Only" keeps Golem on the AGPL 3 of 2007, so a later AGPL of the Free Software Foundation does
   not apply to Golem by itself.
 
-Golem follows its own license on the SkyTekx server. The command `/golem source`, the server list
-text and the field `server.source` of the GraphQL API name the repository and the exact commit that
-runs, so every player can get the source of the running version.
+Golem follows its own license on the SkyTekx server. The command `/golem source` names the
+repository and the exact commit that runs, so every player can get the source of the running
+version. The server list text and the field `server.source` of the GraphQL API will name them as
+well once they are built.
 
 The license is written into the code itself.
 
