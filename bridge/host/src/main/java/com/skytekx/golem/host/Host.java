@@ -12,7 +12,10 @@
 package com.skytekx.golem.host;
 
 /**
- * The native methods of Golem, which the bridge mod calls on the server thread.
+ * The native methods of Golem, which the bridge mod calls on the thread of each event, most of
+ * them on the server thread. Forge 47 fires the chat event on a worker thread, builds the commands
+ * on the main thread at the start, constructs the mod on a thread of the mod loader, and a mod may
+ * ask a permission on any thread, as the rules of the server thread in okf/bridge.md say.
  *
  * <p>A native method never throws: the Rust side catches every panic and answers what a pass
  * answers, nothing, false or an empty array. On a stock Forge no native is registered, so every

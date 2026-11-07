@@ -3,11 +3,13 @@
 /*
  * golem-plugin: the plugin runtime of Golem.
  *
- * A Golem plugin is Rust code that the runtime calls on the server thread, for the events that
- * can be cancelled or changed and for the commands it declares. Every call is timed against the
- * budget of the runtime, and the runtime keeps the time of every plugin, so the GraphQL API can
- * report which plugin costs the server how much once it is built. A plugin that only observes
- * will use the subscriptions of that API instead, which okf/api.md designs.
+ * A Golem plugin is Rust code that the runtime calls for the events that can be cancelled or
+ * changed and for the commands it declares, one call at a time and most of them on the server
+ * thread. A chat message arrives on a worker thread of Forge and a mod asks a permission on any
+ * thread, so a plugin keeps no state in a thread local. Every call is timed against the budget of
+ * the runtime, and the runtime keeps the time of every plugin, so the GraphQL API can report which
+ * plugin costs the server how much once it is built. A plugin that only observes will use the
+ * subscriptions of that API instead, which okf/api.md designs.
  *
  * The runtime is the handler of golem-bridge. The core plugin answers the command golem.
  */
@@ -203,6 +205,9 @@ pub trait Plugin: Send {
     }
 
     /// Answers an event. The default lets it pass.
+    ///
+    /// A chat message arrives on a worker thread of Forge, where the game answers none, and
+    /// every other event on the server thread.
     fn on_event(&mut self, event: &Event, context: &mut Context<'_>) -> Verdict {
         let _ = (event, context);
         Verdict::Pass

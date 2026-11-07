@@ -6,8 +6,13 @@
  * The bridge mod is a Forge mod. It listens on the Forge event bus and reports what happens to
  * the native methods of the host class com.skytekx.golem.host.Host, which lives in the jar
  * golem-host.jar on the module path of the JVM. The host registers those native methods before
- * it calls the main class, so no library is loaded from Java. Every native method runs on the
- * server thread, so a handler may answer a cancellable event before the game goes on.
+ * it calls the main class, so no library is loaded from Java. A native method runs on the thread
+ * of the mod that calls it, and the mod waits for its answer, so a handler may answer a
+ * cancellable event before the game goes on. Most natives run on the server thread. Forge 47
+ * calls chat() on a worker thread, commandNames() on the main thread at the start and on the
+ * server thread on a reload, version() and connect() on a thread of the mod loader, and a mod may
+ * ask permission() on any thread, as the rules of the server thread in okf/bridge.md say. The
+ * handler sits behind one lock, so its calls never overlap, but they do not share a thread.
  *
  * Rust never touches the game from another thread. It queues actions, and the mod drains the
  * queue at the end of every server tick and runs them on the server thread. While a native of the
@@ -109,7 +114,8 @@ pub enum Sender {
     },
 }
 
-/// What the mod reports, each on the server thread.
+/// What the mod reports: a chat message on a worker thread of Forge and every other event on the
+/// server thread.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// The server is starting, before the worlds load.
@@ -196,9 +202,13 @@ pub enum Verdict {
 
 /// What answers the events and the commands of the mod.
 ///
-/// The plugin runtime of golem-plugin is the handler of a running Golem. Every method runs on
-/// the server thread but those the contract names, so it must return quickly. Each method gets
-/// the game behind the guard of the server thread, which answers none on any other thread.
+/// The plugin runtime of golem-plugin is the handler of a running Golem. A method runs on the
+/// thread of the native that calls it: `event` for a chat message on a worker thread of Forge,
+/// `command_names` on the main thread at the start, `permission` on the thread of the mod that
+/// asks, and everything else on the server thread. The handler sits behind one lock, so two
+/// calls never overlap, but it must be `Send` and keep no state in a thread local. Every call
+/// holds up its thread, so it must return quickly. Each method gets the game behind the guard of
+/// the server thread, which answers none on any other thread.
 pub trait Handler: Send {
     /// Answers an event.
     fn event(&mut self, event: &Event, actions: &Actions, game: &dyn Game) -> Verdict;

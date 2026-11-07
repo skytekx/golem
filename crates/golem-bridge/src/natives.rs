@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The natives of golem-bridge: the functions behind the native methods of the host class, which
- * the JVM calls on the server thread, and their registration with RegisterNatives.
+ * run on the thread of the mod that calls them, most of them on the server thread, as the rules
+ * of the server thread in okf/bridge.md say, and their registration with RegisterNatives.
  *
  * Each native converts what the JVM hands it, calls its function of host.rs and converts the
  * answer back, so the logic lives in plain Rust that the notebooks reach without a JVM. A native
