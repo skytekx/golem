@@ -30,10 +30,10 @@ Closes: https://github.com/skytekx/golem/issues/12
 Signed-off-by: Florian Kleber <opensource@skytekx.com>"""
 schema = "<type>(<scope>): <summary>\n\n<body>\n\n<trailers>"
 # A subject of at most 72 characters: the type, a scope in parentheses, an optional ! for a
-# breaking change, and a summary that starts in lower case and ends without a full stop. Then a
-# body after an empty line. The check reads no message_length_limit, so the lookahead holds the
-# length.
-schema_pattern = "(?s)(?=[^\\n]{1,72}\\n)(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)\\([A-Za-z0-9_./-]+\\)!?: [a-z0-9][^\\n]*[^.\\s]\\n\\n\\S.*$"
+# breaking change, and a summary that starts in lower case and ends without a full stop, which may
+# be one character long, as the commit lint takes it. Then a body after an empty line. The check
+# reads no message_length_limit, so the lookahead holds the length.
+schema_pattern = "(?s)(?=[^\\n]{1,72}\\n)(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)\\([A-Za-z0-9_./-]+\\)!?: [a-z0-9](?:[^\\n]*[^.\\s])?\\n\\n\\S.*$"
 info = """A commit message is a Conventional Commit in the form of the Linux kernel.
 
 The subject is type(scope): summary, imperative, starting in lower case, without a full stop,
