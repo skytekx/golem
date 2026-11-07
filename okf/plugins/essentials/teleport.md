@@ -7,7 +7,7 @@ type: Spec
 title: EssentialsX teleport port
 description: The teleport side of EssentialsX 2.22.0 and EssentialsXSpawn 2.22.0 as the Java code does it with the live config, command by command, with every message, config key, permission node, store and bridge need, and the quirks and security issues Golem fixes instead of copying.
 tags: [plugins, essentials, essentialsx, spawn, teleport, tpa, home, warp, back, port, quirks]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # EssentialsX teleport port
@@ -1477,10 +1477,12 @@ A component form keeps names literal.
 
 ### 8.4 Storage
 
-A Golem store per player holds homes (a name and a location with a dimension id), the last
-location, the logout location, `teleportenabled`, `teleportauto`, the ignore list and the last
-teleport time. A table holds the warps with name, location and last owner, and another table the
-spawns per group. Requests and warmups stay in memory.
+The [store](../../store.md) of the plugins holds, keyed by UUID, the homes of a player (a name and a
+location with a dimension id), the last location that `/back` leads to, the logout location and the
+ignore list, and it holds a table of the warps with name and location and a table of the spawns per
+group. `teleportenabled`, `teleportauto`, the last teleport time and the last owner of a warp have
+no column there, so the port adds them to the schema or drops them in the migration. Requests and
+warmups stay in memory.
 
 The migration of the plan reads `userdata/*.yml`, `warps/*.yml` and `spawn.yml` with the keys of
 section 3.7. A stored location names a Bukkit world by UUID and name (`LazyLocation.java:12-29`), so

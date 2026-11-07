@@ -7,7 +7,7 @@ type: Spec
 title: EssentialsX social, info, status, economy and admin commands
 description: The part of the port of EssentialsX 2.22.0 to golem-essentials that covers messages, mail, ignore, the info commands, AFK, suicide, the economy and the admin commands eco, gamemode, kick and ban, as the Java code does them with the default config, with their messages, config keys, bridge needs and the quirks Golem fixes.
 tags: [essentials, port, spec, messages, mail, afk, economy, gamemode]
-timestamp: 2026-11-06
+timestamp: 2026-11-07
 ---
 
 # EssentialsX social, info, status, economy and admin commands
@@ -1891,8 +1891,10 @@ The state of `msgtoggle` is not in the file at all. It lives in memory (`E/User.
 turns `money` into the whole cents of the Golem accounts by the rules of
 [Balances](../../store.md#balances): a balance with a fraction of a cent rounds half to even and the
 report names the account, and a balance below zero is refused with its debt, see issue
-[#106](https://github.com/skytekx/golem/issues/106). It keeps mails with their read and expiry
-flags, keeps ignore lists, and drops `afk`, which is runtime state.
+[#106](https://github.com/skytekx/golem/issues/106). It keeps mails with their read flags, keeps
+ignore lists, and drops `afk`, which is runtime state. A key that has no column in the store, such
+as the expiry of a mail, the port adds to the schema or the migration drops, see the section Storage
+of [What the port needs from the bridge](#what-the-port-needs-from-the-bridge).
 
 ## What the port needs from the bridge
 
