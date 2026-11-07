@@ -36,10 +36,13 @@ the file. The rules are these.
    among its first lines, or in the .license file beside it, and one of them names Florian
    Kleber, the holder of Golem.
 9. A port keeps the license of the plugin it ports. ports.toml at the root names every port
-   with its path, its upstream, its license and the holders of the upstream. Every file below
-   the path carries exactly that license and a copyright line for each of those holders beside
-   the one of Florian Kleber, the Cargo.toml of the port states that license itself, and NOTICE
-   has a section that names the upstream.
+   with its name, its path, its upstream, which is the name of the plugin and its version, its
+   source, its license and the holders of the upstream. The path holds files of the tree and the
+   Cargo.toml of a package of that name, which states the license itself, and the license has
+   its text under LICENSES/. Every file below the path carries exactly that license and a
+   copyright line for each of those holders beside the one of Florian Kleber. NOTICE has a
+   section headed by the name of the plugin, underlined with =, whose Version line starts with
+   the version, whose License line is the license and whose Files line names the path.
 
 Unlike Aosabi, Golem has no default license for a file without a tag: rule 6 covers every file,
 not only the shipped sources.
@@ -102,6 +105,10 @@ AGPL_SENTENCES = (
 
 #: The table of the ports, which rule 9 reads.
 PORTS = PurePosixPath("ports.toml")
+#: The version that ends the upstream of a port, after the name of the plugin and a space.
+VERSION = re.compile(r"[0-9][0-9A-Za-z.+-]*")
+#: A line of a section of NOTICE that names one of its fields.
+NOTICE_FIELD = re.compile(r"^(Project|URL|Version|Files|License): (.*)$")
 
 #: The names of a license file of a package under third_party/.
 LICENSE_FILE = re.compile(r"^(?:LICEN[CS]E|COPYING|UNLICENSE)(?:[-._].*)?$", re.I)
@@ -265,23 +272,64 @@ def load_ports(root: Path, fail) -> list[dict]:
         except ValueError as broken:
             fail(where, "rule 9: the license %r is no SPDX expression, %s" % (port["license"], broken))
             continue
-        ports.append(dict(port, path=PurePosixPath(port["path"]), licenses=licenses))
+        ports.append(dict(port, path=PurePosixPath(port["path"]), licenses=licenses, where=where))
     return ports
 
 
-def check_ports(root: Path, files: list[PurePosixPath], present: set, fail) -> None:
+def notice_sections(text: str) -> dict:
+    """The sections of NOTICE by their heading, a line underlined with = as long as it, each with
+    the fields its lines name, such as Version and License."""
+    lines = text.splitlines()
+    sections, current = {}, None
+    for index, line in enumerate(lines):
+        if line.strip() and index + 1 < len(lines) and lines[index + 1] == "=" * len(line):
+            current = sections.setdefault(line, {})
+            continue
+        match = NOTICE_FIELD.match(line)
+        if current is not None and match:
+            current.setdefault(match.group(1), match.group(2).strip())
+    return sections
+
+
+def check_notice(port: dict, sections: dict, fail) -> None:
+    """Rule 9: NOTICE has the section of the upstream of a port, with its version, its license
+    and the path of the port."""
+    project, _, version = port["upstream"].rpartition(" ")
+    if not project or not VERSION.fullmatch(version):
+        fail(port["where"], "rule 9: the upstream %r names no version after the name of the plugin" % port["upstream"])
+        return
+    section = sections.get(project)
+    if section is None:
+        fail("NOTICE", "rule 9: NOTICE has no section headed %s, the upstream of %s" % (project, port["name"]))
+        return
+    if not re.match(re.escape(version) + r"(?:,|$)", section.get("Version", "")):
+        fail("NOTICE", "rule 9: the section %s gives the version %r, not %s, the version that %s ports"
+             % (project, section.get("Version"), version, port["name"]))
+    if section.get("License") != port["license"]:
+        fail("NOTICE", "rule 9: the section %s gives the license %r, not %s, the license of %s"
+             % (project, section.get("License"), port["license"], port["name"]))
+    if str(port["path"]) not in [entry.strip() for entry in section.get("Files", "").split(",")]:
+        fail("NOTICE", "rule 9: the section %s does not name %s among its files" % (project, port["path"]))
+
+
+def check_ports(root: Path, files: list[PurePosixPath], present: set, known: dict, fail) -> None:
     """Rule 9: every file of a port keeps the license and the holders of its upstream."""
     ports = load_ports(root, fail)
     if not ports:
         return
     try:
-        notice = (root / "NOTICE").read_text(encoding="utf-8")
+        sections = notice_sections((root / "NOTICE").read_text(encoding="utf-8"))
     except OSError:
-        notice = ""
+        sections = {}
     for port in ports:
-        if port["upstream"] not in notice:
-            fail("NOTICE", "rule 9: NOTICE has no section on %s, the upstream of %s" % (port["upstream"], port["name"]))
+        check_notice(port, sections, fail)
+        for identifier in port["licenses"]:
+            if identifier not in known:
+                fail(port["where"], "rule 9: the license %s of the port has no text under LICENSES/" % identifier)
         owned = [path for path in files if port["path"] in path.parents]
+        if not owned:
+            fail(port["where"], "rule 9: the path %s of the port %s holds no file of the tree" % (port["path"], port["name"]))
+            continue
         for path in owned:
             if path.name.endswith(".license"):
                 continue
@@ -303,14 +351,19 @@ def check_ports(root: Path, files: list[PurePosixPath], present: set, fail) -> N
                 if not any(holder in line for line in holders):
                     fail(source, "rule 9: no copyright line names %s, a holder of %s" % (holder, port["upstream"]))
         manifest = port["path"] / "Cargo.toml"
-        if manifest in present:
-            try:
-                package = tomllib.loads((root / manifest).read_text(encoding="utf-8")).get("package") or {}
-            except (OSError, ValueError):
-                continue  # Rule 4 reports it.
-            if package.get("license") != port["license"]:
-                fail(manifest, "rule 9: the port states the license %r, not %s, the license of %s"
-                     % (package.get("license"), port["license"], port["upstream"]))
+        if manifest not in present:
+            fail(manifest, "rule 9: the port %s has no Cargo.toml at its path" % port["name"])
+            continue
+        try:
+            package = tomllib.loads((root / manifest).read_text(encoding="utf-8")).get("package") or {}
+        except (OSError, ValueError):
+            continue  # Rule 4 reports it.
+        if package.get("name") != port["name"]:
+            fail(manifest, "rule 9: the package is named %r, not %s as ports.toml names the port"
+                 % (package.get("name"), port["name"]))
+        if package.get("license") != port["license"]:
+            fail(manifest, "rule 9: the port states the license %r, not %s, the license of %s"
+                 % (package.get("license"), port["license"], port["upstream"]))
 
 
 def main(argv=None) -> int:
@@ -448,7 +501,7 @@ def main(argv=None) -> int:
         fail("NOTICE", "rule 7: %s names a license other than the AGPL and the root holds no NOTICE" % foreign[0])
 
     # Rule 9.
-    check_ports(root, files, present, fail)
+    check_ports(root, files, present, known, fail)
 
     # A file beside another file may fail as itself and as the other file's .license.
     failures = list(dict.fromkeys(failures))
