@@ -60,7 +60,8 @@ The link is the repository followed by `/tree/` and the commit, with a trailing 
 the repository dropped. While the commit is unknown, the line `Commit: unknown` stands and the link
 is the repository alone. A commit that ends in `-dirty` names a build whose files differ from that
 commit, as the build script of the program golem names it, so the tree of the commit is not its
-source and the link is the repository alone as well.
+source and the link is the repository alone as well. The link opens on a click in the chat of a
+player, as [Bridge](../bridge.md#commands) says, so no player types it by hand.
 
 The program golem gives the core plugin the version and the repository of the workspace and the
 commit that its `build.rs` takes from the environment variable `GOLEM_COMMIT`, else from

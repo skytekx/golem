@@ -114,7 +114,8 @@ public final class PluginCommands {
 	/**
 	 * Runs the command in the plugin and sends every line of its answer to the sender, as a system
 	 * message, which the game rule sendCommandFeedback does not suppress. A silent source, such
-	 * as a function, still sees no line, since the game drops every message to it.
+	 * as a function, still sees no line, since the game drops every message to it. A link in a
+	 * line, such as the one to the source that /golem source offers, opens on a click.
 	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
@@ -126,7 +127,7 @@ public final class PluginCommands {
 		}
 		for (String line : lines) {
 			if (line != null) {
-				source.sendSystemMessage(Component.literal(line));
+				source.sendSystemMessage(Links.text(line));
 			}
 		}
 		return Command.SINGLE_SUCCESS;

@@ -140,6 +140,13 @@ Until the runtime hands the plugins the permissions, a plugin judges by the leve
 the operator level of the player alone, since `golem run` loads neither `golem-permissions` nor
 `config/permissions.toml`, see [Permissions](plugins/permissions.md).
 
+The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
+of the chat, so a player would type the link to the source that `/golem source` offers by hand.
+The mod builds every line of an answer, of a `message` and of a `broadcast` with
+`ForgeHooks.newChatWithLinks` of Forge, as Forge builds the links of a chat message: an address
+with its scheme, such as `https://`, opens on a click and shows underlined in blue, and an address
+without a scheme stays plain text, so no word turns into a link that a plugin did not mean.
+
 Forge builds the commands when it loads the data packs: once at the start, before
 `ServerStartingEvent`, and again on every `/reload`. So `commandNames()` answers before
 `serverStarting()`, and the plugins must know their commands by then. A name that is empty or holds

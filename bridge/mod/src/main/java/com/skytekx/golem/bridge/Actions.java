@@ -90,14 +90,14 @@ final class Actions {
 		UUID uuid = UUID.fromString(fields[1]);
 		ServerPlayer player = server.getPlayerList().getPlayer(uuid);
 		if (player != null) {
-			player.sendSystemMessage(Component.literal(fields[2]));
+			player.sendSystemMessage(Links.text(fields[2]));
 		}
 	}
 
 	/** Sends a system message to every player and to the console. */
 	private void broadcast(MinecraftServer server, String[] fields) {
 		if (fits(fields, 2)) {
-			Component text = Component.literal(fields[1]);
+			Component text = Links.text(fields[1]);
 			server.getPlayerList().broadcastSystemMessage(text, false);
 		}
 	}
