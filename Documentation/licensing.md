@@ -220,6 +220,12 @@ reuse lint
   `ports.toml` keeps the license and the holders of its upstream. Its rules are written in the
   docstring of the script.
 
+In a git work tree both read the files that git tracks. Outside one, as in an exported source
+archive, the license lint reads every file outside the directories that `.gitignore` names, the
+builds and the downloads and executed notebooks of the harness among them. `reuse lint` has no
+such list, so notebook `01_license_lint` then runs both on a copy of the files the license lint
+reads.
+
 ## 10. Contributing
 
 A contribution is licensed under the license of the file it changes, and a new file takes the

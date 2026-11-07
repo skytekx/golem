@@ -49,9 +49,11 @@ the file. The rules are these.
 Unlike Aosabi, Golem has no default license for a file without a tag: rule 6 covers every file,
 not only the shipped sources.
 
-The files are the ones git tracks when the root is a git work tree, and otherwise every file
-below the root outside the directories of build output. Every failure is printed with its path,
-and the exit status is 1 when any rule fails.
+The files are the ones git tracks when the root is a git work tree. Otherwise, as in an exported
+source archive, they are every file below the root outside the directories that the .gitignore of
+Golem names: the build output, the environment, the downloads and the executed notebooks of the
+harness and the checkpoints of an editor. Every failure is printed with its path, and the exit
+status is 1 when any rule fails.
 """
 
 from __future__ import annotations
@@ -123,8 +125,12 @@ REUSE_TOML = PurePosixPath("REUSE.toml")
 #: license and holder, since its text quotes the notices of other projects.
 UNTAGGED = {PurePosixPath("LICENSE"), NOTICE}
 
-#: Build output and dependency trees, skipped when the root is no git work tree.
-SKIP_DIRS = {".git", "target", "node_modules", ".venv", "__pycache__", "build", ".gradle"}
+#: The directories skipped at any depth when the root is no git work tree: build output,
+#: dependency trees, environments and the checkpoints of an editor, as .gitignore names them.
+SKIP_DIRS = {".git", "target", "node_modules", ".venv", "__pycache__", "build", ".gradle", ".ipynb_checkpoints"}
+#: The directories of the harness skipped by their path from the root when the root is no git
+#: work tree: the downloads of tests/fetch.py and the executed notebooks of tests/run.py.
+SKIP_PATHS = {PurePosixPath("tests/.cache"), PurePosixPath("tests/notebooks/out")}
 
 
 class Failure(Exception):
@@ -142,7 +148,8 @@ def tracked_files(root: Path) -> list[PurePosixPath]:
     files = []
     for directory, subdirectories, names in os.walk(root):
         relative = PurePosixPath(Path(directory).relative_to(root).as_posix())
-        subdirectories[:] = sorted(name for name in subdirectories if name not in SKIP_DIRS)
+        subdirectories[:] = sorted(name for name in subdirectories
+                                   if name not in SKIP_DIRS and relative / name not in SKIP_PATHS)
         for name in names:
             if not os.path.islink(os.path.join(directory, name)):
                 files.append(relative / name if str(relative) != "." else PurePosixPath(name))
