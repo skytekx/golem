@@ -45,6 +45,9 @@ for [Modpack](modpack.md), which answers whether Golem runs that pack.
 | [Plugins](plugins/index.md) | The plugin runtime: order, cancel chain, panics, budgets, threads, commands and tick statistics |
 | [Core plugin](plugins/core.md) | The command `golem`: source, status, who runs a command, help and the tools of operators |
 | [Permissions](plugins/permissions.md) | The permissions in place of LuckPerms: the format, the rules of resolution, the seed and the quirks they fix |
+| [EssentialsX teleport port](plugins/essentials/teleport.md) | The spec of the teleport side of the port of EssentialsX 2.22.0 and EssentialsXSpawn 2.22.0, command by command, with its messages, config keys, nodes, stores and bridge needs and the quirks and security issues Golem fixes, under the GPL 3 or later of EssentialsX |
+| [EssentialsX social port](plugins/essentials/social.md) | The spec of the messages, mail, ignore, info, AFK, suicide, economy and admin commands of the port of EssentialsX 2.22.0, in the same form and under the same license |
+| [EssentialsX bridge needs](plugins/essentials/bridge-needs.md) | Every query, action, event and storage need of the port of EssentialsX and EssentialsXSpawn, held against what the bridge offers |
 | [Store](store.md) | The SQLite store of the plugins: its design, threads, durability, schema, versions, API, refusals, the rules for the data of EssentialsX, its place in `golem run`, its cost and its tests |
 | [Modpack](modpack.md) | Whether `golem run` runs the SkyTekx 3 modpack of the live server, what notebook 08 checks, its numbers and every difference against java and Arclight |
 | [Plugin API](api.md) | The design of the GraphQL API of Golem on Aosabi, an equivalent of the whole Bukkit API: the schema, the client through the executor, the contract with the bridge, threads, events, remote clients, coverage, the Bukkit layer and the work breakdown |

@@ -242,6 +242,17 @@ server, behind the prefix `[golem]`.
 | `the native <n> got null for <field>, so it answers the pass value` | A null where the contract names a string |
 | `the native <n> waited 1000 ms for the handler, which another call holds, so it answers the pass value, <count> times so far` | A call of another thread than the server thread that found the handler taken for a second, at powers of ten |
 
+## The ports
+
+A port of a Bukkit plugin is a Golem plugin that keeps the license of its upstream, as
+[Licensing](../../Documentation/licensing.md) says. The port of LuckPerms is
+[Permissions](permissions.md). The spec of the port of EssentialsX 2.22.0 and EssentialsXSpawn
+2.22.0 quotes EssentialsX and keeps its license, the GPL 3 or later, in three pages:
+[EssentialsX teleport port](essentials/teleport.md) for the teleport, home, warp and spawn
+commands, [EssentialsX social port](essentials/social.md) for the messages, mail, info, AFK,
+economy and admin commands, and [EssentialsX bridge needs](essentials/bridge-needs.md) for what
+the ports need from the bridge.
+
 ## Tests
 
 The notebook `tests/notebooks/04_plugins.ipynb` drives the runtime, the core plugin and the
@@ -252,4 +263,5 @@ the table that `register_natives` hands the JVM. The natives themselves run only
 `tests/notebooks/07_forge_boot.ipynb` boots the Forge server under `golem run` with the bridge mod,
 so a player, the console and both stop paths go through the real natives.
 
-Related: [Bridge](../bridge.md), [Core plugin](core.md), [Index](../index.md).
+Related: [Bridge](../bridge.md), [Core plugin](core.md), [Permissions](permissions.md),
+[EssentialsX teleport port](essentials/teleport.md), [Index](../index.md).

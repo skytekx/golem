@@ -140,3 +140,8 @@ Oldest first. Times are UTC.
 - The shared pages follow the merge: [Testing](../Documentation/testing.md) names what every
   notebook needs and asks, and the index, the open items and this log name the parts that are
   built.
+- The spec of the port of EssentialsX 2.22.0 and EssentialsXSpawn 2.22.0 went into the wiki, under
+  the GPL 3 or later of EssentialsX: [EssentialsX teleport port](plugins/essentials/teleport.md),
+  [EssentialsX social port](plugins/essentials/social.md) and
+  [EssentialsX bridge needs](plugins/essentials/bridge-needs.md), held against the bridge as it is
+  after the fixes of the game access.
