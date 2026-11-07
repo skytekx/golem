@@ -238,14 +238,16 @@ When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run
 This replaces the signal stop of Arclight, whose shutdown thread worked on chunks beside the server
 thread, issue [#4](https://github.com/skytekx/golem/issues/4).
 
-A server without the bridge mod in `mods/`, or a signal before Forge constructs the mod, has no
-tick that drains the queue. The first signal then logs
+A server without the bridge mod in `mods/`, or a signal before Forge constructs the mod, has no tick
+that drains the queue. The first signal then logs
 `[golem] SIGTERM: the bridge is not connected, so the JVM exits through the shutdown hook of the server`
-and calls `System.exit` with 128 plus the number of the signal on a thread that it attaches to the
-JVM. That is what the java launcher does on a signal: the shutdown hook of the server stops it and
-saves the worlds, and the exit hook ends the process with the status, 143 for `SIGTERM`. A signal
-before the JVM exists ends golem at once with that status, since nothing is loaded that could be
-saved.
+and calls `System.exit` with 128 plus the number of the signal on a thread of its own, `golem-exit`,
+that it attaches to the JVM. That is what the java launcher does on a signal: the shutdown hook of
+the server stops it and saves the worlds, and the exit hook ends the process with the status, 143
+for `SIGTERM`. `System.exit` runs the shutdown hooks on the thread that calls it, so while they save
+the worlds, `golem-signals` still prints the dump on `SIGQUIT` and logs a later signal as
+`[golem] SIGINT: the JVM already exits through the shutdown hook of the server`. A signal before the
+JVM exists ends golem at once with that status, since nothing is loaded that could be saved.
 
 ## The errors
 

@@ -246,6 +246,11 @@ fn attach(vm: &jni::JavaVM) -> jni::errors::Result<jni::JNIEnv<'_>> {
 /// Ends the JVM as the java launcher does on a signal, with System.exit and the exit status
 /// 128 plus the number of the signal, so the shutdown hook of the server stops it and saves the
 /// worlds. Before the JVM exists there is nothing to save, and golem exits at once.
+///
+/// System.exit runs the shutdown hooks on the thread that calls it and returns only when it could
+/// not run, so it runs on a thread of its own, golem-exit. The thread golem-signals goes on to
+/// print a dump on SIGQUIT and to log a later signal while the hooks save the worlds, as the
+/// signal thread of the JVM does under java.
 fn exit_through_jvm(status: i32) {
     let Some(vm) = JVM.get() else {
         log(format_args!(
@@ -253,6 +258,20 @@ fn exit_through_jvm(status: i32) {
         ));
         std::process::exit(status);
     };
+    let spawned = std::thread::Builder::new()
+        .name("golem-exit".to_owned())
+        .spawn(move || call_exit(vm, status));
+    if let Err(error) = spawned {
+        log(format_args!(
+            "could not start the thread golem-exit ({error}), so golem-signals calls System.exit"
+        ));
+        call_exit(vm, status);
+    }
+}
+
+/// Calls System.exit with `status` on the current thread, which it does not leave while the JVM
+/// runs the shutdown hooks and ends the process.
+fn call_exit(vm: &jni::JavaVM, status: i32) {
     let exited = attach(vm).and_then(|mut env| {
         env.call_static_method(
             "java/lang/System",
@@ -348,14 +367,26 @@ fn print_thread_dump() {
     }
 }
 
+/// How far a shutdown signal has taken the stop of the server.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Stop {
+    /// No shutdown signal came yet.
+    None,
+    /// Save-all flush and stop wait in the queue that the mod drains on the server thread.
+    Queued,
+    /// System.exit runs the shutdown hooks of the JVM.
+    Exiting,
+}
+
 /// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own.
 ///
 /// When the bridge is connected, the first signal queues save-all flush and stop, which the mod
 /// runs on the server thread at the end of the next tick. Without the bridge no tick drains the
 /// queue, so the first signal ends the JVM through System.exit, which runs the shutdown hook of
 /// the server as a signal does under java. A later signal changes nothing, since the stop is
-/// already on its way and a second stop would only race it. SIGQUIT prints the dump of every
-/// thread and stops nothing, as under java.
+/// already on its way and a second stop would only race it, and it logs how the first one goes.
+/// SIGQUIT prints the dump of every thread and stops nothing, as under java, also while the
+/// shutdown hooks run.
 fn watch_signals(actions: Actions) -> Result<(), String> {
     use signal_hook::consts::{
         SIGHUP,
@@ -382,31 +413,35 @@ fn watch_signals(actions: Actions) -> Result<(), String> {
     std::thread::Builder::new()
         .name("golem-signals".to_owned())
         .spawn(move || {
-            let mut queued = false;
+            let mut stop = Stop::None;
             for signal in signals.forever() {
                 if signal == SIGQUIT {
                     print_thread_dump();
                     continue;
                 }
                 let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
-                if queued {
-                    log(format_args!(
+                match stop {
+                    Stop::Queued => log(format_args!(
                         "{name}: the stop is already queued, waiting for the server to end"
-                    ));
-                    continue;
-                }
-                queued = true;
-                if golem_bridge::connected() {
-                    actions.push(Action::Command("save-all flush".to_owned()));
-                    actions.push(Action::Command("stop".to_owned()));
-                    log(format_args!(
-                        "{name}: queued save-all flush and stop on the server thread"
-                    ));
-                } else {
-                    log(format_args!(
-                        "{name}: the bridge is not connected, so the JVM exits through the shutdown hook of the server"
-                    ));
-                    exit_through_jvm(128 + signal);
+                    )),
+                    Stop::Exiting => log(format_args!(
+                        "{name}: the JVM already exits through the shutdown hook of the server"
+                    )),
+                    Stop::None if golem_bridge::connected() => {
+                        actions.push(Action::Command("save-all flush".to_owned()));
+                        actions.push(Action::Command("stop".to_owned()));
+                        log(format_args!(
+                            "{name}: queued save-all flush and stop on the server thread"
+                        ));
+                        stop = Stop::Queued;
+                    }
+                    Stop::None => {
+                        log(format_args!(
+                            "{name}: the bridge is not connected, so the JVM exits through the shutdown hook of the server"
+                        ));
+                        exit_through_jvm(128 + signal);
+                        stop = Stop::Exiting;
+                    }
                 }
             }
         })
