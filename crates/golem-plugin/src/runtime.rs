@@ -4,9 +4,17 @@
  * The runtime of golem-plugin: the handler of golem-bridge that calls the plugins in their
  * order, times every call against the budget, catches the panic of a plugin and routes every
  * command to the plugin that owns it.
+ *
+ * A plugin that panics on every tick must not fill the log. The runtime logs the panics of a
+ * plugin the first time, the tenth, the hundredth and at every further power of ten, as the guard
+ * of the mod logs a fault, while its budget counts every panic. The panic hook of the standard
+ * library would print every panic with its place, and with RUST_BACKTRACE its backtrace, before
+ * the runtime catches it, so the runtime installs a hook that stays silent while a call of a
+ * plugin runs on the thread and hands every other panic to the hook it replaced.
  */
 
 use std::{
+    cell::Cell,
     panic::{
         self,
         AssertUnwindSafe, //
@@ -15,6 +23,7 @@ use std::{
         Arc,
         Mutex,
         MutexGuard,
+        Once,
         PoisonError, //
     },
     time::{
@@ -46,6 +55,43 @@ pub const DEFAULT_BUDGET: Duration = Duration::from_millis(1);
 
 /// The least time between two lines on the log about the calls of one plugin over the budget.
 pub const WARNING_INTERVAL: Duration = Duration::from_mins(1);
+
+thread_local! {
+    /// How many calls of plugins run on this thread, whose panics the runtime catches and logs.
+    static CALLING: Cell<u32> = const { Cell::new(0) };
+}
+
+/// Installs, once per process, the panic hook that stays silent while a call of a plugin runs on
+/// the thread and hands every other panic to the hook it replaces.
+fn quiet_panics_of_plugins() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let previous = panic::take_hook();
+        panic::set_hook(Box::new(move |info| {
+            if CALLING.with(Cell::get) == 0 {
+                previous(info);
+            }
+        }));
+    });
+}
+
+/// Runs `body`, a call of a plugin, and catches its panic, which the hook leaves to the runtime.
+fn caught<T>(body: impl FnOnce() -> T) -> std::thread::Result<T> {
+    CALLING.with(|calls| calls.set(calls.get().saturating_add(1)));
+    let outcome = panic::catch_unwind(AssertUnwindSafe(body));
+    CALLING.with(|calls| calls.set(calls.get().saturating_sub(1)));
+    outcome
+}
+
+/// Answers whether the panic with the number `count` of a plugin is logged: the first, the
+/// tenth, the hundredth and every further power of ten.
+fn logged(count: u64) -> bool {
+    let mut rest = count;
+    while rest > 0 && rest.is_multiple_of(10) {
+        rest /= 10;
+    }
+    rest == 1
+}
 
 /// The time a plugin has cost so far.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -163,7 +209,8 @@ struct Owner {
 /// The runtime calls its plugins in the order they were added. For an event that can be
 /// cancelled, the first plugin that cancels it ends the chain, and the runtime answers
 /// [`Verdict::Cancel`]. Every other event reaches every plugin and passes, whatever they
-/// answer. A plugin that panics is logged and counted, and the chain goes on as if it passed.
+/// answer. A plugin that panics is counted, logged at powers of ten of its panics, and the chain
+/// goes on as if it passed.
 /// The first plugin that declares a command owns it, and the runtime routes the command to it.
 /// The first plugin that answers a permission decides it, and without one the node falls to
 /// its default resolver.
@@ -175,7 +222,11 @@ pub struct Runtime {
 
 impl Runtime {
     /// A runtime without plugins whose calls each have `budget`.
+    ///
+    /// The first runtime of a process installs the panic hook that leaves the panics of plugins
+    /// to the runtime, so the log names them as the runtime counts them.
     pub fn new(budget: std::time::Duration) -> Self {
+        quiet_panics_of_plugins();
         Self {
             plugins: Vec::new(),
             commands: Vec::new(),
@@ -193,7 +244,7 @@ impl Runtime {
     pub fn add(&mut self, plugin: Box<dyn Plugin>) {
         let name = plugin.name().to_owned();
         let index = self.plugins.len();
-        let specs = match panic::catch_unwind(AssertUnwindSafe(|| plugin.commands())) {
+        let specs = match caught(|| plugin.commands()) {
             Ok(specs) => specs,
             Err(payload) => {
                 log(format_args!(
@@ -280,17 +331,18 @@ impl Runtime {
         let slot = plugins.get_mut(index)?;
         let mut context = Context::in_runtime(actions, budgets, game);
         let started = Instant::now();
-        let outcome = panic::catch_unwind(AssertUnwindSafe(|| {
-            body(slot.plugin.as_mut(), &mut context)
-        }));
+        let outcome = caught(|| body(slot.plugin.as_mut(), &mut context));
         let elapsed = started.elapsed();
         let over_budget = elapsed > budgets.limit;
-        if let Some((_, budget)) = budgets.lock().get_mut(index) {
+        let panics = budgets.lock().get_mut(index).map(|(_, budget)| {
             budget.count(elapsed, over_budget, outcome.is_err());
-        }
-        if let Err(payload) = &outcome {
+            budget.panics
+        });
+        if let (Err(payload), Some(panics)) = (&outcome, panics)
+            && logged(panics)
+        {
             log(format_args!(
-                "the plugin {} panicked on {what} with \"{}\", so the runtime goes on as if it passed",
+                "the plugin {} panicked on {what} with \"{}\", so the runtime goes on as if it passed, {panics} times so far",
                 slot.name,
                 panic_message(payload.as_ref())
             ));

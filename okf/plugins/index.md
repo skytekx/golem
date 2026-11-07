@@ -86,10 +86,15 @@ For a chat message the first plugin that answers `Cancel` ends the chain: the pl
 never see the message, and the native answers true, so the mod cancels `ServerChatEvent`. Every
 other event reaches every plugin, and the runtime answers a pass whatever the plugins answer.
 
-A plugin that panics is caught with `catch_unwind`. The runtime logs the panic with the name of
-the plugin and the event, counts it in the budget of the plugin and goes on as if the plugin
-passed, so the plugins after it still see the event. A panic never reaches the bridge, and the
-bridge would answer the pass value if one did.
+A plugin that panics is caught with `catch_unwind`. The runtime counts the panic in the budget of
+the plugin and goes on as if the plugin passed, so the plugins after it still see the event. A
+panic never reaches the bridge, and the bridge would answer the pass value if one did. The runtime
+logs the panics of a plugin with its name, the event and the message the first time, the tenth,
+the hundredth and at every further power of ten, as the guard of the mod logs a fault, so a plugin
+that panics on every tick cannot fill the log, while the budget counts every panic. The first
+`Runtime` of a process installs a panic hook that stays silent while a call of a plugin runs on
+the thread and hands every other panic to the hook it replaced, so the hook of the standard
+library prints neither the place of such a panic nor, under `RUST_BACKTRACE`, its backtrace.
 
 ## Budgets
 
@@ -240,7 +245,7 @@ server, behind the prefix `[golem]`.
 
 | Line | When |
 | --- | --- |
-| `the plugin <p> panicked on the event <e> with "<message>", so the runtime goes on as if it passed` | A plugin panics on an event |
+| `the plugin <p> panicked on the event <e> with "<message>", so the runtime goes on as if it passed, <count> times so far` | A plugin panics on an event, a command or a permission, at powers of ten per plugin |
 | `the plugin <p> took <t> ms on the event <e>, over the budget of <b> ms, ...` | A call over the budget, once a minute per plugin |
 | `the plugin <p> declares the command <c>, which the plugin <o> owns, so the runtime ignores it` | A duplicate command |
 | `the native <n> panicked with "<message>", so it answers the pass value` | A panic that reached a native |
