@@ -62,11 +62,15 @@ is the repository alone. A commit that ends in `-dirty` names a build whose file
 commit, as the build script of the program golem names it, so the tree of the commit is not its
 source and the link is the repository alone as well.
 
-`Source::of_build()` gives the core plugin the version and the repository of the workspace and the
-commit that the environment variable `GOLEM_COMMIT` names when the crate is built, so a release
-build sets it to the output of `git rev-parse HEAD`. A build without it names the commit unknown.
-`Source::lines()` answers the same five lines, so the program golem prints them for
-`golem source` as well.
+The program golem gives the core plugin the version and the repository of the workspace and the
+commit that its `build.rs` takes from the environment variable `GOLEM_COMMIT`, else from
+`git rev-parse HEAD`, else names unknown, see [JVM host](../jvm-host.md#golem-run). So a build in a
+clone of the repository names its commit without the variable. `Source::of_build()` is a helper
+for other hosts of the core plugin: it reads `GOLEM_COMMIT` alone when `golem-plugin` is built, and
+without it names the commit unknown. `Source::lines()` answers the five lines above, which
+`/golem source` sends. The program golem prints the same version, repository and commit for
+`golem source` as three lines of a key and a value, `version <v>`, `repository <url>` and
+`commit <hash>`, for scripts to read.
 
 ## Status
 

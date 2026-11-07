@@ -93,8 +93,9 @@ impl Source {
         }
     }
 
-    /// Answers the lines that name the license and the source, which `/golem source` and the
-    /// program golem print.
+    /// Answers the five lines that name the license and the source, which `/golem source`
+    /// sends. The program golem prints its version, repository and commit for `golem source` as
+    /// three lines of a key and a value instead.
     pub fn lines(&self) -> Vec<String> {
         vec![
             format!(
