@@ -333,9 +333,66 @@ fn thread_dump(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<String> {
     Ok(text)
 }
 
+/// The temporary directory of the JVM, in which `HotSpot` keeps the socket of its attach listener.
+fn vm_temporary_directory(env: &mut jni::JNIEnv<'_>) -> jni::errors::Result<PathBuf> {
+    env.with_local_frame(4, |env| {
+        let directory = env
+            .call_static_method(
+                "jdk/internal/vm/VMSupport",
+                "getVMTemporaryDirectory",
+                "()Ljava/lang/String;",
+                &[],
+            )?
+            .l()?;
+        let directory = jni::objects::JString::from(directory);
+        let directory: String = env.get_string(&directory)?.into();
+        Ok(PathBuf::from(directory))
+    })
+}
+
+/// Answers the socket of the attach listener when a tool such as jcmd asks to attach while that
+/// socket is gone.
+///
+/// A tool that finds no socket `.java_pid<pid>` in the temporary directory of the JVM writes the
+/// trigger `.attach_pid<pid>` into the working directory of the process or into that directory
+/// and sends SIGQUIT, on which the signal thread of `HotSpot` starts its listener again. Under -Xrs
+/// `HotSpot` starts the listener at startup and has no signal thread, so it never creates a removed
+/// socket again, and a dump on each SIGQUIT of the tool would only flood the console.
+fn attach_without_socket(env: &mut jni::JNIEnv<'_>) -> Option<PathBuf> {
+    static TEMPORARY: OnceLock<PathBuf> = OnceLock::new();
+    let temporary = if let Some(directory) = TEMPORARY.get() {
+        directory
+    } else if let Ok(directory) = vm_temporary_directory(env) {
+        TEMPORARY.get_or_init(|| directory)
+    } else {
+        let _ = env.exception_clear();
+        return None;
+    };
+    let pid = std::process::id();
+    let socket = temporary.join(format!(".java_pid{pid}"));
+    if socket.exists() {
+        return None;
+    }
+    let trigger = format!(".attach_pid{pid}");
+    let asked = std::env::current_dir()
+        .into_iter()
+        .chain([temporary.clone()])
+        .any(|directory| directory.join(&trigger).exists());
+    asked.then_some(socket)
+}
+
+/// What the host does on SIGQUIT.
+enum Quit {
+    /// It prints the dump of every thread.
+    Dump(String),
+    /// A tool asks to attach, but the socket of the attach listener is gone.
+    Attach(PathBuf),
+}
+
 /// Prints the dump of every thread on standard output, as the JVM does on SIGQUIT when it has
 /// the signal, which -Xrs takes from it. The default action of SIGQUIT would end the process
-/// without saving, and an operator sends it for a dump alone.
+/// without saving, and an operator sends it for a dump alone. A SIGQUIT of a tool that asks to
+/// attach while the socket of the attach listener is gone prints no dump but a line that says so.
 fn print_thread_dump() {
     let Some(vm) = JVM.get() else {
         log(format_args!(
@@ -343,7 +400,10 @@ fn print_thread_dump() {
         ));
         return;
     };
-    let dump = attach(vm).and_then(|mut env| {
+    let quit = attach(vm).and_then(|mut env| {
+        if let Some(socket) = attach_without_socket(&mut env) {
+            return Ok(Quit::Attach(socket));
+        }
         // The thread stays attached and never returns to Java, so nothing else frees the local
         // references of a dump, and each would keep its objects, the text of the dump among
         // them, until the process ends. A frame of their own frees them once the text is read.
@@ -352,15 +412,19 @@ fn print_thread_dump() {
             let _ = env.exception_describe();
             let _ = env.exception_clear();
         }
-        dump
+        dump.map(Quit::Dump)
     });
-    match dump {
-        Ok(text) => {
+    match quit {
+        Ok(Quit::Dump(text)) => {
             let mut out = std::io::stdout().lock();
             let _ = writeln!(out, "{text}");
             let _ = out.flush();
             log(format_args!("SIGQUIT: printed the dump of every thread"));
         }
+        Ok(Quit::Attach(socket)) => log(format_args!(
+            "SIGQUIT: a tool such as jcmd asks to attach, but the socket {} of the JVM is gone, which the JVM does not create again under -Xrs, so no tool attaches until golem restarts",
+            socket.display()
+        )),
         Err(error) => log(format_args!(
             "SIGQUIT: no dump of the threads ({error}), jcmd <pid> Thread.print gives one"
         )),

@@ -231,7 +231,19 @@ from the JVM too, and its default action would end the process without saving. S
 logs `[golem] SIGQUIT: printed the dump of every thread`. The thread attaches to the JVM under its
 own name, so the dump shows it as `golem-signals` and not as the `Thread-N` that the JNI gives a
 thread that attaches without a name. `jcmd` and `jstack` attach as under java, since HotSpot starts
-its attach listener at startup when `-Xrs` is set.
+its attach listener at startup when `-Xrs` is set, with the socket `/tmp/.java_pid<pid>` on Linux.
+
+Unlike java, golem cannot bring a removed socket back. A tool that finds the socket gone writes the
+trigger `.attach_pid<pid>` into the working directory of the process or into `/tmp` and sends
+`SIGQUIT`, on which the signal thread of HotSpot would create the socket again, but `-Xrs` takes
+that thread away. Once the socket is removed, by hand or by a cleaner of `/tmp` that removes old
+files, no tool attaches until golem restarts. A `SIGQUIT` that finds the trigger while the socket is
+gone prints no dump, since `jstack` sends several, and logs
+`[golem] SIGQUIT: a tool such as jcmd asks to attach, but the socket /tmp/.java_pid<pid> of the JVM is gone`
+and why. On a host whose `systemd-tmpfiles` cleans `/tmp` by age, a line `x /tmp/.java_pid*` in a
+file of `/etc/tmpfiles.d` keeps the socket. Giving `SIGQUIT` back to HotSpot needs the host to drop
+`-Xrs` and take the shutdown signals through handlers of the JVM instead, which waits for a decision
+of the owner.
 
 When the server stops, its threads end, `DestroyJavaVM` returns 0 and `golem run` exits with 0.
 This replaces the signal stop of Arclight, whose shutdown thread worked on chunks beside the server
