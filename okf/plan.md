@@ -141,9 +141,9 @@ rules as they are built.
   stack uses `ring`, which is under Apache-2.0 and ISC terms. A license that is GPL 2 only could not
   take those parts.
 - Forge is LGPL-2.1 and LuckPerms is MIT. Both may be combined with AGPL code.
-- EssentialsX is GPL-3.0, which is compatible, but Golem still does not copy or translate its code.
-  The port is written from the documented behaviour and from tests against the running plugin.
-  Arclight and CraftBukkit code is not used either.
+- EssentialsX is GPL-3.0-or-later, which combines with the AGPL. Its ports keep that license, as
+  the later ruling below says, so they may translate its code, its messages and its texts, while the
+  crates of Golem itself take no code of it. Arclight and CraftBukkit code is not used either.
 - Golem never ships Minecraft. The server jar comes from Mojang's download as today.
 - "Only" keeps Golem on the AGPL 3 of 2007, so a later AGPL of the Free Software Foundation does
   not apply to Golem by itself.
@@ -156,9 +156,11 @@ well once they are built.
 The license is written into the code itself.
 
 - The file `LICENSE` holds the full text of the AGPL 3 from gnu.org, unchanged.
-- Every source file names the license on its first line with an SPDX identifier, as the Linux kernel
-  does, and carries no other license text. A file that cannot hold a comment, such as JSON or an
-  image, is covered by an entry in `REUSE.toml`.
+- Every file states its license in an SPDX tag at its head, as the Linux kernel does, and carries
+  no other license text. A file that cannot hold a comment, such as JSON or an image, takes its tags
+  from a `.license` file beside it, `REUSE.toml` gives `NOTICE` alone its tags, and the license
+  texts carry none. [Licensing](../Documentation/licensing.md#3-the-spdx-lines) says on which line
+  the tags stand.
 
 <!-- REUSE-IgnoreStart -->
 
@@ -177,8 +179,9 @@ Each SPDX line is followed by the `SPDX-FileCopyrightText` line of REUSE that na
   `Cargo.toml` of a port states the license of its upstream itself, as the later ruling below says.
   The wiki pages carry both tags as YAML comments right after the opening `---` of their front
   matter, so that REUSE reads them.
-- The folder `LICENSES/` holds the text of every license a dependency or a copied file brings, named
-  by its SPDX identifier, and `NOTICE` names each such project.
+- The folder `LICENSES/` holds the text of every license that a file of the tree names, named by
+  its SPDX identifier, and `NOTICE` names every project whose work the tree carries or derives
+  from. A dependency that the build fetches adds no text.
 - CI runs `reuse lint` and the license lint of Golem so that no file lacks its SPDX lines, and
   `cargo deny` so that no dependency has an incompatible license.
 
@@ -232,7 +235,8 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
 
 ### Code
 
-- The first line of every file is its SPDX line, see [License](#license).
+- Every file opens with its SPDX lines where
+  [Licensing](../Documentation/licensing.md#3-the-spdx-lines) places them, see [License](#license).
 - Rust is formatted with `rustfmt` and passes `clippy` with warnings as errors, as the Rust code of
   the kernel does. Every `unsafe` block, which the JNI host needs, carries a `// SAFETY:` comment
   that says why it is sound, as the kernel requires.
