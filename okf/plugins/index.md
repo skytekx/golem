@@ -5,7 +5,7 @@ type: Spec
 title: Plugins
 description: The plugin runtime of Golem, the handler of the bridge that calls the Rust plugins on the server thread in their order, times every call against a budget, catches their panics and routes their commands.
 tags: [plugins, runtime, budget, commands, bridge]
-timestamp: 2026-11-07
+timestamp: 2026-11-15
 ---
 
 # Plugins
@@ -185,6 +185,12 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `actions()` | The queue itself, for what the helpers do not cover |
 | `game()` | The game, which answers on the server thread and answers none on any other thread |
 | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
+| `store()` | The store of the plugins that a program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
+
+Once every plugin saw `ServerStopped`, the runtime flushes the store, outside the budget of every
+plugin, so every change of the plugins is in the file before the JVM ends, also when nothing closes
+the store after it. A flush that fails is logged. The program `golem` gives the runtime no store
+yet, see [Store](../store.md#the-place-in-the-program-golem).
 
 A field of an action that holds U+001F, the separator of the wire form, has it replaced by a space,
 and the first such replacement of the process is logged.
@@ -275,11 +281,12 @@ the ports need from the bridge.
 
 The notebook `tests/notebooks/04_plugins.ipynb` drives the runtime, the core plugin and the
 functions behind the natives through `golem-devtool`. The subcommand `plugins` runs a script of
-native calls with test plugins that broadcast, cancel, panic and sleep, `actions-encode` prints the
-wire form of actions, `tick-stats` feeds ticks at given instants to a window and `natives` prints
-the table that `register_natives` hands the JVM. The natives themselves run only inside a JVM:
-`tests/notebooks/07_forge_boot.ipynb` boots the Forge server under `golem run` with the bridge mod,
-so a player, the console and both stop paths go through the real natives.
+native calls with test plugins that broadcast, cancel, panic, sleep and reach a store that the
+script names through the context, `actions-encode` prints the wire form of actions, `tick-stats`
+feeds ticks at given instants to a window and `natives` prints the table that `register_natives`
+hands the JVM. The natives themselves run only inside a JVM: `tests/notebooks/07_forge_boot.ipynb`
+boots the Forge server under `golem run` with the bridge mod, so a player, the console and both stop
+paths go through the real natives.
 
 Related: [Bridge](../bridge.md), [Core plugin](core.md), [Permissions](permissions.md),
 [EssentialsX teleport port](essentials/teleport.md), [Index](../index.md).

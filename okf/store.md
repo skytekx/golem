@@ -542,7 +542,8 @@ Issue: [#107](https://github.com/skytekx/golem/issues/107).
 
 ## The place in the program golem
 
-The store is not wired into `golem run` yet. The ports wire it in this way.
+The store is not wired into `golem run` yet. The runtime of the plugins takes a store and flushes
+it, as steps 3 and 4 say, and `04_plugins` holds both. `golem run` wires the store in this way.
 
 1. `golem run` opens `golem-store.db` in the server directory, beside `world/`, with
    `Store::open` after it has resolved the server directory and before `install_plugins`, so a
@@ -550,9 +551,12 @@ The store is not wired into `golem run` yet. The ports wire it in this way.
    exists.
 2. It seeds the permissions with `replace_permissions(PermissionSet::from_toml(...))` of
    `config/permissions.toml` when the store has no group yet.
-3. It hands a clone of the `Store` to each port it adds to the runtime.
-4. A plugin of the program calls `flush` on `ServerStopped`, the last event of the server thread,
-   where a wait costs no tick, so every change of the ports is in the file before the JVM ends.
+3. It gives the runtime a clone of the `Store` with `Runtime::set_store`, and every plugin reaches
+   it through `Context::store` of its call, see [Plugins](plugins/index.md#the-context-of-a-call).
+4. Once every plugin saw `ServerStopped`, the last event of the server thread, where a wait costs
+   no tick, the runtime calls `flush`, so every change of the plugins is in the file before the JVM
+   ends, also when no close follows, such as when a thread of a mod keeps the JVM from ending until
+   a kill. The wait counts in the budget of no plugin, and a flush that fails is logged.
 5. It calls `close` after `golem_jvm::run` returns, before `report`. A JVM that ends through
    `System.exit`, as the stop of a server without the bridge does on a signal, never returns from
    `golem_jvm::run`, so `close` runs there in the callback that the host sets with

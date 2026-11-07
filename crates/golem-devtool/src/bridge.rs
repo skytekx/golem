@@ -2,10 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 /*
  * The subcommands of golem-bridge and golem-plugin: plugins feeds a script of native calls to
- * the plugin runtime with the core plugin and test plugins, as the mod would, and prints what
- * the natives answered and queued. actions-encode prints the wire form of actions, tick-stats
- * the statistics of a window of ticks at given instants, and natives the table of native
- * methods that the host registers.
+ * the plugin runtime with the core plugin and test plugins, as the mod would, with a store of
+ * the plugins when the script names one, and prints what the natives answered and queued.
+ * actions-encode prints the wire form of actions, tick-stats the statistics of a window of ticks
+ * at given instants, and natives the table of native methods that the host registers.
  */
 
 //! The primitives of golem-bridge and golem-plugin.
@@ -22,9 +22,14 @@
 //!   "source": {"version": "0.1.0", "repository": "...", "commit": "..."},   or "build"
 //!   "plugins": [{"kind": "core"}, {"kind": "echo", "name": "echo-a", "commands": ["a"]}],
 //!   "game": {"players": [], "dimensions": []},   the scripted game of the module game
+//!   "store": "golem-store.db",       the file of a store of the plugins, by default none
 //!   "steps": [{"op": "chat", "uuid": "...", "name": "Alex", "message": "hello"}]
 //! }
 //! ```
+//!
+//! With `store` the devtool opens the store of that file, hands it to the runtime as `golem run`
+//! does, and closes it after the last step. The answer names the outcome of that close as
+//! `storeClosed`, which is null for a script without a store.
 //!
 //! Every native step hands the natives the scripted game, or a game that answers nothing when
 //! the script names none, and the natives hand it to the plugins behind the guard of the server
@@ -54,7 +59,10 @@
 //! true for a UUID of `operators` and false for every other player. `mover`
 //! answers its `commands` with the helpers of the context that teleport a player to its place
 //! `to`, to a place that is no number and to one beyond the bounds of the world, and name them in
-//! the player list. `ask` asks the game, as the module game describes.
+//! the player list. `ask` asks the game, as the module game describes. `keeper` reaches the store
+//! through the context of its call: its `commands` set and answer a setting, answer the counts of
+//! the writer, hold the writer still, name a setting that the plugin sets behind a held writer when
+//! it sees `ServerStopped`, and answer whether a context that no runtime made holds a store.
 
 use std::{
     fs,
@@ -88,6 +96,7 @@ use golem_plugin::{
     Runtime,
     Source, //
 };
+use golem_store::Store;
 use serde::{
     Deserialize,
     Serialize, //
@@ -142,6 +151,7 @@ struct Script {
     #[serde(default)]
     plugins: Vec<PluginSpec>,
     game: Option<GameSpec>,
+    store: Option<String>,
     steps: Vec<Step>,
 }
 
@@ -235,6 +245,8 @@ enum PluginSpec {
         commands: Vec<String>,
         to: LocationSpec,
     },
+    /// A plugin that reads and changes the store through the context on its commands.
+    Keeper { name: String, commands: Vec<String> },
 }
 
 /// The default of a count of the script.
@@ -450,6 +462,12 @@ fn run_script(script: Script) -> Result<Value, String> {
             commit,
         },
     };
+    let store = script
+        .store
+        .as_deref()
+        .map(Store::open)
+        .transpose()
+        .map_err(|error| error.to_string())?;
     let mut run = Run {
         kind: script.handler,
         budget,
@@ -458,6 +476,7 @@ fn run_script(script: Script) -> Result<Value, String> {
         budgets: None,
         actions: host::actions(),
         game: script.game.map(ScriptedGame::new),
+        store,
     };
     run.install();
     let answers: Vec<Value> = script
@@ -470,10 +489,16 @@ fn run_script(script: Script) -> Result<Value, String> {
             answer
         })
         .collect();
+    // The store closes after the last step, as golem run closes it once the JVM ended.
+    let closed = run
+        .store
+        .take()
+        .map(|store| store.close().map_err(|error| error.to_string()));
     Ok(json!({
         "handler": run.kind_name(),
         "budgetMs": budget.as_secs_f64() * 1000.0,
         "steps": answers,
+        "storeClosed": closed,
     }))
 }
 
@@ -487,6 +512,8 @@ struct Run {
     actions: Actions,
     /// The game of the script, or none for a game that answers nothing.
     game: Option<ScriptedGame>,
+    /// The store of the script, which the runtime hands its plugins.
+    store: Option<Store>,
 }
 
 impl Run {
@@ -512,6 +539,9 @@ impl Run {
         match self.kind {
             HandlerKind::Runtime => {
                 let mut runtime = Runtime::new(self.budget);
+                if let Some(store) = &self.store {
+                    runtime.set_store(store.clone());
+                }
                 for spec in &self.plugins {
                     runtime.add(build_plugin(spec, &self.source));
                 }
@@ -790,6 +820,11 @@ fn build_plugin(spec: &PluginSpec, source: &Source) -> Box<dyn Plugin> {
             name,
             commands,
             to: to.into(),
+        }),
+        PluginSpec::Keeper { name, commands } => Box::new(Keeper {
+            name,
+            commands,
+            stopped: None,
         }),
     }
 }
@@ -1071,6 +1106,95 @@ impl Plugin for Mover {
                 context.clear_list_name(uuid);
                 "cleared".to_owned()
             }
+            other => format!("{} knows no {other}", self.name),
+        };
+        vec![answer]
+    }
+}
+
+/// A test plugin that reaches the store through the context of its call. Its commands take
+/// `set <key> <value>`, which sets a setting, `get <key>`, which answers it, `stats`, which
+/// answers the counts of the writer, `pause <ms>`, which holds the writer still through the hook
+/// of the feature testing of golem-store, `stopped <ms> <key>`, after which the plugin holds the
+/// writer still for that long and sets the setting once it sees `ServerStopped`, and `outside`,
+/// which answers whether a context that no runtime made holds a store.
+struct Keeper {
+    name: String,
+    commands: Vec<String>,
+    /// What the plugin does once it sees `ServerStopped`: how long it holds the writer still, and
+    /// the setting that it then sets.
+    stopped: Option<(Duration, String)>,
+}
+
+impl Plugin for Keeper {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn commands(&self) -> Vec<CommandSpec> {
+        specs(&self.name, &self.commands)
+    }
+
+    fn on_event(&mut self, event: &Event, context: &mut Context<'_>) -> Verdict {
+        if let (Event::ServerStopped, Some((held, key)), Some(store)) =
+            (event, &self.stopped, context.store())
+        {
+            // A change on the last event of the server thread, behind a writer that stands still,
+            // which only a flush behind the plugins brings into the file.
+            let _ = store.testing_pause_writer(*held);
+            let _ = store.set_setting(key, "stopped");
+        }
+        Verdict::Pass
+    }
+
+    fn on_command(
+        &mut self,
+        _name: &str,
+        _sender: &Sender,
+        arguments: &str,
+        context: &mut Context<'_>,
+    ) -> Vec<String> {
+        let mut words = arguments.splitn(3, ' ');
+        let (verb, key, value) = (
+            words.next().unwrap_or_default(),
+            words.next().unwrap_or_default(),
+            words.next().unwrap_or_default(),
+        );
+        if verb == "outside" {
+            let outside = Context::new(context.actions());
+            return vec![format!("store {}", outside.store().is_some())];
+        }
+        if verb == "stopped" {
+            let Ok(ms) = key.parse::<u64>() else {
+                return vec![format!("{key} is no number of milliseconds")];
+            };
+            self.stopped = Some((Duration::from_millis(ms), value.to_owned()));
+            return vec![format!("armed {value} behind {ms} ms")];
+        }
+        let Some(store) = context.store() else {
+            return vec!["no store".to_owned()];
+        };
+        let answer = match verb {
+            "set" => match store.set_setting(key, value) {
+                Ok(()) => format!("set {key}"),
+                Err(error) => format!("refused {key}: {error}"),
+            },
+            "get" => match store.setting(key) {
+                Some(held) => format!("{key} is {held}"),
+                None => format!("{key} is not set"),
+            },
+            "stats" => {
+                let stats = store.stats();
+                let (queued, written, pending) = (stats.queued, stats.written, stats.pending);
+                format!("queued {queued}, written {written}, pending {pending}")
+            }
+            "pause" => match key.parse::<u64>() {
+                Ok(ms) => match store.testing_pause_writer(Duration::from_millis(ms)) {
+                    Ok(()) => format!("paused {ms} ms"),
+                    Err(error) => format!("not paused: {error}"),
+                },
+                Err(_) => format!("{key} is no number of milliseconds"),
+            },
             other => format!("{} knows no {other}", self.name),
         };
         vec![answer]

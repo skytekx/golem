@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 #
 # The plugin runtime of Golem: the trait of a plugin, the calls on the server thread with their
-# time budget, and the core plugin with the command golem.
+# time budget, the store that it hands the plugins, and the core plugin with the command golem.
 
 [package]
 name = "golem-plugin"
@@ -17,6 +17,7 @@ publish = false
 
 [dependencies]
 golem-bridge.workspace = true
+golem-store.workspace = true
 
 [lints]
 workspace = true

@@ -317,3 +317,10 @@ Oldest first. Times are UTC.
   callback caught and logged, so a host has a place to close what it opened when
   `golem_jvm::run` never returns. `golem-devtool jvm-on-exit` sets such callbacks before a
   launch, and `03_launch_args` holds the hook to them. See [JVM host](jvm-host.md#the-hooks).
+- The runtime of the plugins hands every plugin the store. A program gives it one with
+  `Runtime::set_store`, a plugin reaches it through `Context::store` of its call, and the runtime
+  flushes it once every plugin saw `ServerStopped`, outside the budget of every plugin.
+  `golem-devtool plugins` takes the file of a store in its script, and `04_plugins` holds a plugin
+  that sets and reads a setting, a change that waits for a writer held still until the flush, a
+  change that the plugin makes when it sees `ServerStopped` itself, behind a held writer, and
+  the file after the close. See [Plugins](plugins/index.md#the-context-of-a-call).

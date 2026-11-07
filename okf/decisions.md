@@ -5,7 +5,7 @@ type: Decisions
 title: Decisions
 description: Every ruling of the owner on Golem, with its day, its status and the page or file where it lives.
 tags: [decisions, rulings, owner]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Decisions
@@ -90,4 +90,5 @@ blocking questions instead of asking. Each stands until the owner rules otherwis
 | Do the threads of Golem share their prepared operations? | Yes. One set serves every thread, with the ids given at enable, and Aosabi keeps a plan per thread | [Features](features.md#what-golem-asks-of-aosabi) |
 | Is the budget of a first call measured once or per thread? | Per thread, since Aosabi keeps its plans per thread and each thread pays its own first call | [Features](features.md#the-graphql-api-of-golem) |
 | Which stack do the threads that Golem makes get? | 8 MiB, as `golem-jvm` gives its thread | [Features](features.md#the-graphql-api-of-golem) |
+| Who flushes the store on `ServerStopped`? | The runtime, once every plugin saw the event, so the wait for the disk counts in the budget of no plugin and no port has to remember it | [Store](store.md#the-place-in-the-program-golem) |
 | What does a remote subscriber get when its events overflow? | Every remote stream of events, chat and commands included, closes with `EVENTS_LOST` and the count of the lost events, and the streams of state, the tick and the positions keep the newest | [Features](features.md#the-graphql-api-of-golem) |

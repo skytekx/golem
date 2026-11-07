@@ -155,6 +155,7 @@ name = "golem-plugin"
 version = "0.1.0"
 dependencies = [
  "golem-bridge",
+ "golem-store",
 ]
 
 [[package]]

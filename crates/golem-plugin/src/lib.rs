@@ -21,6 +21,7 @@
 //! | `runtime` | [`Runtime`], the handler of golem-bridge, and [`Budget`] and [`Budgets`], the time of every plugin |
 //! | `core_plugin` | [`CorePlugin`], the command golem, and [`Source`], the source that the AGPL asks Golem to offer |
 //! | `operator` | The subcommands of /golem that ask the game, most of them for operators |
+//! | `services` | What the runtime hands every plugin beside the game: the store |
 //!
 //! okf/plugins/index.md describes the runtime and okf/plugins/core.md the core plugin. The crate
 //! holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
@@ -29,6 +30,7 @@
 mod core_plugin;
 mod operator;
 mod runtime;
+mod services;
 
 use golem_bridge::{
     Action,
@@ -80,6 +82,7 @@ pub struct Context<'a> {
     actions: &'a Actions,
     budgets: Option<&'a Budgets>,
     game: &'a dyn Game,
+    services: Option<&'a services::Services>,
 }
 
 impl<'a> Context<'a> {
@@ -94,19 +97,23 @@ impl<'a> Context<'a> {
             actions,
             budgets: None,
             game,
+            services: None,
         }
     }
 
-    /// A context of a call of the runtime, which also reads the budgets of its plugins.
+    /// A context of a call of the runtime, which also reads the budgets of its plugins and
+    /// hands them what the runtime holds for them, such as the store.
     pub(crate) fn in_runtime(
         actions: &'a Actions,
         budgets: &'a Budgets,
         game: &'a dyn Game,
+        services: &'a services::Services,
     ) -> Self {
         Self {
             actions,
             budgets: Some(budgets),
             game,
+            services: Some(services),
         }
     }
 

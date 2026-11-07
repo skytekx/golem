@@ -46,7 +46,8 @@ use golem_bridge::{
 use crate::{
     CommandSpec,
     Context,
-    Plugin, //
+    Plugin,
+    services::Services, //
 };
 
 /// A budget for one call that fits many plugins into one tick of 50 ms, which the whole game
@@ -218,6 +219,8 @@ pub struct Runtime {
     plugins: Vec<Slot>,
     commands: Vec<Owner>,
     budgets: Budgets,
+    /// What the runtime hands every plugin through the context, which `services.rs` sets.
+    pub(crate) services: Services,
 }
 
 impl Runtime {
@@ -234,6 +237,7 @@ impl Runtime {
                 limit: budget,
                 table: Arc::default(),
             },
+            services: Services::default(),
         }
     }
 
@@ -326,10 +330,13 @@ impl Runtime {
         body: impl FnOnce(&mut dyn Plugin, &mut Context<'_>) -> T,
     ) -> Option<T> {
         let Self {
-            plugins, budgets, ..
+            plugins,
+            budgets,
+            services,
+            ..
         } = self;
         let slot = plugins.get_mut(index)?;
-        let mut context = Context::in_runtime(actions, budgets, game);
+        let mut context = Context::in_runtime(actions, budgets, game, services);
         let started = Instant::now();
         let outcome = caught(|| body(slot.plugin.as_mut(), &mut context));
         let elapsed = started.elapsed();
@@ -365,6 +372,7 @@ impl Handler for Runtime {
                 return Verdict::Cancel;
             }
         }
+        self.services.after_event(event);
         Verdict::Pass
     }
 
