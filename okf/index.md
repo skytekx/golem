@@ -18,7 +18,7 @@ the SkyTekx 3 server and its modpack stay in the
 [wiki of the server](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/index.md), but
 for [Modpack](modpack.md), which answers whether Golem runs that pack.
 
-## State on 2026-11-07
+## State on 2026-11-08
 
 | Area | State | Details |
 | --- | --- | --- |
@@ -33,13 +33,14 @@ for [Modpack](modpack.md), which answers whether Golem runs that pack.
 | Modpack | Checked: `golem run` boots the 289 mods of the pack of the live server as java does and opens the world that Arclight wrote, held by `08_modpack_boot` | [Modpack](modpack.md) |
 | Plugin API | Designed, not built: GraphQL on Aosabi, called in process through the executor, an equivalent of the whole Bukkit API that a coverage check holds to `spigot-api` 1.20.1 | [Plugin API](api.md), [API coverage](api-coverage.md) |
 | Bukkit layer | Surveyed, not built: a survey of 503 plugins measures the three levels of the layer that runs Bukkit and Spigot plugins unchanged on the Golem API | [Bukkit layer](bukkit-layer.md) |
-| Next | The ports of EssentialsX, EssentialsXSpawn and LuckPerms on the store, the store in `golem run`, the first area of the API and the decisions open for the owner | [Open items](open-items.md) |
+| Next | The work of the hand over merged from its bundle, the foundation and the ports of EssentialsX, EssentialsXSpawn and LuckPerms, Golem on macOS and the switch of the live server. The feature list holds 375 rows and marks each feature whose decision is open with the owner, and Open items names the open decisions | [Features](features.md), [Open items](open-items.md) |
 
 ## Page map
 
 | Page | What it holds |
 | --- | --- |
 | [Plan](plan.md) | The plan of Golem as the owner set it, with the later rulings |
+| [Features](features.md) | Every feature of Golem by what it does, with its source, its state and its notebook |
 | [JVM host](jvm-host.md) | `golem run`, the launch as the java launcher reads it, the options Golem adds, the thread, the hooks, the stop path and the host jar |
 | [Bridge](bridge.md) | The contract between the bridge mod and the Rust of Golem, and how the bridge is built and tested |
 | [Plugins](plugins/index.md) | The plugin runtime: order, cancel chain, panics, budgets, threads, commands and tick statistics |

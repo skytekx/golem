@@ -266,3 +266,14 @@ Oldest first. Times are UTC.
   the API.
 - [Bukkit layer](bukkit-layer.md) names its work items by the plugins that each completes, in place
   of numbered steps, and calls the two analyses of its survey the first and the second.
+- A feature list joins the wiki. [Features](features.md) holds 375 rows in 20 areas, each a feature
+  of Golem by what it does, with its source, its state and its notebook. It names every open issue
+  of `skytekx/golem`, marks each feature whose decision is open with the owner and lists what Golem
+  needs of Aosabi. An area holds the levels: a tick window, tick hooks and an action queue per
+  level, a lock per plugin, the teleport across levels as a hand off, budgets per level on the one
+  server thread, and the loop of a protected level of its own as research on a test server, so that
+  one busy dimension does not slow the others.
+- [Decisions](decisions.md) gains the answers of the agents that the feature list relies on, among
+  them the order in which the two branches of the bundle land, the crate of the ports of
+  EssentialsX, how Golem takes Aosabi, the numbers of the new notebooks and how the levels tick at
+  the switch.
