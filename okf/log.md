@@ -264,3 +264,5 @@ Oldest first. Times are UTC.
   so the design holds once the levels get threads of their own. [API coverage](api-coverage.md)
   follows, and [Bridge](bridge.md) says how the contract that is built today becomes the contract of
   the API.
+- [Bukkit layer](bukkit-layer.md) names its work items by the plugins that each completes, in place
+  of numbered steps, and calls the two analyses of its survey the first and the second.

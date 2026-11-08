@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 type: Spec
 title: Bukkit layer
-description: The Bukkit layer that runs Bukkit and Spigot plugins unchanged in the JVM of Forge on the Golem API, with the three levels it serves as a survey of 503 plugins measures them, the stand-ins of CraftBukkit and what the API offers behind each, the remapper of Minecraft names and the answers it gives to probes, the shaded libraries, the needs outside the levels, the order of work, the plugins no layer runs, the blind spots, how to reproduce the survey and the decisions open for the owner.
+description: The Bukkit layer that runs Bukkit and Spigot plugins unchanged in the JVM of Forge on the Golem API, with the three levels it serves as a survey of 503 plugins measures them, the stand-ins of CraftBukkit and what the API offers behind each, the remapper of Minecraft names and the answers it gives to probes, the shaded libraries, the needs outside the levels, what each work item completes, the plugins no layer runs, the blind spots, how to reproduce the survey and the decisions open for the owner.
 tags: [bukkit, spigot, craftbukkit, layer, plugins, remapper, survey, paper]
-timestamp: 2026-11-06
+timestamp: 2026-11-08
 ---
 
 # Bukkit layer
@@ -62,11 +62,11 @@ file of each plugin that targets 1.20.1:
 
 `tools/plugin-survey/corpus.py` builds the corpus and `tools/plugin-survey/scan.py` reads every
 class file of every jar, nested jars included. A second, independent scanner reads the same jars,
-and a judge pass reconciles the two scans into one record per jar in the format of `scan.py`,
+and a reconciling pass joins the two scans into one record per jar in the format of `scan.py`,
 `reconciled.jsonl`. The summary steps in `tools/plugin-survey/summary/` count the reconciled
-records, and the scans and the counts are of 2026-11-06. Where a count comes instead from one of
-the two analyses of the same records, the Opus analysis and the Fable analysis of 2026-11-06, the
-text names the analysis. Section 12 says how to run the tools.
+records, and the scans and the counts are of 2026-11-06. Where a count comes instead from one of two
+independent analyses of the same records of 2026-11-06, called the first and the second analysis
+below, the text names the analysis. Section 12 says how to run the tools.
 
 - **Counts are jars.** Every count is plugins of this corpus, unless the text names members,
   classes or downloads.
@@ -92,9 +92,9 @@ text names the analysis. Section 12 says how to run the tools.
 ## 3. The three levels
 
 A plugin is level 3 when it reaches classes of Minecraft, level 2 when it reaches classes of
-CraftBukkit, the runtime class behind an API object by a member lookup or a non-public member of
-the API jar, and level 1 otherwise. The summary step `levels.py` gives these levels for all 503
-jars, equal to the levels of the judge pass on all code paths.
+CraftBukkit, the runtime class behind an API object by a member lookup or a non-public member of the
+API jar, and level 1 otherwise. The summary step `levels.py` gives these levels for all 503 jars,
+equal to the levels of the reconciling pass on all code paths.
 
 | Level | What the plugin reaches | All code paths | On 1.20.1 | Share of downloads on 1.20.1 |
 | --- | --- | ---: | ---: | ---: |
@@ -125,7 +125,7 @@ Of the live plugins, EssentialsX is level 3, LuckPerms level 2 and EssentialsXSp
 
 Plugins on 1.20.1 by `members.py`, directly and by reflection. Members of the API jar, such as
 `SimpleCommandMap.knownCommands`, stand with the CraftBukkit members because plugins reach them the
-same way. The rows marked Opus or Fable come from that analysis.
+same way. A row that names the first or the second analysis comes from that analysis.
 
 | Member | Plugins | Directly | By reflection |
 | --- | ---: | ---: | ---: |
@@ -144,14 +144,14 @@ same way. The rows marked Opus or Fable come from that analysis.
 | `CraftRegistry.getMinecraftRegistry` | 41 | 0 | 41 |
 | `CraftServer.getServer` | 38 | 24 | 16 |
 | `CraftMagicNumbers.getMaterial` | 29 | 10 | 20 |
-| `PluginCommand` protected constructor (Opus) | 26 | 0 | 26 |
-| `VanillaCommandWrapper.getListener` (Opus) | 25 | 6 | 19 |
+| `PluginCommand` protected constructor (first analysis) | 26 | 0 | 26 |
+| `VanillaCommandWrapper.getListener` (first analysis) | 25 | 6 | 19 |
 | `Material.BY_NAME` (private field of the API) | 24 | 0 | 24 |
 | `SimplePluginManager.commandMap` (field) | 24 | 0 | 24 |
-| `CraftServer.getMinecraftVersion`, a Paper method that plugins probe (Fable) | 22 | 0 | 22 |
+| `CraftServer.getMinecraftVersion`, a Paper method that plugins probe (second analysis) | 22 | 0 | 22 |
 | `CraftServer.syncCommands` | 18 | 8 | 10 |
-| `CraftServer.console` (field, Fable) | 17 | 0 | 17 |
-| `CraftPlayer.entity` (field, Fable) | 15 | 0 | 15 |
+| `CraftServer.console` (field, second analysis) | 17 | 0 | 17 |
+| `CraftPlayer.entity` (field, second analysis) | 15 | 0 | 15 |
 | `CraftHumanEntity.perm` (field) | 2 | 0 | 2 |
 
 Some members that plugins reach do not exist in CraftBukkit 1.20.1, as a check against the
@@ -165,7 +165,7 @@ CraftBukkit 1.20.1 exactly and adds Paper members only with the whole of Paper, 
 
 The stand-ins grouped by the object they wrap, by `groups.py`, ranked by plugins on 1.20.1 with all
 code paths in brackets. 306 plugins reach at least one group on 1.20.1. The member counts beside the
-groups come from section 4.1 and, where it lacks a member, from the Fable analysis.
+groups come from section 4.1 and, where it lacks a member, from the second analysis.
 
 | Rank | Group | Plugins on 1.20.1 | Leading members (plugins) |
 | ---: | --- | ---: | --- |
@@ -262,24 +262,25 @@ which [Plugin API](api.md#17-the-bukkit-layer) section 17 records.
 
 ### 4.4 The plugins of the live server
 
-- **LuckPerms 5.5.71** reaches `CraftHumanEntity.perm`, `CraftEntity.perm` and
-  `getPermissibleBase`, `ServerCommandSender.perm` and `blockPermInst`, the maps `permissions`,
-  `permSubs`, `defaultPerms`, `commandMap` and `dependencyGraph` of `SimplePluginManager`, and
-  `attachments` and `permissions` of `PermissibleBase`. Nothing in it touches Minecraft. It needs
-  the command map, the entity and the permissible groups and works after step 22 of section 9.
+- **LuckPerms 5.5.71** reaches `CraftHumanEntity.perm`, `CraftEntity.perm` and `getPermissibleBase`,
+  `ServerCommandSender.perm` and `blockPermInst`, the maps `permissions`, `permSubs`,
+  `defaultPerms`, `commandMap` and `dependencyGraph` of `SimplePluginManager`, and `attachments` and
+  `permissions` of `PermissibleBase`. Nothing in it touches Minecraft. It needs the command map, the
+  entity and the permissible groups and works once every item of section 9 down to the injection of
+  permissibles stands.
 - **EssentialsX 2.22.0** reaches `CraftServer.commandMap`, `syncCommands` and `knownCommands`,
   `dependencyGraph`, `CraftPlayer.getHandle`, `CraftEntity.getHandle`, `CraftItemStack`,
   `CraftWorld`, `CraftRegistry`, `CraftBossBar.handle` and `OfflinePlayer.setBanned` on the runtime
   class. Its own `net.ess3.nms.refl` code reaches `Language`, the Spigot `LocaleLanguage`, and
   `MinecraftServer`, and its legacy `net.minecraft.server.{version}` lookups must fail on 1.20.1 so
   that it falls back to the API. Its shaded adventure-platform-bukkit sends title, boss bar, book
-  and tab list packets. It works after step 13, so "every plugin works" is a statement about level
-  3 even for the plugins of this server.
-- **EssentialsXSpawn 2.22.0** needs level 1 only and works after step 1.
+  and tab list packets. It works once every item of section 9 down to the boss bars stands, so
+  "every plugin works" is a statement about level 3 even for the plugins of this server.
+- **EssentialsXSpawn 2.22.0** needs level 1 only and works once level 1 stands.
 
 ## 5. Level 3: the remapper
 
-239 plugins reach classes of Minecraft on 1.20.1, 222 by reflection and 95 directly (Opus
+239 plugins reach classes of Minecraft on 1.20.1, 222 by reflection and 95 directly (first
 analysis), and a typical one reaches most areas of the game at once. The classes already exist in
 the JVM of Forge, under Mojang class names and SRG member names, so level 3 is a remapper and not a
 set of stand-ins.
@@ -297,14 +298,14 @@ set of stand-ins.
    Mojang names: `net.minecraft.core.Registry` is Mojang's `IdMap` in Spigot names and Mojang's
    `Registry` in Mojang names, and the same holds for `MobEffect`, `Fluid`, `ChunkMap`, `Path`,
    `WorldData`, `Position`, `ParticleType`, `TextFilter` and `ResourceManager`. 44 jars declare
-   `paperweight-mappings-namespace: mojang` in their manifest and the judge pass finds both naming
-   styles in 60 jars (`details.py`), so the remapper decides per class, from the manifest and the
-   version tag.
+   `paperweight-mappings-namespace: mojang` in their manifest and the reconciling pass finds both
+   naming styles in 60 jars (`details.py`), so the remapper decides per class, from the manifest and
+   the version tag.
 4. **It maps Mojang member names as well.** Code written in Mojang names, such as DamageIndicator,
    ServerListPlus and the Mojang adapters of many plugins, finds Forge's class names but not its
    SRG member names.
-5. **It covers overrides and classes defined at run time.** 40 plugins extend Minecraft classes,
-   13 of them `ContainerAnvil` and 8 `PathfinderGoal` (Opus analysis), so their overriding methods
+5. **It covers overrides and classes defined at run time.** 40 plugins extend Minecraft classes, 13
+   of them `ContainerAnvil` and 8 `PathfinderGoal` (first analysis), so their overriding methods
    need the Spigot member names mapped too. Big Doors, WolfyUtils, Denizen and TrainCarts define
    classes against Minecraft at run time.
 6. **It keeps the pass of CraftBukkit.** The `processClass` of CraftBukkit rewrites the `Material`
@@ -315,7 +316,7 @@ set of stand-ins.
 ### 5.2 Faithful answers to probes
 
 313 plugins have internal access on 1.20.1 (`library_reach.py`). 69 of them carry code for
-`v1_20_R1` that runs (Opus analysis), and only 9 reach internals through that code alone (Fable
+`v1_20_R1` that runs (first analysis), and only 9 reach internals through that code alone (second
 analysis): BedWars1058, BetterHud, CratesPlus, DamageIndicator, DiceFurniture, DualWield,
 SilkSpawners, Staff+ and TerraformGenerator. The other 60 mix it with version independent code, and
 244 carry no code for `v1_20_R1` at all. They splice the version into names at run time, use
@@ -330,9 +331,9 @@ for another server:
 - **No such method or field** for the Paper members of section 4.1, such as
   `CraftServer.getMinecraftVersion`, and for the Folia schedulers on the API types, which 107
   plugins carry code for.
-- **The version of Spigot 1.20.1** from `Bukkit.getVersion`, `getBukkitVersion`, the package name
-  of `CraftServer`, `CraftMagicNumbers.getDataVersion` and `getMappingsVersion`, since 194 plugins
-  build internal class names from that package (Opus analysis).
+- **The version of Spigot 1.20.1** from `Bukkit.getVersion`, `getBukkitVersion`, the package name of
+  `CraftServer`, `CraftMagicNumbers.getDataVersion` and `getMappingsVersion`, since 194 plugins
+  build internal class names from that package (first analysis).
 - **The Spigot type of every lookup.** A field read by name has the CraftBukkit type, so a plugin
   that casts `CraftServer.console` to `DedicatedServer` or `CraftBossBar.handle` to
   `ServerBossEvent` gets that object.
@@ -345,8 +346,8 @@ for another server:
   `EntityPlayer.nextContainerCounter` 21, `WorldServer.getWorld` 17, `World.getWorld` 16,
   `MinecraftServer.server` 9, `Container.getBukkitView` 8, `EntityHuman.getBukkitEntity` 8,
   `CommandListenerWrapper.getBukkitSender` 7 and `IRecipe.toBukkitRecipe` 7 (`details.py`). 78
-  plugins reference such members directly (Opus analysis, an upper bound) and 116 when reflection by
-  name counts (`order.py`). The layer adds them by Mixin or redirects the calls while it remaps.
+  plugins reference such members directly (first analysis, an upper bound) and 116 when reflection
+  by name counts (`order.py`). The layer adds them by Mixin or redirects the calls while it remaps.
 - **The Netty pipeline of the player connection.** 29 plugins reach `Connection`, the Spigot
   `NetworkManager`, or `ServerConnectionListener` on 1.20.1, and packet libraries insert their
   handlers into the channel pipeline by name. ProtocolLib and PacketEvents are among them, and 60
@@ -360,7 +361,7 @@ for another server:
 Every area of the game is reached by 34 to 162 plugins, and a level 3 plugin reaches most of them,
 so the areas are no separate units of work. The two analyses draw the borders differently:
 
-| Area | Opus | Fable |
+| Area | First analysis | Second analysis |
 | --- | ---: | ---: |
 | Packets | 162 | 158 |
 | Registries, holders and resource keys | 161 | 143 |
@@ -379,7 +380,7 @@ The most reached classes. "Written" counts plugins that name the class on a 1.20
 that exists in 1.20.1 (`minecraft_rank.py`). The analyses also count legacy names, descriptors and
 the return types of calls, so their counts are mostly higher.
 
-| Mojang name | Spigot 1.20.1 name | Written | Opus | Fable |
+| Mojang name | Spigot 1.20.1 name | Written | First analysis | Second analysis |
 | --- | --- | ---: | ---: | ---: |
 | `ItemStack` | `ItemStack` | 133 | 153 | 150 |
 | `CompoundTag` | `NBTTagCompound` | 124 | 139 | 136 |
@@ -399,13 +400,13 @@ the return types of calls, so their counts are mostly higher.
 | `SynchedEntityData` | `DataWatcher` | 40 | 87 | 87 |
 | `ClientboundSetEntityDataPacket` | `PacketPlayOutEntityMetadata` | 38 | 87 | 85 |
 
-The analyses count 1,583 (Opus) and 1,809 (Fable) distinct Minecraft classes on 1.20.1, and the
-written names that exist in 1.20.1 cover 1,270. By the Fable analysis, over the 222 plugins that
-reach these classes, the 430 most reached classes make half of them whole, 1,119 make 80 % whole
-and 1,682 make 95 % whole. So the remapper maps all of Minecraft and not a chosen part.
+The analyses count 1,583 (first analysis) and 1,809 (second analysis) distinct Minecraft classes on
+1.20.1, and the written names that exist in 1.20.1 cover 1,270. By the second analysis, over the 222
+plugins that reach these classes, the 430 most reached classes make half of them whole, 1,119 make
+80 % whole and 1,682 make 95 % whole. So the remapper maps all of Minecraft and not a chosen part.
 
-Five shapes carry most member references, counted directly (Opus analysis) and with reflection by
-name (Fable analysis):
+Five shapes carry most member references, counted directly (first analysis) and with reflection by
+name (second analysis):
 
 1. **Build a packet and send it** through the player's connection: `EntityPlayer.c`
    (`connection`) 57 plugins directly and 62 with reflection, `PlayerConnection.a(Packet)` (`send`)
@@ -464,20 +465,21 @@ on 1.20.1 lies in that library.
 
 ## 7. Level 1: the public API
 
-Counted at the declaring type (`public_api.py` and the Opus analysis), the corpus uses 4,983 of the
+Counted at the declaring type (`public_api.py` and the first analysis), the corpus uses 4,983 of the
 7,942 public methods (62.7 %), 3,621 of the 5,900 public fields and constants (61.4 %) and names
-about 1,060 of the 1,247 types (1,057 by the Fable count, 1,064 by `public_api.py`). 4,010 methods
-are used by two or more plugins, 1,902 by ten or more and 606 by fifty or more. Taking methods in
-order of use, the level 1 plugins need the 2,904 most used before half of them are fully served,
-4,401 for 90 % and 4,965 for all of them (Opus analysis), so level 1 is complete or nothing, and
-the coverage check of [API coverage](api-coverage.md) holds the Golem API to all 7,942.
+about 1,060 of the 1,247 types (1,057 by the count of the second analysis, 1,064 by
+`public_api.py`). 4,010 methods are used by two or more plugins, 1,902 by ten or more and 606 by
+fifty or more. Taking methods in order of use, the level 1 plugins need the 2,904 most used before
+half of them are fully served, 4,401 for 90 % and 4,965 for all of them (first analysis), so level 1
+is complete or nothing, and the coverage check of [API coverage](api-coverage.md) holds the Golem
+API to all 7,942.
 
-- **The most used methods** by plugins: `JavaPlugin.<init>` 494, `PluginManager.registerEvents`
-  473, `PlayerEvent.getPlayer` 458, `Permissible.hasPermission` 440, `CommandSender.sendMessage`
-  435, `Bukkit.getServer` 434, `Bukkit.getScheduler` 430, `PluginDescriptionFile.getVersion` 426.
-  Plugin classes extend or implement `JavaPlugin` 494, `Listener` 479, `CommandExecutor` 260,
-  `Event` 211, `BukkitRunnable` 194, `Cancellable` 193, `TabCompleter` 187 and `InventoryHolder`
-  113 (Fable analysis).
+- **The most used methods** by plugins: `JavaPlugin.<init>` 494, `PluginManager.registerEvents` 473,
+  `PlayerEvent.getPlayer` 458, `Permissible.hasPermission` 440, `CommandSender.sendMessage` 435,
+  `Bukkit.getServer` 434, `Bukkit.getScheduler` 430, `PluginDescriptionFile.getVersion` 426. Plugin
+  classes extend or implement `JavaPlugin` 494, `Listener` 479, `CommandExecutor` 260, `Event` 211,
+  `BukkitRunnable` 194, `Cancellable` 193, `TabCompleter` 187 and `InventoryHolder` 113 (second
+  analysis).
 - **Events.** 476 plugins listen to events, 475 to an event of spigot-api. They listen to 231 of
   the 250 concrete events (92.4 %) and 233 of the 267 event types below `Event`. The most heard are
   PlayerJoinEvent 379, PlayerQuitEvent 326, InventoryClickEvent 245, PlayerInteractEvent 223,
@@ -548,71 +550,72 @@ three tiers:
   ArmorStandEditor-Reborn, akropolis, CommandControl, Tweaks and Networks.
 - **Likely (4):** named by the estimates of both analyses: FeatherMorph, FreedomChat, Simple Voice
   Chat Discord Bridge and Typewriter.
-- **Possible (40 more):** named by one estimate only. The Fable rule, a Paper reference outside any
-  Paper adapter class and no `Class.forName` guard anywhere, adds 20, some of them guarded at run
-  time, such as the ACF command framework inside SpawnTP and Ultra SetHome. The Opus rule, an author
-  who lists only Paper, Folia or Purpur on Modrinth and own code that calls Paper API, adds 20 more.
-  A listing names what the author tested and not what the code needs, so the second list is the
-  weaker one.
+- **Possible (40 more):** named by one estimate only. The rule of the second analysis, a Paper
+  reference outside any Paper adapter class and no `Class.forName` guard anywhere, adds 20, some of
+  them guarded at run time, such as the ACF command framework inside SpawnTP and Ultra SetHome. The
+  rule of the first analysis, an author who lists only Paper, Folia or Purpur on Modrinth and own
+  code that calls Paper API, adds 20 more. A listing names what the author tested and not what the
+  code needs, so the list of the first analysis is the weaker one.
 
 Beyond the tiers, 241 plugins call Paper API from the server on 1.20.1 paths, 172 of them from their
 own code and the rest through shaded libraries, 157 use Adventure from the server and 128 listen to
-a Paper event (Opus and Fable analyses), and 329 use `org.bukkit` members that spigot-api 1.20.1
-lacks, mostly of Paper and Folia, see section 7. On Spigot 1.20.1 those paths stay dark. A layer
-that offers Paper lights them all, and one that offers part of Paper sends plugins down Paper paths
-it cannot serve, so Paper is a tier of its own, all of it or none of it, see section 13.
+a Paper event (both analyses), and 329 use `org.bukkit` members that spigot-api 1.20.1 lacks, mostly
+of Paper and Folia, see section 7. On Spigot 1.20.1 those paths stay dark. A layer that offers Paper
+lights them all, and one that offers part of Paper sends plugins down Paper paths it cannot serve,
+so Paper is a tier of its own, all of it or none of it, see section 13.
 
-## 9. The order of work
+## 9. What each work item completes
 
-Each step adds the work item that completes the most plugins, and a plugin counts as working when
-every item it needs is done (`order.py`). The counts assume that guarded calls take their fallback
-path, and the five plugins of section 10 stay out.
+The work items stand in the order in which each completes the most plugins that the items above it
+left, and a plugin counts as working when every item it needs is done (`order.py`). The counts
+assume that guarded calls take their fallback path, and the five plugins of section 10 stay out.
 
-| Step | Work item | Plugins that need it | Completed by this step | Working | Share |
-| ---: | --- | ---: | ---: | ---: | ---: |
-| 1 | Level 1: spigot-api 1.20.1 unchanged, its events, the plugin loader, `CraftServer` in `v1_20_R1` with Spigot's version strings | 503 | 136 | 136 | 27.0 % |
-| 2 | A Java 21 or 25 runtime for plugin classes, or a downgrade of their class files to Java 17 at load | 87 | 21 | 157 | 31.2 % |
-| 3 | Accepting `api-version` above 1.20 and the misread 1.2 | 40 | 23 | 180 | 35.8 % |
-| 4 | Level 2: command map, registration and help | 140 | 16 | 196 | 39.0 % |
-| 5 | Level 2: entity and player handles | 228 | 21 | 217 | 43.1 % |
-| 6 | Level 3: the remapper | 239 | 31 | 248 | 49.3 % |
-| 7 | Level 2: game profiles | 76 | 17 | 265 | 52.7 % |
-| 8 | Level 2: item stacks, item meta and persistent data | 169 | 17 | 282 | 56.1 % |
-| 9 | Level 2: worlds, chunks, blocks and block data | 161 | 27 | 309 | 61.4 % |
-| 10 | Level 2: server handle | 84 | 10 | 319 | 63.4 % |
-| 11 | Level 2: conversions | 101 | 16 | 335 | 66.6 % |
-| 12 | Level 3: CraftBukkit's additions to Minecraft classes | 116 | 18 | 353 | 70.2 % |
-| 13 | Level 2: boss bars, all 39 completed carriers of adventure-platform-bukkit | 56 | 39 | 392 | 77.9 % |
-| 14 | Level 2: other CraftBukkit classes | 21 | 17 | 409 | 81.3 % |
-| 15 | Level 2: chat | 31 | 13 | 422 | 83.9 % |
-| 16 | Level 3: the Netty pipeline | 29 | 18 | 440 | 87.5 % |
-| 17 | Level 2: inventories and menus | 28 | 16 | 456 | 90.7 % |
-| 18 | The Paper loader and Paper API for the 12 certain and 4 likely Paper plugins | 16 | 15 | 471 | 93.6 % |
-| 19 | Level 2: event factory | 15 | 14 | 485 | 96.4 % |
-| 20 | Level 2: maps | 5 | 5 | 490 | 97.4 % |
-| 21 | Level 2: scheduler | 4 | 4 | 494 | 98.2 % |
-| 22 | Level 2: permissible injection | 3 | 3 | 497 | 98.8 % |
-| 23 | Level 2: scoreboards | 1 | 1 | 498 | 99.0 % |
+| Work item | Plugins that need it | Completed by this item | Working | Share |
+| --- | ---: | ---: | ---: | ---: |
+| Level 1: spigot-api 1.20.1 unchanged, its events, the plugin loader, `CraftServer` in `v1_20_R1` with Spigot's version strings | 503 | 136 | 136 | 27.0 % |
+| A Java 21 or 25 runtime for plugin classes, or a downgrade of their class files to Java 17 at load | 87 | 21 | 157 | 31.2 % |
+| Accepting `api-version` above 1.20 and the misread 1.2 | 40 | 23 | 180 | 35.8 % |
+| Level 2: command map, registration and help | 140 | 16 | 196 | 39.0 % |
+| Level 2: entity and player handles | 228 | 21 | 217 | 43.1 % |
+| Level 3: the remapper | 239 | 31 | 248 | 49.3 % |
+| Level 2: game profiles | 76 | 17 | 265 | 52.7 % |
+| Level 2: item stacks, item meta and persistent data | 169 | 17 | 282 | 56.1 % |
+| Level 2: worlds, chunks, blocks and block data | 161 | 27 | 309 | 61.4 % |
+| Level 2: server handle | 84 | 10 | 319 | 63.4 % |
+| Level 2: conversions | 101 | 16 | 335 | 66.6 % |
+| Level 3: CraftBukkit's additions to Minecraft classes | 116 | 18 | 353 | 70.2 % |
+| Level 2: boss bars, all 39 completed carriers of adventure-platform-bukkit | 56 | 39 | 392 | 77.9 % |
+| Level 2: other CraftBukkit classes | 21 | 17 | 409 | 81.3 % |
+| Level 2: chat | 31 | 13 | 422 | 83.9 % |
+| Level 3: the Netty pipeline | 29 | 18 | 440 | 87.5 % |
+| Level 2: inventories and menus | 28 | 16 | 456 | 90.7 % |
+| The Paper loader and Paper API for the 12 certain and 4 likely Paper plugins | 16 | 15 | 471 | 93.6 % |
+| Level 2: event factory | 15 | 14 | 485 | 96.4 % |
+| Level 2: maps | 5 | 5 | 490 | 97.4 % |
+| Level 2: scheduler | 4 | 4 | 494 | 98.2 % |
+| Level 2: permissible injection | 3 | 3 | 497 | 98.8 % |
+| Level 2: scoreboards | 1 | 1 | 498 | 99.0 % |
 
-EssentialsXSpawn works after step 1, EssentialsX after step 13 and LuckPerms after step 22.
+EssentialsXSpawn works once level 1 stands, EssentialsX once every item down to the boss bars stands
+and LuckPerms once every item down to the injection of permissibles stands.
 
 - **The internals of the API jar cost nothing** when the stock classes of spigot-api run unchanged,
-  which is why step 1 completes 136 plugins and not fewer. Of the 183 level 1 plugins, 9 still do
-  not work after step 3, the 7 with a `paper-plugin.yml` and ClearInventory and Random Death Drop,
-  while 6 plugins of level 2 whose internals the stock classes give work by then.
+  which is why level 1 completes 136 plugins and not fewer. Of the 183 level 1 plugins, 9 still do
+  not work once the items down to the `api-version` check stand, the 7 with a `paper-plugin.yml` and
+  ClearInventory and Random Death Drop, while 6 plugins of level 2 whose internals the stock classes
+  give work by then.
 - **The Java runtime and the `api-version` check come before any internal.** Together they complete
   44 plugins that need nothing else.
 - **Level 2 stand-ins and the remapper go together.** The handles complete few plugins on their own
-  (21 in step 5), because what plugins do with a handle is level 3. From step 6 on, each stand-in
-  group completes plugins whose Minecraft part already works.
-- **Boss bars are one cluster.** Step 13 completes 39 plugins at once, all of them carriers of
-  adventure-platform-bukkit whose last missing piece is `CraftBossBar.handle`.
-- **Permissible injection comes late by count, not by value.** It completes 3 plugins, but
-  LuckPerms runs on this server today, and once the entity stand-ins exist its cost is small, see
-  section 13.
-- The Opus analysis gives the same shape, 135 plugins after level 1 and 498 after 24 steps. The
-  Fable analysis completes 165 plugins with level 1 because it counts neither the Java runtime nor
-  the `api-version` check, then goes flat for fourteen steps because it treats every area of
+  (21 with the entity and player handles), because what plugins do with a handle is level 3. Once
+  the remapper stands, each stand-in group completes plugins whose Minecraft part already works.
+- **Boss bars are one cluster.** The item of the boss bars completes 39 plugins at once, all of them
+  carriers of adventure-platform-bukkit whose last missing piece is `CraftBossBar.handle`.
+- **Permissible injection comes late by count, not by value.** It completes 3 plugins, but LuckPerms
+  runs on this server today, and once the entity stand-ins exist its cost is small, see section 13.
+- The first analysis gives the same shape, 135 plugins after level 1 and 498 after 24 items. The
+  second analysis completes 165 plugins with level 1 because it counts neither the Java runtime nor
+  the `api-version` check, then goes flat for fourteen items because it treats every area of
   Minecraft as a unit of its own, while one remapper serves all areas at once.
 
 ## 10. Plugins no layer runs identically
@@ -640,15 +643,15 @@ Death Drop only by reading descriptors more leniently than Spigot, which is no l
 compiled against `org.bukkit.craftbukkit.v1_21_R3`, so its merchant feature fails on Spigot 1.20.1
 while the rest may run. Enchantment Solution has one tagged adapter, `v1_16_R3`, and ten numbered,
 untagged classes `AnvilGUI_1` to `AnvilGUI_10` in the package names of 1.17, and its author tested
-it on 1.20, so it probably runs. The Opus analysis puts both under "cannot run".
+it on 1.20, so it probably runs. The first analysis puts both under "cannot run".
 
 **At risk, but servable (4).** Big Doors generates subclasses with ByteBuddy, WolfyUtils container
 classes with javassist, Denizen its property and packet helpers with ASM, and TrainCarts its classes
 through BKCommonLib's Mountiplex. They run if the remapper also covers classes defined at run time
 and the names their generators look up. RPGItems generates ByteBuddy proxies of its own classes
 only, and StormSzafka references `java.lang.instrument` from obfuscated code for an unknown purpose.
-The judge pass flags 140 jars for patching (`details.py`), but the rest is library code that never
-touches server classes, and no jar declares a Java agent in its manifest.
+The reconciling pass flags 140 jars for patching (`details.py`), but the rest is library code that
+never touches server classes, and no jar declares a Java agent in its manifest.
 
 **No limits of the layer.**
 
@@ -693,13 +696,13 @@ Their `README.md` gives the commands and the hosts they reach.
 3. `summary/run.py <dir> <out> --srg <bukkit_srg.srg>` runs the summary steps over the records and
    writes what each prints and hands on into `<out>`.
 
-The reconciled data of 2026-11-06 adds to the records of `scan.py` the corrections of the judge pass
-that compares them with a second scanner. The second scanner, the judge pass and the two analyses
-are not in the repository, so the counts this page marks Opus or Fable come from the survey folder
-of that day, and so does the check of CraftBukkit members against Arclight's classes in section 4.1.
-Rerun on the reconciled data of 2026-11-06, the summary steps give every other count on this page.
-Run on the records of `scan.py` alone, they give the counts without the corrections of the judge
-pass.
+The reconciled data of 2026-11-06 adds to the records of `scan.py` the corrections of the
+reconciling pass that compares them with a second scanner. The second scanner, the reconciling pass
+and the two analyses are not in the repository, so the counts this page marks with the first or the
+second analysis come from the survey folder of that day, and so does the check of CraftBukkit
+members against Arclight's classes in section 4.1. Rerun on the reconciled data of 2026-11-06, the
+summary steps give every other count on this page. Run on the records of `scan.py` alone, they give
+the counts without the corrections of the reconciling pass.
 
 ## 13. Decisions for the owner
 
@@ -712,9 +715,9 @@ pass.
 2. **Java 21.** Whether Java 21 class files run on the server on Java 21, which must be measured
    with the pack first, or through a downgrade at load that keeps the server on Java 17. Java 25
    class files need Java 25 or the downgrade either way.
-3. **Permissible injection.** Whether it moves forward from step 22, because LuckPerms runs on the
-   live server today. It completes 3 plugins, and its cost is small once the entity stand-ins of
-   step 5 exist.
+3. **Permissible injection.** Whether it moves forward in the ranking of section 9, ahead of items
+   that complete more plugins, because LuckPerms runs on the live server today. It completes 3
+   plugins, and its cost is small once the stand-ins of the entity and player handles exist.
 4. **Who decides a permission.** How Golem's own permission checks in `golem-permissions` ask a
    Bukkit permission plugin when one owns the decision, through the `PermissibleBase` in the `perm`
    field of the sender, so that the server keeps one source of truth.
