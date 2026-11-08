@@ -48,8 +48,10 @@ localhost only and runs in offline mode, so no account of Mojang is involved.
 A pin that is already in place is kept, so a second run downloads nothing. The JDK, the Forge
 server and Gradle are installed into a folder beside their place, which takes the name of the pin
 once the install is complete, so a run that failed or broke off leaves nothing that a later run
-takes for a pin in place. The exit status is 1 when a download or an install fails or a hash
-differs.
+takes for a pin in place. A download of the JDK, the installer of Forge or Gradle that its host
+answers with 429 or an error of 500 and above, or whose connection fails or breaks off, is tried
+again after a pause that doubles, five tries in all. The exit status is 1 when a download or an
+install fails or a hash differs.
 
 The jars of the pack are the work of their authors under their own licenses, the files of the
 server repository are the work of SkyTekx. The script only puts them where the notebooks find
@@ -70,6 +72,7 @@ import sys
 import tarfile
 import time
 import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -105,6 +108,12 @@ GRADLE_VERSION = "8.14.3"
 GRADLE_URL = "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
 GRADLE_SHA256 = "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531"
 GRADLE_DIRECTORY = "gradle-8.14.3"
+
+#: The tries of a download of the JDK, the installer of Forge or Gradle before the script gives
+#: up, and the pause in seconds before the second try, which doubles before each later one, since
+#: GitHub and the host of Gradle answer 503 and 504 at times.
+DOWNLOAD_TRIES = 5
+DOWNLOAD_PAUSE = 5
 
 #: The repository of the SkyTekx 3 server and the commit whose pack the notebooks boot.
 SERVER_REPOSITORY = "https://github.com/skytekx/skytekx3-1201-server"
@@ -232,14 +241,41 @@ def sha256(path: Path) -> str:
 
 
 def download(url: str, target: Path, expected: str) -> None:
-    """Download `url` to `target` and check its SHA-256, keeping a file that already matches."""
+    """Download `url` to `target` and check its SHA-256, keeping a file that already matches.
+
+    An answer of 429 or of 500 and above, a connection that fails and an answer that breaks off
+    before its Content-Length are tried again after DOWNLOAD_PAUSE seconds, a pause that doubles
+    before each later try, up to DOWNLOAD_TRIES tries. Any other error and a file whose hash misses
+    fail at once, and a failed download leaves no part behind.
+    """
     if target.is_file() and sha256(target) == expected:
         return
     partial = target.with_name(target.name + ".part")
-    print("fetch: %s" % url, flush=True)
     request = urllib.request.Request(url, headers={"User-Agent": "golem-harness"})
-    with urllib.request.urlopen(request, timeout=300) as response, open(partial, "wb") as stream:
-        shutil.copyfileobj(response, stream)
+    for attempt in range(1, DOWNLOAD_TRIES + 1):
+        if attempt > 1:
+            time.sleep(DOWNLOAD_PAUSE * 2 ** (attempt - 2))
+        print("fetch: %s%s" % (url, ", try %d of %d" % (attempt, DOWNLOAD_TRIES) if attempt > 1 else ""), flush=True)
+        try:
+            with urllib.request.urlopen(request, timeout=300) as response, open(partial, "wb") as stream:
+                shutil.copyfileobj(response, stream)
+                promised = response.headers.get("Content-Length", "")
+            # http.client ends a body whose connection closes before its Content-Length with no
+            # error, so the size is checked here.
+            size = partial.stat().st_size
+            if not promised.isdigit() or size >= int(promised):
+                break
+            reason = "an answer that broke off after %d of its %s bytes" % (size, promised)
+        except (OSError, http.client.HTTPException) as broken:
+            # HTTPError is an OSError, and of its codes 429 and those from 500 on are tried again.
+            if isinstance(broken, urllib.error.HTTPError) and broken.code != 429 and broken.code < 500:
+                partial.unlink(missing_ok=True)
+                raise Failure("%s: %s" % (url, broken)) from broken
+            reason = str(broken)
+        if attempt == DOWNLOAD_TRIES:
+            partial.unlink(missing_ok=True)
+            raise Failure("%s: all %d tries failed, the last with %s" % (url, DOWNLOAD_TRIES, reason))
+        print("fetch: %s" % reason, flush=True)
     found = sha256(partial)
     if found != expected:
         partial.unlink()
