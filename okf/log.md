@@ -287,3 +287,8 @@ Oldest first. Times are UTC.
   LuckPerms, and that two or three players play on it on the LAN for an hour, since only players
   make the load that the comparison of Arclight and Golem needs. [Decisions](decisions.md) records
   the ruling, and [Features](features.md) and the verification of [Plan](plan.md) follow it.
+- The main branch is `master`, the new name of the branch `claude/aosabi-license-setup-9185l4`. The
+  commit lint and its notebook 02, CI, `.cz.toml`, CONTRIBUTING.md, `HANDOVER.md`, [Plan](plan.md),
+  [Open items](open-items.md), [Plugin API](api.md), [API coverage](api-coverage.md) and
+  [Features](features.md) say `master` where they said `main` or named the old branch, and
+  [Decisions](decisions.md) records the ruling.

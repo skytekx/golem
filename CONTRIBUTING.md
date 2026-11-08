@@ -16,7 +16,7 @@ gone.
 
 - Commit often, at every step that works or that would hurt to redo, not only at the end of a task.
 - Work happens on a work branch of one person or one agent, pushed after every commit. Before a
-  merge into `main` the branch is cleaned into commits of section 3, and only then may it be force
+  merge into `master` the branch is cleaned into commits of section 3, and only then may it be force
   pushed, with `--force-with-lease` and on that branch alone.
 - A push that fails because of the network is retried at once and then with growing pauses. A push
   that still fails is the first thing to report, before any other work goes on. A push that origin
@@ -84,16 +84,16 @@ Signed-off-by: Florian Kleber <opensource@skytekx.com>
   that solves an issue carries `Closes:` with the URL of the issue, and `Link:` points to further
   discussion. `Reported-by`, `Reviewed-by`, `Tested-by`, `Suggested-by` and `Co-developed-by` are
   used as the kernel uses them.
-- One logical change per commit. On `main` every commit builds and passes the notebooks on its own,
-  so that `git bisect` works. A refactor never rides along with a change of behaviour.
+- One logical change per commit. On `master` every commit builds and passes the notebooks on its
+  own, so that `git bisect` works. A refactor never rides along with a change of behaviour.
 
 [.cz.toml](.cz.toml) gives Commitizen the subject, so `cz commit -- -s` writes a message through
 its questions and `cz check` checks one. The questions of the body and of the trailers take several
 lines, which Esc and then Enter end. The commit lint,
 [.github/scripts/commit_lint.py](.github/scripts/commit_lint.py), checks the rules of the kernel
 that Commitizen does not know. CI runs both on the commits of every push and pull request: the
-commits that a pull request adds to its base, the commits that a push adds to `main`, and on
-another branch or a tag the commits that `main` does not hold.
+commits that a pull request adds to its base, the commits that a push adds to `master`, and on
+another branch or a tag the commits that `master` does not hold.
 
 ## 4. Style
 

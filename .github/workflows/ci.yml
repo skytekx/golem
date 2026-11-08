@@ -13,8 +13,8 @@
 # The job commits checks the message of every commit that the push or the pull request brings,
 # once with Commitizen as .cz.toml configures it and once with the commit lint of Golem for the
 # rules of the Linux kernel, as CONTRIBUTING.md describes. The lint picks the commits from the
-# event: those a pull request adds to its base, those a push adds to main, and on another branch
-# or a tag those that main does not hold.
+# event: those a pull request adds to its base, those a push adds to master, and on another branch
+# or a tag those that master does not hold.
 #
 # The job rust checks the format of the workspace, lints it with clippy, which denies every
 # warning, builds it and its documentation, all on the toolchain of rust-toolchain.toml and the
@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      # The whole history, so that origin/main and every commit of the branch are there.
+      # The whole history, so that origin/master and every commit of the branch are there.
       - name: Check out the tree
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,8 +98,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      # The commits of the event, which both checks judge. After a push to main, origin/main is the
-      # commit pushed, so the commits that main lacks would be none.
+      # The commits of the event, which both checks judge. After a push to master, origin/master is
+      # the commit pushed, so the commits that master lacks would be none.
       - name: Choose the commits of the event
         id: range
         run: |
@@ -114,7 +114,7 @@ jobs:
       - name: Install Commitizen
         run: python3 -m pip install --disable-pip-version-check --no-input commitizen==4.19.2
 
-      # cz check fails on a range that holds no commit, such as the push of a tag on main, where
+      # cz check fails on a range that holds no commit, such as the push of a tag on master, where
       # the lint finds nothing to judge either.
       - name: Check the commit messages with Commitizen
         env:

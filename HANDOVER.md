@@ -4,9 +4,10 @@
 # Hand over
 
 This file hands Golem, and the work on Aosabi that Golem needs, to the next agent. It was written on
-2026-11-07 at the pushed head `5fe5a38` of the branch `claude/aosabi-license-setup-9185l4` of
-`skytekx/golem`, whose CI run 71 is green. Read it whole, then the pages it names, before the first
-change. Delete it, and the folder `handover/`, once the work it describes is merged.
+2026-11-07 at the pushed head `5fe5a38` of the branch `master` of `skytekx/golem`, at that time
+named `claude/aosabi-license-setup-9185l4`, whose CI run 71 is green. Read it whole, then the pages
+it names, before the first change. Delete it, and the folder `handover/`, once the work it describes
+is merged.
 
 ## 1. What Golem is and where it stands
 
@@ -64,7 +65,7 @@ These rules stand in `okf/decisions.md` and `CONTRIBUTING.md`. The ones an agent
    trailers `Co-Authored-By` of the model, `Claude-Session` of your session and
    `Signed-off-by: Florian Kleber <opensource@skytekx.com>`, in one last paragraph. One logical
    change per commit, and every commit builds on its own. Push right after a verified change, only
-   to the branch `claude/aosabi-license-setup-9185l4`. Pushed history is not rewritten.
+   to the branch `master`. Pushed history is not rewritten.
 6. **Checks before a push.** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --
    -D warnings`, `python3 -I .github/scripts/commit_lint.py --range <base>..HEAD`,
    `python3 -I .github/scripts/license_lint.py`, `python3 -I .github/scripts/docs_lint.py`,

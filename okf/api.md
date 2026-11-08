@@ -1839,7 +1839,7 @@ for each status and the cells of the notebook.
   canonical operations, while the SDL and the operations of the schema part of a port stand in the
   crate of the port under its license, as [4.2](#42-the-schema-parts-of-ports) says.
 - `bridge/contract/*.toml`, the contract that `api gen` writes from the mapping.
-- `api/coverage.lock`, the numbers of `main`.
+- `api/coverage.lock`, the numbers of `master`.
 - `tests/corpus/api/`, the conformance corpus: documents with variables and golden answers against
   the known world of the test server.
 
@@ -1902,10 +1902,10 @@ again and fails when it differs from the committed one, prints the SDL with the 
 and fails when it differs from `api/schema.graphql`, runs the checks of 14.4 and compares the
 numbers with `api/coverage.lock`. CI runs it on every push and every pull request. A number below
 the lock fails, and a number above it fails as well with the lines to write, so the lock always
-equals the state of `main` and every rise is visible in the history, in the commit that made it. The
-proven number comes from `26_api_corpus`, which boots the test server and runs in the notebooks job
-of CI on every push and every pull request, and the lock of the proven number follows the same rule
-in that job. The release notes of every version of golem carry the three numbers.
+equals the state of `master` and every rise is visible in the history, in the commit that made it.
+The proven number comes from `26_api_corpus`, which boots the test server and runs in the notebooks
+job of CI on every push and every pull request, and the lock of the proven number follows the same
+rule in that job. The release notes of every version of golem carry the three numbers.
 Existence is not equivalence: each part also has a notebook that holds its coordinates to the
 semantics of CraftBukkit, such as the order of a chain with mixed priorities and `ignoreCancelled`,
 the leftovers of `addItem` and `removeItem`, the default of a permission for an operator and the

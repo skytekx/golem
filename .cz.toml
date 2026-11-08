@@ -8,7 +8,7 @@
 # width of the body and the Signed-off-by line.
 #
 #     cz commit -- -s                    write a commit through the questions below
-#     cz check --rev-range origin/main..HEAD
+#     cz check --rev-range origin/master..HEAD
 
 [tool.commitizen]
 name = "cz_customize"

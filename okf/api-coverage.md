@@ -34,7 +34,7 @@ it.
 | `crates/<port>/schema/schema.graphql`, `crates/<port>/src/client.rs` | `golem-devtool api sdl` and `api client`, under the license of the port | The printed SDL of the part, and its client methods and canonical operations, see [Plugin API](api.md#42-the-schema-parts-of-ports) |
 | `bridge/contract/<area>.toml` | `golem-devtool api gen` | The calls, records and frames of the JNI that the mapping implies |
 | `crates/golem-client/src/lib_items.rs` | `golem-devtool api lib` | The path of every `lib` target, named in a function that is never called, so a missing helper fails the build |
-| `api/coverage.lock` | `golem-devtool api coverage --lock` | The three numbers of `main` |
+| `api/coverage.lock` | `golem-devtool api coverage --lock` | The three numbers of `master` |
 | `tests/corpus/api/<area>/<name>.graphql` with `<name>.json` | People | The conformance corpus: a document, its variables and its golden answer against the known world of the test server |
 | `target/api/coverage.json`, `target/api/proven.json` | The tool and `26_api_corpus` | Every member with its state, and the coordinates a passing corpus run resolved. Never committed |
 
@@ -730,8 +730,8 @@ passing documents, from the resolve info of the executor and the counts of `g.ru
 
 - The notebooks job of CI runs `22_api_coverage` on every push and every pull request. A mapped or
   present number below the lock fails, and a number above the lock fails as well with the lines to
-  write, so the lock always equals the state of `main` and every rise lands in the commit that made
-  it, with its numbers in the history.
+  write, so the lock always equals the state of `master` and every rise lands in the commit that
+  made it, with its numbers in the history.
 - The same job runs `26_api_corpus`, which boots the test server, and holds the proven numbers to
   the lock by the same rule.
 - The lock holds the numbers per status, per kind and per area, so a fall in one area cannot hide

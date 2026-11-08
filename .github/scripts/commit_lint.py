@@ -4,7 +4,7 @@
 """Check that every commit message is a Conventional Commit in the form of the Linux kernel.
 
     python3 -I .github/scripts/commit_lint.py
-    python3 -I .github/scripts/commit_lint.py --range origin/main..HEAD
+    python3 -I .github/scripts/commit_lint.py --range origin/master..HEAD
     python3 -I .github/scripts/commit_lint.py --event "$GITHUB_EVENT_PATH"
     python3 -I .github/scripts/commit_lint.py --event "$GITHUB_EVENT_PATH" --print-range
     python3 -I .github/scripts/commit_lint.py --message-file .git/COMMIT_EDITMSG
@@ -48,13 +48,13 @@ judges no message while git makes a merge, in git merge or in a git commit that 
 shallow clone cuts the parents of the commits at its edge, so there a commit whose message git
 writes for a merge, such as the merge of a pull request that CI checks out, is left out as well.
 
-With no range, the commits are those of HEAD that origin/main does not hold, or every commit of
-HEAD while origin/main does not exist. With --event, the payload of the GitHub event that
+With no range, the commits are those of HEAD that origin/master does not hold, or every commit of
+HEAD while origin/master does not exist. With --event, the payload of the GitHub event that
 GITHUB_EVENT_PATH names gives them, in a clone of the whole history as actions/checkout makes it:
-the commits that a pull request adds to its base, the commits that a push to main adds to the main
-it replaced, every commit of a push that creates main or replaces a main that the clone lacks, and
-for a push of another branch or of a tag the commits that origin/main does not hold. --print-range
-prints the range and checks nothing, so Commitizen can check the same commits.
+the commits that a pull request adds to its base, the commits that a push to master adds to the
+master it replaced, every commit of a push that creates master or replaces a master that the clone
+lacks, and for a push of another branch or of a tag the commits that origin/master does not hold.
+--print-range prints the range and checks nothing, so Commitizen can check the same commits.
 
 Every failure is printed with the short hash and the subject, and the exit status is 1 when any
 rule fails.
@@ -115,8 +115,8 @@ def is_commit(root: Path, revision: str) -> bool:
 
 
 def default_range(root: Path) -> str:
-    """origin/main..HEAD, or HEAD alone while origin/main does not exist."""
-    return "origin/main..HEAD" if is_commit(root, "origin/main") else "HEAD"
+    """origin/master..HEAD, or HEAD alone while origin/master does not exist."""
+    return "origin/master..HEAD" if is_commit(root, "origin/master") else "HEAD"
 
 
 def event_range(root: Path, event: dict) -> str:
@@ -124,10 +124,10 @@ def event_range(root: Path, event: dict) -> str:
     request = event.get("pull_request")
     if isinstance(request, dict):
         return "%s..%s" % (request["base"]["sha"], request["head"]["sha"])
-    if event.get("ref") == "refs/heads/main" and (event.get("after") or "").strip("0"):
+    if event.get("ref") == "refs/heads/master" and (event.get("after") or "").strip("0"):
         before = event.get("before") or ""
-        # A push that creates main names no commit before it, and a forced push may name one that
-        # the clone lacks. The whole history of main passes the lint, so it is checked then.
+        # A push that creates master names no commit before it, and a forced push may name one that
+        # the clone lacks. The whole history of master passes the lint, so it is checked then.
         if before.strip("0") and is_commit(root, before):
             return "%s..%s" % (before, event["after"])
         return event["after"]
@@ -401,7 +401,7 @@ def check_message(message: str, subject_of=None) -> list[str]:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Check the commit messages of a range.")
     source = parser.add_mutually_exclusive_group()
-    source.add_argument("--range", dest="revisions", help="The commits to check, by default origin/main..HEAD.")
+    source.add_argument("--range", dest="revisions", help="The commits to check, by default origin/master..HEAD.")
     source.add_argument("--event", type=Path, help="Check the commits of the GitHub event of this payload.")
     source.add_argument("--message-file", type=Path, help="Check one message from a file, as a commit-msg hook.")
     parser.add_argument("--print-range", action="store_true", help="Print the range of the commits, check none.")

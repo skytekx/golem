@@ -203,7 +203,7 @@ holds the rules as they are checked.
 
 ### Commits
 
-- One logical change per commit. On `main` every commit builds and passes the tests on its own, so
+- One logical change per commit. On `master` every commit builds and passes the tests on its own, so
   that `git bisect` works.
 - The subject is `type(scope): summary` and says what the commit does in the imperative, in lower
   case, without a period at the end and in 72 characters at most. Examples are
@@ -256,9 +256,9 @@ These hold for everyone who works on `skytekx/golem`, human or agent.
 - Commit often, at every step that works or that would hurt to redo, not only at the end of a task.
   Uncommitted work is lost the same way.
 - Work happens on a personal work branch that is pushed after every commit. On that branch commits
-  may be work in progress that does not build yet. Before a merge into `main` the branch is cleaned
-  into commits of [Commit and code style](#commit-and-code-style), and only then may it be force
-  pushed with `--force-with-lease`, and only on that own branch.
+  may be work in progress that does not build yet. Before a merge into `master` the branch is
+  cleaned into commits of [Commit and code style](#commit-and-code-style), and only then may it be
+  force pushed with `--force-with-lease`, and only on that own branch.
 - If a push fails because of the network, retry it at once and keep retrying with growing pauses. A
   push that still fails is the first thing to report, before any other work goes on.
 - An agent ends no session and no answer with an unpushed commit or uncommitted changes. Before it

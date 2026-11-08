@@ -40,9 +40,9 @@ A number such as H03 names a finding of the bug hunt of 2026-11-06, see [Change 
   pins pull in included, and pins the patch release of Python, or keeps the pins of the eight
   packages it names alone, as the comment of `tests/pyproject.toml` states (H45).
 - Whether CI runs once for a push to a branch with an open pull request, where the push and the pull
-  request each run the whole of CI (H46). Running the push on main and the tags alone takes CI from
-  a work branch without a pull request, and one group of concurrency for both events cancels a run
-  of an earlier commit that still runs.
+  request each run the whole of CI (H46). Running the push on master and the tags alone takes CI
+  from a work branch without a pull request, and one group of concurrency for both events cancels a
+  run of an earlier commit that still runs.
 - Whether the commit lint refuses a `Signed-off-by` that does not name the holder, which would also
   refuse the sign off of an outside contributor (H53). Until then the review checks the name, as
   [Decisions](decisions.md) says, and notebook 10 holds that row to the lint.
