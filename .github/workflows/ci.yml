@@ -196,7 +196,9 @@ jobs:
           DENY: cargo-deny-0.18.9-x86_64-unknown-linux-musl
           DENY_SHA256: 491d04e4c05d7c92582e3d40ec94126c52472a546326a6d29473a5a4e73babd2
         run: |
-          curl --proto '=https' --tlsv1.2 -sSfL -o "$RUNNER_TEMP/$DENY.tar.gz" \
+          # GitHub answers 503 and 504 to the downloads of its releases at times, which curl takes
+          # for a transient error and tries again with --retry.
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 5 -o "$RUNNER_TEMP/$DENY.tar.gz" \
             "https://github.com/EmbarkStudios/cargo-deny/releases/download/0.18.9/$DENY.tar.gz"
           echo "$DENY_SHA256  $RUNNER_TEMP/$DENY.tar.gz" | sha256sum --check --strict
           tar -xzf "$RUNNER_TEMP/$DENY.tar.gz" -C "$RUNNER_TEMP" --strip-components=1 "$DENY/cargo-deny"
