@@ -5,7 +5,7 @@ type: Spec
 title: Bridge
 description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the game that Rust may ask, the permission handler of Forge, the wire form of the actions and the rules of the server thread.
 tags: [bridge, jni, forge, contract]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Bridge
@@ -79,7 +79,7 @@ does not run, instead of failing on every event.
 | --- | --- | --- |
 | `version()` | Once, through `available()`, while Forge constructs the mod | The version of Golem, such as `0.1.0` |
 | `connect(game)` | Once, right after `available()`, while Forge constructs the mod | None. Golem keeps the game, see [The game](#the-game) |
-| `serverStarting(forge, minecraft)` | On `ServerStartingEvent` | None |
+| `serverStarting(forge, minecraft)` | On `ServerStartingEvent`, which Forge fires at the end of `initServer`, once the worlds are loaded | None |
 | `serverStarted()` | On `ServerStartedEvent` | None |
 | `serverStopping()` | On `ServerStoppingEvent` | None |
 | `serverStopped()` | On `ServerStoppedEvent` | None |
@@ -393,6 +393,14 @@ same as an operator's at the console.
   server thread. A call of another thread waits at most one second for a call of the server
   thread, and then answers what a pass would answer, since a question of the server thread may
   wait for a worker of the server, such as the one that runs a chat message.
+- The mod listens to `ServerChatEvent` and `LivingDeathEvent` at the priority `LOWEST`, after every
+  other mod, so Golem hears only what really happens, and to the end of the tick at `LOWEST` and to
+  its start at `HIGHEST`. [Plugin API](api.md#103-order-priorities-and-ignorecancelled) changes
+  these rules once its shared base moves this contract onto the generated hooks: its listeners take
+  the priority `LOW` with `receiveCanceled = true`, so the mods at `LOWEST` see what the plugins
+  decided, and an event fired inside a handler enters the dispatcher again on the same thread, in
+  place of the one call at a time and the wait of one second above, see [Plugin
+  API](api.md#74-re-entrancy).
 - Rust never touches game state from another thread. Whatever Rust wants done is an action, and
   it reads the game only through `Game` while a native of the server thread runs. A handler of
   `chat()` runs beside the server thread, so it must be thread safe and may only answer and queue
@@ -406,6 +414,16 @@ same as an operator's at the console.
   fails again and again logs its first failure with the stack trace and after that only its tenth,
   its hundredth and every further power of ten, so a native that fails on every tick cannot fill
   the log.
+
+## The bridge and the Plugin API
+
+The questions of `Game`, the actions `teleport` and `listName`, the permission handler and the
+level of a command sender are the first game interface of [Plugin
+API](api.md#16-the-essentialsx-port-and-the-first-game-interface) and the seed of its mapping. They
+keep their fields joined by U+001F until the shared base of the Plugin API moves them onto the
+generated contract, where each question becomes a coordinate of the schema and `golem_bridge::Game`
+and `Context::game()` become a shim over the client of the schema. This page describes the contract
+as it is built, and Plugin API the contract it becomes.
 
 ## Building the bridge
 

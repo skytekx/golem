@@ -5,7 +5,7 @@ type: Project
 title: Golem
 description: Knowledge base of Golem, the Rust hybrid server of SkyTekx, with its state, the parts that are built and a map of every page.
 tags: [golem, server, rust, forge, overview]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Golem
@@ -50,7 +50,7 @@ for [Modpack](modpack.md), which answers whether Golem runs that pack.
 | [EssentialsX bridge needs](plugins/essentials/bridge-needs.md) | Every query, action, event and storage need of the port of EssentialsX and EssentialsXSpawn, held against what the bridge offers |
 | [Store](store.md) | The SQLite store of the plugins: its design, threads, durability, schema, versions, API, refusals, the rules for the data of EssentialsX, its place in `golem run`, its cost and its tests |
 | [Modpack](modpack.md) | Whether `golem run` runs the SkyTekx 3 modpack of the live server, what notebook 08 checks, its numbers and every difference against java and Arclight |
-| [Plugin API](api.md) | The design of the GraphQL API of Golem on Aosabi, an equivalent of the whole Bukkit API: the schema, the client through the executor, the contract with the bridge, threads, events, remote clients, coverage, the Bukkit layer and the work breakdown |
+| [Plugin API](api.md) | The design of the GraphQL API of Golem on Aosabi, an equivalent of the whole Bukkit API: the schema, the client through the executor, the contract with the bridge, threads, events, remote clients, coverage, the Bukkit layer and the parts of the work |
 | [API coverage](api-coverage.md) | The format of the mapping that holds the API to every member of spigot-api 1.20.1, its statuses, the three numbers and how CI holds them |
 | [Bukkit layer](bukkit-layer.md) | The layer that runs Bukkit and Spigot plugins unchanged on the Golem API: what it is, the three levels a survey of 503 plugins measures, the stand-ins of CraftBukkit, the remapper, the needs outside the levels, the order of work and the decisions open for the owner |
 | [Change log](log.md) | What changed, oldest first |

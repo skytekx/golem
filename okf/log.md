@@ -5,7 +5,7 @@ type: Log
 title: Change log
 description: Chronological change log of Golem from the plan of 2026-11-06 on.
 tags: [log, history]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Change log
@@ -255,3 +255,12 @@ Oldest first. Times are UTC.
   as two branches in the git bundle `handover/port.bundle`, the items of Aosabi that Golem needs,
   the branch of Aosabi that adds an embedding entry, the feature list the owner asks for, the next
   steps and the decisions still open with their defaults.
+
+## 2026-11-08
+
+- [Plugin API](api.md) names the parts of its work by what each delivers and what it needs, with no
+  durations and no order of work, and the notebooks it plans take the numbers 20 to 38, since 10 and
+  11 exist and 12 to 19 hold the switch. The thread class `server` splits into `level` and `global`,
+  so the design holds once the levels get threads of their own. [API coverage](api-coverage.md)
+  follows, and [Bridge](bridge.md) says how the contract that is built today becomes the contract of
+  the API.

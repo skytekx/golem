@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 type: Spec
 title: Plugin API
-description: The plugin API of Golem, one GraphQL schema on Aosabi that covers an equivalent of the whole Bukkit API of spigot-api 1.20.1, with native Rust plugins compiled into golem that reach it through the executor of Aosabi on the thread of the caller, the mapping that generates the schema, the contract and the client, the threads, the synchronous answer of cancellable events, remote clients, the coverage check and the work breakdown.
+description: The plugin API of Golem, one GraphQL schema on Aosabi that covers an equivalent of the whole Bukkit API of spigot-api 1.20.1, with native Rust plugins compiled into golem that reach it through the executor of Aosabi on the thread of the caller, the mapping that generates the schema, the contract and the client, the threads, the synchronous answer of cancellable events, remote clients, the coverage check and the parts of the work.
 tags: [api, graphql, aosabi, plugins, bukkit, events, coverage]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Plugin API
@@ -18,12 +18,11 @@ included: 1,247 types, 7,942 public methods, 5,900 fields and constants and 268 
 every Bukkit or Spigot plugin converts to a Golem plugin. Plugins are native Rust on Aosabi and use
 nothing else, as the owner ruled on 2026-11-06 ([Decisions](decisions.md)).
 
-This page is the one design that the two syntheses of the panel of 2026-11-06 settle into, each
-point where they differed ruled on its evidence. Nothing of it is built yet. [Index](index.md) says
-what is built, and [the work breakdown](#20-work-breakdown) says in which order the rest comes.
-Every duration on this page is an estimate that nobody measured, and every measured number names
-the spike or the notebook, the machine and the day. [API coverage](api-coverage.md) holds the exact
-format of the mapping files.
+This page is the one design that the two designs of 2026-11-06 settle into, each point where they
+differed ruled on its evidence. Nothing of it is built yet. [Index](index.md) says what is built,
+and [the parts of the work](#20-the-parts-of-the-work) say what each part delivers and needs. Every
+measured number names the spike or the notebook, the machine and the day. [API
+coverage](api-coverage.md) holds the exact format of the mapping files.
 
 ## 1. The design in short
 
@@ -41,10 +40,10 @@ format of the mapping files.
    canonical operation of one coordinate, a document of one field that the build validates and the
    runtime prepares at `enable`, through the `Service` of `golem-api`, whose resolver calls the
    coordinate function, so a Bukkit getter such as `getLocation()` costs one pass of the executor
-   and one JNI call with primitive arguments and an out buffer. Until item A2 of Aosabi lands, that
-   pass parses the text with validation off, and A2 then runs it as `Operation::Persisted` from the
-   document table of Aosabi. A document of several fields pays the executor once for all of them.
-   Golem writes no plan and no compiler of documents of its own.
+   and one JNI call with primitive arguments and an out buffer. Until Aosabi offers a prepared
+   operation, item A2, that pass parses the text with validation off, and the prepared operation
+   then runs it by the `u32` id that Golem gives it at `enable`. A document of several fields pays
+   the executor once for all of them. Golem writes no plan and no compiler of documents of its own.
 5. One mapping file per Bukkit type, `api/bukkit/<package>/<Type>.toml`, keyed by the exact lines
    of `inventory.json`, names the coordinate of every member and how it is built: a Java expression
    from which a generator writes the contract call, the Java, the Rust stub, the coordinate
@@ -87,13 +86,14 @@ format of the mapping files.
 16. Measured on 2026-11-06: a document of seven fields costs about 13 µs through `Service::execute`
     of Aosabi with validation off and about 30 µs with the 27 rules, and a document of one field
     about 7 to 8 µs with validation off, against about 100 ns for a JNI call. That gap is the price
-    of point 4, which item A2 and the records of 6.3 lower and the gates measure first.
+    of point 4, which the prepared operation of item A2 and the records of 6.3 lower, and which the
+    first measurements of [section 20](#20-the-parts-of-the-work) measure on the test server.
 
 ## 2. What exists and what this design makes of it
 
 | Part today | What it does | What it becomes |
 | --- | --- | --- |
-| The natives of `Host` in `golem-bridge` | Events as strings, a handler behind one lock, a native called from inside the handler answers its pass value | The natives stay as the entry, with `serverAboutToStart`, `event`, `complete`, `runHops`, `apiSlot`, `call` and the callback of a closure during a call added. The global lock goes, since Bukkit events are re-entrant, and dispatch nests on the server thread |
+| The natives of `Host` in `golem-bridge` | Events as strings, a handler behind one lock, a native called from inside the handler answers its pass value | The natives stay as the entry, with `serverAboutToStart`, `event`, `complete`, `runHops`, `apiSlot`, `call`, `bindBuffers` and the callback of a closure during a call added. The global lock goes, since Bukkit events are re-entrant, and dispatch nests on the server thread |
 | Actions joined by U+001F, drained at the end of the tick | The only way Rust changes the game | A bounded queue for unit mutations from other threads. A mutation on the server thread runs at once, as in Bukkit |
 | `Game.java` and `golem_bridge::Game`, the first game interface | Seven queries answered as strings joined by U+001F through `Host.connect(Game)`, the actions `teleport` and `listName`, the PermissionAPI handler and the level of a command sender | The seed of the mapping. Its calls move onto generated calls with primitive arguments, and `Context::game()` answers through the client until the ports leave it. `respawn` answers the point as Minecraft stores it, which `Player.bedSpawnLocation` checks first, see [section 16](#16-the-essentialsx-port-and-the-first-game-interface) |
 | `golem-plugin::Plugin` | `on_event`, `on_command`, `on_permission`, 10 events, budgets | A plugin gets `load`, `enable` and `disable` and registers subscriptions, commands, tasks, permissions, services and documents in `enable`. Budgets stay, with a count per coordinate |
@@ -287,20 +287,19 @@ AGPL 3 allow, and every file keeps its own license.
 | --- | --- | --- |
 | The builder reads inherent `impl` blocks only and no trait impl, so Rust states no inheritance | `aosabi-build/src/source/describe.rs` | Every object type carries every field of its interfaces, each delegating to the one coordinate function |
 | An interface is made only from a union enum whose members share fields, and it implements no interface | `promote_unions_to_interfaces` and `check_if_interface_is_possible_for_union` in `aosabi-infer/src/schema_parser.rs` | One union enum per Bukkit interface over its concrete types. Every object type implements each interface of its ancestry by name, so a fragment on `LivingEntity` matches a field typed `Entity` |
-| A union enum with one member prints as that member, and one that no field references leaves the SDL | The spikes of the panel on 2026-11-06 | Every union enum has at least two members: `<Name>Object` is the member for the instances whose most specific Bukkit type is the interface itself, modded entities of that base included. Every union enum is referenced: the entity unions by `World.entitiesOf`, which maps `getEntitiesByClass`, and every other union that no Bukkit signature references by the cast `Query.as<Name>(id:)` |
+| A union enum with one member prints as that member, and one that no field references leaves the SDL | Two spikes of 2026-11-06 in a cloud container | Every union enum has at least two members: `<Name>Object` is the member for the instances whose most specific Bukkit type is the interface itself, modded entities of that base included. Every union enum is referenced: the entity unions by `World.entitiesOf`, which maps `getEntitiesByClass`, and every other union that no Bukkit signature references by the cast `Query.as<Name>(id:)` |
 | An input type is named after the field and the argument that take it | Rust guide of Aosabi, section 4 | No argument takes a struct until item A3 gives inputs a shared name, so no document declares a variable of an input type that A3 would rename. Places are flat arguments (`world`, `x`, `y`, `z`, `yaw`, `pitch`), prefixed with the name of the parameter where a member takes two, such as `fromX` and `toX`, an item stack is the SNBT text of the stack as vanilla saves it, a block data is its text such as `minecraft:oak_stairs[facing=north]` |
 | No custom scalar, only the markers `ID`, `Int`, `Float`, `Number`, `Date`, `File`, `JSON` and `Any` | `aosabi-build/src/source/describe.rs` | Ids are `ID`, keys of registries are `String` of the form `namespace:path`, NBT is SNBT text, a text component is `JSON`, raw bytes are base64 text, numbers of 64 bits are `Number` |
 | A default of an argument does not reach the schema | Rust guide of Aosabi, section 3 | An optional argument is an `Option`, its description names the default and the body takes it |
 | The plain path declares no directive | `aosabi-build/src/source` | No custom directive. Priority, `ignoreCancelled` and filters are arguments of the subscription field |
 | An enum whose variants hold a value is refused as an input | `payload_of` in `aosabi-build/src/source/describe.rs` | No input that is one of several shapes and no `@oneOf`. An argument that Bukkit takes as one of several types is one optional argument per shape, and the body refuses all but one |
-| No deprecation is printed | Quirk `Q07_NO_DEPRECATED` of `aosabi-infer` | The schema only grows within a major version of Golem, and a coordinate that a later one replaces keeps working with its description naming the replacement. Compatibility is judged by validating documents, see [section 11](#11-packaging-and-lifecycle) |
+| No deprecation is printed | `aosabi-infer`, which prints no deprecation on the plain path | The schema only grows within a major version of Golem, and a coordinate that a later one replaces keeps working with its description naming the replacement. Compatibility is judged by validating documents, see [section 11](#11-packaging-and-lifecycle) |
 | A root is a unit struct of the crate, and a type of a path dependency is refused | `aosabi-build/src/source/entry.rs` and `glue.rs` | Every schema type lives in `golem-api`, and the schema parts of ports are mounted with `#[path]` |
 
 ### 4.4 The spikes behind the rules
 
-The spike `api-design/work-final-opus/spike` of the scratchpad ran the source reader of Aosabi at
-`6e507dc`, `aosabi-devtool source --requests`, over a crate shaped like `golem-api` on 2026-11-06 in
-the cloud container of the panel. It showed four things.
+A spike of 2026-11-06 in a cloud container ran the source reader of Aosabi at `6e507dc`,
+`aosabi-devtool source --requests`, over a crate shaped like `golem-api`. It showed four things.
 
 - A module mounted with `#[path]` from the directory of another crate is read as a module of the
   crate, and its unit struct `EssentialsQuery` merged its field `essentialsBalance` into `Query`.
@@ -311,13 +310,12 @@ the cloud container of the panel. It showed four things.
 - A resolver that calls a function of a path dependency and converts its value into a type of the
   crate with `From` builds, and an `Option<f32>` argument prints as a nullable `Float`.
 
-That spike ran the source reader alone, with the mount in the crate root. The spike
-`api-design/work-final/pathspike` rebuilt the layout that `aosabi-build/src/source/copy.rs` writes,
-a real `src` directory with the crate root copied and every other entry a link, and compiled it with
-rustc 1.95.0 on 2026-11-06 in the same container. A mount in `src/parts/mod.rs` resolved through the
-link to the port. The same mount in the crate root failed with "couldn't read
-`target/aosabi/api/src/../../port/schema/mod.rs`". Hence the mount rule of
-[4.2](#42-the-schema-parts-of-ports).
+That spike ran the source reader alone, with the mount in the crate root. A second spike of the same
+day rebuilt the layout that `aosabi-build/src/source/copy.rs` writes, a real `src` directory with
+the crate root copied and every other entry a link, and compiled it with rustc 1.95.0 in the same
+container. A mount in `src/parts/mod.rs` resolved through the link to the port. The same mount in
+the crate root failed with "couldn't read `target/aosabi/api/src/../../port/schema/mod.rs`". Hence
+the mount rule of [4.2](#42-the-schema-parts-of-ports).
 
 ### 4.5 What Golem asks of Aosabi
 
@@ -325,34 +323,36 @@ Each request is small, useful beyond Golem, and has a fallback that the design u
 
 | Item | Request | Needed by | Fallback |
 | --- | --- | --- | --- |
-| A1 | An embedding entry: the glued copy of a plain crate as a library that a host program links, and an entry that answers the `Service` and the routes without starting `serve_app` | The first area, on the critical path | `golem` links the generated copy that `cargo aosabi build` writes under `target/aosabi/` as a path package, and if that fails `golem-remote` builds `Service::builder(SDL).resolvers(map)` over `api/schema.graphql` with a resolver map that `api gen` writes over the same functions |
-| A2 | The document table of M12, `aosabi-kernel/src/document_table.rs`, which maps the `u32` id of `Operation::Persisted` to its generated resolver plan, the generator of those plans, and an entry on `Service` that runs an id with its variables on the thread of the caller, with the context and the ambient hooks that `execute` builds | Every call of a plugin, which pays a parse per call until it lands | Every operation, the canonical operations of the client included, runs through `Service::execute` with `validate: false`, which parses each time, about 7 to 8 µs for one field. `aosabi-core/src/service.rs` answers `Operation::Persisted` with "Persisted documents land at M12." today, so Golem writes no plan of its own in its place |
+| A1 | An embedding entry: the glued copy of a plain crate as a library that a host program links, and an entry that answers the `Service` and the routes without starting `serve_app` | The shared base, which links the schema into `golem` | `golem` links the generated copy that `cargo aosabi build` writes under `target/aosabi/` as a path package, and if that fails `golem-remote` builds `Service::builder(SDL).resolvers(map)` over `api/schema.graphql` with a resolver map that `api gen` writes over the same functions |
+| A2 | A prepared operation on `Service`: a document parsed and validated once, kept with a `u32` id that the host gives at `enable`, shared by every thread of the host, and run with its variables on the thread of the caller with the context and the ambient hooks that `execute` builds | Every call of a plugin, which pays a parse per call until it lands | Every operation, the canonical operations of the client included, runs through `Service::execute` with `validate: false`, which parses each time, about 7 to 8 µs for one field, and the client keeps its own table of `u32` ids to the canonical texts. The pinned release answers `Operation::Persisted` with an error, so Golem writes no plan of its own in its place |
 | A3 | A shared name for an input struct used at several sites, such as `LocationInput` and `ItemStackInput` | Inputs such as a place or an item stack | Flat arguments and text forms, as in 4.3 |
 | A4 | Custom scalars on the plain path, such as `UUID`, `Key`, `SNBT` and `Component` | Clearer types | `ID`, `String` and `JSON`, with the form named in the description |
 | A5 | A trait with supertraits read as an interface that implements its supertraits, and a struct that implements the trait as a type that implements the interface. The smallest form is a doc line `@implements Entity & Damageable` on a struct, read the way `@param` lines are, into the `implements` list that `aosabi-ir` already carries | Entities, block data, block states, meta, events | The union enum rules of 4.3 |
-| A6 | GraphTP on Unix sockets in the facade, on a path and on a socket pair, `SOCK_SEQPACKET` on Linux and the stream form with prefixed packets on macOS, and a kqueue reactor for macOS. `homa::unix` builds on Linux alone today, `homa/src/unix.rs` stops any other build with `compile_error!`, so the item includes a build of its stream form for macOS | The clients outside the process, which reach the API over GraphTP on a Unix socket as the owner ruled, and process plugins | On Linux `golem-remote` drives `graphql-over-graphtp` over `homa::unix` itself, `SeqListener` on the path, as the card `test-graphtp` of `aosabi-devtool` does. On macOS it drives the same listener through `homa::stream::Framed`, the prefixed AoFrame of one Homa packet on a byte stream, which is `no_std` and builds on every target, over a newtype of the non blocking `std::os::unix::net::UnixStream` that implements `homa::stream::ByteStream` with the plain read and write of the standard library. That adapter is safe code of a few dozen lines, since a Rust program starts with `SIGPIPE` ignored, which gate 0 checks with the JVM running |
-| A7 | The Rust GraphTP client of `roadmap/graphtp.md` item 4 | Process plugins | `golem-client` drives the client of `graphtp-homa`, which does no input or output of its own, over the socket pair of `homa::unix` on Linux and over `Framed` on `UnixStream::pair` of the standard library on macOS, with the adapter of A6 |
+| A6 | GraphTP on Unix sockets in the facade, on a path and on a socket pair, `SOCK_SEQPACKET` on Linux and the stream form with prefixed packets on macOS, and a reactor for macOS that learns readiness. `homa::unix` builds on Linux alone today, `homa/src/unix.rs` stops any other build with `compile_error!`, so the item includes a build of its stream form for macOS | The clients outside the process, which reach the API over GraphTP on a Unix socket as the owner ruled, and process plugins | On Linux `golem-remote` drives `graphql-over-graphtp` over `homa::unix` itself, `SeqListener` on the path, as the card `test-graphtp` of `aosabi-devtool` does. On macOS it drives the same listener through `homa::stream::Framed`, the prefixed AoFrame of one Homa packet on a byte stream, which is `no_std` and builds on every target, over a newtype of the non blocking `std::os::unix::net::UnixStream` that implements `homa::stream::ByteStream` with the plain read and write of the standard library. That adapter is safe code of a few dozen lines, since a Rust program starts with `SIGPIPE` ignored, which the first measurements check with the JVM running |
+| A7 | The Rust GraphTP client | Process plugins | `golem-client` drives the client of `graphtp-homa`, which does no input or output of its own, over the socket pair of `homa::unix` on Linux and over `Framed` on `UnixStream::pair` of the standard library on macOS, with the adapter of A6 |
 | A8 | The peer uid of a Unix socket on macOS, which `aosabi-serve/src/runtime/peer.rs` answers on the Linux cards alone | The principal `local` on the Mac mini | On macOS the modes of the socket and its directory are the boundary, and a token is required |
+| A9 | `ObjectLike::select` of `aosabi-execute` on the plain path, which exists today only behind the feature `host-reads` of the TypeScript option, so the glue of a plain crate writes none | The records and the masked reads of [5.2](#52-documents) and 6.3, one JNI call for about 20 fields of one object | A document of several fields pays one pass of the executor and one JNI call per field |
 
 The engine plugin of `golem-remote` hands each remote operation to the server thread through the
 `on_execute` seam of `aosabi-hooks`, whose `set_execute_fn` lets a plugin replace the execution with
-one that answers later. The first area checks that the serving runtime of Aosabi accepts that answer
-when the server thread wakes the API thread, see
+one that answers later. The first measurements check that the serving runtime of Aosabi accepts that
+answer when the server thread wakes the API thread, see
 [7.8](#78-remote-operations-run-whole-on-the-server-thread).
 
 ### 4.6 The size of the schema
 
 `inventory.json` holds 171 interfaces in `org.bukkit.entity` and its subpackages, 168 in the tree of
-`Entity` with `Entity` itself and 117 of them leaves, counted by `work-final-opus/scripts/counts.py`
-on 2026-11-06. Flattened onto the leaves, the entity types print about 13,000 object fields, by the
-count of the panel. Nobody has run the builder and the boot of Aosabi on a schema of that size, so
-the gates of [section 20](#20-work-breakdown) do that before any area starts. If the builder fails
-at that size, the fallback of A1 with `Service::builder(sdl)` and a generated resolver map keeps the
-engine and the schema and gives up the plain Rust source of the generated part, and plugins are
-untouched, since their calls go through the coordinate functions.
+`Entity` with `Entity` itself and 117 of them leaves, counted by the prototype `counts.py` on
+2026-11-06, which enters the tree under `tools/api/` with the shared base. Flattened onto the
+leaves, the entity types print about 13,000 object fields by the same count. Nobody has run the
+builder and the boot of Aosabi on a schema of that size, so the first measurements of [section
+20](#20-the-parts-of-the-work) do that before the shared base starts. If the builder fails at that
+size, the fallback of A1 with `Service::builder(sdl)` and a generated resolver map keeps the engine
+and the schema and gives up the plain Rust source of the generated part, and plugins are untouched,
+since their calls go through the coordinate functions.
 
 The SDL that the builder prints is committed as `api/schema.graphql`, and the notebook
-`11_api_schema` fails when the printed schema differs from it, so every change of the schema is
+`21_api_schema` fails when the printed schema differs from it, so every change of the schema is
 visible in review.
 
 ## 5. How a plugin calls the schema
@@ -424,16 +424,17 @@ A plugin may keep documents in `ops/*.graphql`. `aosabi-query` writes no Rust cl
 the SHA-256 of the text, a struct for the variables and structs for the answer. At `enable` the
 runtime prepares every document of the plugin once, checks its coordinates against the grants of
 the plugin once and keeps it with its `u32` id. A call runs it on the server thread through the
-`Service` of `golem-api`, through `Operation::Persisted` of the document table of A2 once it lands
-and through `Service::execute` with `validate: false` until then, and the generated decoder reads
-the answer into the structs. The same `ops.rs` builds against `golem-client` with the feature
-`process`, where a call sends the text over GraphTP, so a plugin that only runs documents and
-observes events moves into a process of its own by a change of its manifest.
+`Service` of `golem-api`, as the prepared operation of item A2 once it lands and through
+`Service::execute` with `validate: false` until then, and the generated decoder reads the answer
+into the structs. The same `ops.rs` builds against `golem-client` with the feature `process`, where
+a call sends the text over GraphTP, so a plugin that only runs documents and observes events moves
+into a process of its own by a change of its manifest.
 
 A resolver that the generator writes for a record of the mapping, such as the commonly read fields
 of a living entity, learns the fields a document selects through `ObjectLike::select` of
-`aosabi-execute`, under its feature `host-reads`, and reads them with one JNI call. So a document
-that reads ten fields of one player costs one crossing.
+`aosabi-execute` and reads them with one JNI call, so a document that reads ten fields of one player
+costs one crossing. The plain path of Aosabi offers `select` once item A9 lands. Until then such a
+document pays one JNI call per field and still one pass of the executor.
 
 ### 5.3 Operations and the executor
 
@@ -441,15 +442,15 @@ that reads ten fields of one player costs one crossing.
 proof of [section 14](#14-coverage), checks the grant of the plugin once per operation and runs the
 operation through the `Service` of `golem-api` on the thread of the caller. Until item A2 lands it
 calls `Service::execute` with the text and `validate: false`, since the build validated the text
-against the SDL, which parses on every call. Once A2 lands it runs `Operation::Persisted` with the
-`u32` id under which the document table of Aosabi holds the plan that Aosabi generates, and nothing
-changes for a plugin. The executor resolves the root field, such as `entity(id:)`, and then the one
-field, whose resolver calls the coordinate function, so plugins, documents and tools reach the
-game through the same resolvers and the same executor. A null at the root, such as an entity that
-is gone, is the error `ENTITY_GONE` in the client. The notebook `14_api_smoke` runs the canonical
-operation of every coordinate through the client on a booted server with generated arguments, and
-checks the type of every answer and that the coordinate resolved. Golem writes no plan of an
-operation and no compiler of documents: both are item A2 of Aosabi.
+against the SDL, which parses on every call. Once A2 lands it runs the prepared operation by the
+`u32` id that the client gave it at `enable`, one set for every thread of Golem, and nothing changes
+for a plugin. The executor resolves the root field, such as `entity(id:)`, and then the one field,
+whose resolver calls the coordinate function, so plugins, documents and tools reach the game through
+the same resolvers and the same executor. A null at the root, such as an entity that is gone, is the
+error `ENTITY_GONE` in the client. The notebook `24_api_smoke` runs the canonical operation of every
+coordinate through the client on a booted server with generated arguments, and checks the type of
+every answer and that the coordinate resolved. Golem writes no plan of an operation and no compiler
+of documents: both stay with Aosabi.
 
 ### 5.4 Which form a plugin uses
 
@@ -497,7 +498,7 @@ doc = "Allows or forbids flight, and ends a flight in progress when it forbids i
 
 | Artifact | Where it lands | What `read = "it.getAbilities().mayfly"` becomes |
 | --- | --- | --- |
-| The contract call | `bridge/contract/<area>.toml`, generated and checked in | `playerAllowFlight`, thread `server`, the arguments of an entity, an answer of one boolean |
+| The contract call | `bridge/contract/<area>.toml`, generated and checked in | `playerAllowFlight`, thread `level`, the arguments of an entity, an answer of one boolean |
 | The Java interface method | `bridge/host/.../contract/Players.java` | `boolean playerAllowFlight(int id, int level, long most, long least)` |
 | The Java implementation | `bridge/mod/.../gen/PlayersGen.java` | The lookup of the receiver and the expression, compiled by javac with every lint as an error, so a wrong expression fails the build of the mod at its line |
 | The Rust stub | `crates/golem-game/src/contract/players.rs` | `player_allow_flight(&Server, EntityRef) -> Result<Option<bool>, JniFault>` with its method id cached at `connect` |
@@ -554,13 +555,13 @@ Two forms cut that.
 | Check | Where | Fails when |
 | --- | --- | --- |
 | The generated files are current | CI, the generators with a diff | Someone edits a generated file or a mapping entry without running the generators |
-| The host jar matches the contract | Notebook `10_api_contract`, as `05_bridge_build` checks the natives today | A method of a contract interface has another descriptor than the contract derives |
+| The host jar matches the contract | Notebook `20_api_contract`, as `05_bridge_build` checks the natives today | A method of a contract interface has another descriptor than the contract derives |
 | The mod implements every call | The same notebook, with javap of the mod jar | A call is missing or a frame writer is stale |
 | Every expression compiles | The build of the bridge | An expression names a member that does not exist or is not accessible |
 | Rust and the mod agree at boot | `Host.connect` compares the hash and resolves every method id with `GetMethodID` | A mod jar of another build. The mod then logs one line that names the first missing method and switches itself off, as on a stock Forge |
-| A JNI call costs what the model says | `10_api_contract` times `entityRecord` and a getter with the out buffer on the booted test server | The cost leaves the band of [section 12](#12-performance) |
-| Every coordinate answers on a real server | Notebook `14_api_smoke`, through the client as [5.3](#53-operations-and-the-executor) runs it | A coordinate throws, answers the wrong type or does not resolve |
-| A call of the client costs what the model says | `10_api_contract` times a canonical operation through the `Service` on the booted test server | The cost leaves the band of [section 12](#12-performance) |
+| A JNI call costs what the model says | `20_api_contract` times `entityRecord` and a getter with the out buffer on the booted test server | The cost leaves the band of [section 12](#12-performance) |
+| Every coordinate answers on a real server | Notebook `24_api_smoke`, through the client as [5.3](#53-operations-and-the-executor) runs it | A coordinate throws, answers the wrong type or does not resolve |
+| A call of the client costs what the model says | `20_api_contract` times a canonical operation through the `Service` on the booted test server | The cost leaves the band of [section 12](#12-performance) |
 
 ## 7. Threads
 
@@ -568,28 +569,36 @@ Two forms cut that.
 
 | Thread | Who | May call |
 | --- | --- | --- |
-| The server thread of Minecraft | Ticks, Forge events, Mixin hooks, commands, tab completion, sync tasks, the API slot, hops | Every coordinate, at once |
+| The server thread of Minecraft, which ticks every level today | Ticks, Forge events, Mixin hooks, commands, tab completion, sync tasks, the API slot, hops | Every coordinate, at once |
+| The thread of a level, once levels get threads of their own | The tick of that level, its events, hooks, commands and sync tasks, its API slot, hops | The coordinates of the class `level` whose subject lives in that level, and `any` and `snapshot`, at once. A coordinate of another level or of the class `global` is a hop |
 | `golem-chat-<n>`, a pool of Golem | The chain of `AsyncPlayerChatEvent`, see [7.6](#76-the-chat-and-login-chains) | The coordinates of the classes `any` and `snapshot`, the frame of the chat event, hops |
 | `golem-net-<n>`, a pool of Golem | The chains of `AsyncPlayerPreLoginEvent` and `ServerListPingEvent`, which hooks on the threads of Netty and of the login hand over, see [7.6](#76-the-chat-and-login-chains) | The same as `golem-chat` |
 | The threads of Netty | Packets, the status answer and the login of vanilla | Nothing of a plugin: their hooks only hand frames to `golem-chat` and `golem-net` |
 | `golem-async-<n>`, a pool of Golem | The async tasks of plugins, `runTaskAsynchronously` | The same as `golem-chat` |
-| `golem-api` | HTTP and GraphTP of remote clients, authentication, limits, remote event streams | The classes `any` and `snapshot`. It hands every other operation to the server thread whole |
+| `golem-api` | HTTP and GraphTP of remote clients, authentication, limits, remote event streams | The classes `any` and `snapshot`. It hands every other operation whole to the thread of its level |
 | `golem-watchdog` | The watchdog of [11.4](#114-containment) | Nothing of the game |
 | The world generation threads of Minecraft | Chunk generators of plugins | The chunk buffer handed to the generator and the coordinates of the class `worldgen` |
 
-Every coordinate has one thread class in its mapping entry. `server` is the default. `any` is what
-is safe off the server thread: permissions, metadata, configuration, the registry tables, the
-mirrors, every value type, and `CommandSender.sendMessage`, since the connection of vanilla queues
-its packets from any thread. `snapshot` is a live read on the server thread and the value of the
-[tick snapshot](#77-the-tick-snapshot) on any other thread, and the coverage tool holds every
-`snapshot` member to a field of the snapshot record. The snapshot holds a record per online player
-and per world alone, so off the server thread a `snapshot` coordinate answers from the record of its
-receiver when there is one, and for any other receiver, such as a zombie for
-`LivingEntity.remainingAir`, it answers `NOT_ON_SERVER_THREAD`, as a coordinate of the class
-`server` does. CraftBukkit reads such getters off the server thread with no check, as
-`CraftEntity.getLocation()` does, so Bukkit plugins read them from async tasks, and a value at most
-one tick old is the closest equivalent that is also safe. `worldgen` is the chunk buffer of a
-generator.
+Every coordinate has one thread class in its mapping entry. `level` is the default: a coordinate
+whose subject lives in one level, a world, a chunk, a block, an entity or a player, runs on the
+thread that ticks that level, and a query about a player runs on the thread of the level of that
+player. `global` is a coordinate of the whole server, such as the player list, the commands, the
+broadcast and the stop, and runs on the thread of the global work of the tick. While one server
+thread ticks every level, as under Arclight and at the switch to Golem, both classes run on the
+server thread, and once levels get threads of their own no mapping entry changes. The description
+of every coordinate names its class. `any` is what is safe off the tick threads: permissions,
+metadata, configuration, the registry tables, the mirrors, every value type, and
+`CommandSender.sendMessage`, since the connection of vanilla queues its packets from any thread.
+`snapshot` is a live read on the thread of its level and the value of the [tick
+snapshot](#77-the-tick-snapshot) on any other thread, and the coverage tool holds every `snapshot`
+member to a field of the snapshot record. The snapshot holds a record per online player and per
+world alone, so off its thread a `snapshot` coordinate answers from the record of its receiver when
+there is one, and for any other receiver, such as a zombie for `LivingEntity.remainingAir`, it
+answers `NOT_ON_SERVER_THREAD`, as a coordinate of the class `level` does off its thread, with the
+thread that the call needs named in the message. CraftBukkit reads such getters off the server
+thread with no check, as `CraftEntity.getLocation()` does, so Bukkit plugins read them from async
+tasks, and a value at most one tick old is the closest equivalent that is also safe. `worldgen` is
+the chunk buffer of a generator.
 
 ### 7.2 A coordinate on the server thread
 
@@ -638,7 +647,7 @@ and hands to `Host.bindBuffers`, and whose addresses `golem-game` reads once.
   also writes its answer after its last call that can re-enter Rust, and the review of a method
   written by hand checks the same.
 
-The notebook `13_api_events` holds the stack and the slots with nested events, a spawn closure and
+The notebook `23_api_events` holds the stack and the slots with nested events, a spawn closure and
 getters inside handlers on a booted server.
 
 ### 7.4 Re-entrancy
@@ -649,9 +658,10 @@ inner event, `Host.event` enters the dispatcher again on the same thread with th
 stack, and the outer handler goes on when the inner chain ends. The depth is capped at 16, and a
 deeper event answers `EVENT_DEPTH`, passes as if nobody heard it and is logged once per event kind.
 Every call of the client and every document run from inside a handler nests an agent of Aosabi the
-same way, which the gates prove first. The registrations of the dispatcher are an immutable table
-that an enable or a disable replaces as a whole, so dispatch reads it with no lock, and the global
-lock of the handler of the first milestone goes.
+same way, which the first measurements prove. The registrations of the dispatcher are an immutable
+table that an enable or a disable replaces as a whole, so dispatch reads it with no lock, and the
+one lock of the handler that the bridge has today goes. A nested event that reaches the same plugin
+on the same thread enters it at the next depth, see [7.10](#710-the-locks-of-a-plugin).
 
 ### 7.5 Hops
 
@@ -660,10 +670,11 @@ runs.
 
 | Call | From another thread | Bukkit |
 | --- | --- | --- |
-| `g.on_server(|g| ...)` | A future that the server thread completes. `.wait()` blocks for at most 5 seconds and answers `HOP_TIMEOUT` after that, and `PLUGIN_DISABLED` at once when the plugin disables, see [11.3](#113-the-ledger) | `callSyncMethod(...)` and its `get()` |
-| `g.later(|g| ...)` | Queued, runs on the server thread within the tick, answers nothing | `runTask` from an async thread |
-| A mutation of the class `server` whose answer is unit | Queued in the same bounded queue and answered at once. A mirror that the mutation changes is updated when the server thread applies it, not before | A sync task that sets something |
-| A query of the class `server` | `NOT_ON_SERVER_THREAD` | The `AsyncCatcher` of CraftBukkit, which throws for the operations it guards |
+| `g.on_server(\|g\| ...)` | A future that the server thread completes. `.wait()` blocks for at most 5 seconds and answers `HOP_TIMEOUT` after that, and `PLUGIN_DISABLED` at once when the plugin disables, see [11.3](#113-the-ledger) | `callSyncMethod(...)` and its `get()` |
+| `g.on_level(dim, \|g\| ...)` and `g.on_global(\|g\| ...)` | The same, completed by the thread of that level or of the global work. While one server thread ticks every level, both hop to it, so a plugin that uses them keeps working once levels get threads of their own. A `.wait()` on the thread of one level for another level is refused at once, since two loops that wait for each other never wake | The region and global schedulers of Folia |
+| `g.later(\|g\| ...)` | Queued, runs on the server thread within the tick, answers nothing | `runTask` from an async thread |
+| A mutation of the class `level` or `global` whose answer is unit | Queued in the same bounded queue and answered at once. A mirror that the mutation changes is updated when the thread of its level applies it, not before | A sync task that sets something |
+| A query of the class `level` or `global` | `NOT_ON_SERVER_THREAD` | The `AsyncCatcher` of CraftBukkit, which throws for the operations it guards |
 
 The queue is bounded per plugin at 4,096 entries, and a full queue answers `QUEUE_FULL` and logs
 once a minute. A hop does not wait for the end of the tick. The mod hands `Host` a waker at
@@ -672,8 +683,8 @@ first hop of an empty queue calls the waker once through the JNI, attached as a 
 the server thread runs `Host.runHops()` from its task queue, which `MinecraftServer` drains while it
 waits for the next tick. So a hop waits at most for the rest of the current tick. A thread that
 waits for a hop spins for at most 20 µs before it parks, since a parked wake measured a p50 of 21 to
-26 µs and a spinning one 3 to 5 µs on the 4 core Xeon of the dev container on 2026-11-06
-(`work-judge-runtime/oopo-rtt.txt`), and a longer spin would cost a core of the Mac mini.
+26 µs and a spinning one 3 to 5 µs on the 4 core Xeon of the dev container on 2026-11-06, rerun at a
+load average of 1, and a longer spin would cost a core of the Mac mini.
 
 ### 7.6 The chat and login chains
 
@@ -740,11 +751,11 @@ inventories, since a stale block is a bug a plugin cannot see.
 ### 7.8 Remote operations run whole on the server thread
 
 A document of a remote client could touch the game in every field, and one hop per field would cost
-a tick per level of nesting. So the API thread never resolves a field of the class `server`. It
-reads the request, authenticates it, applies the limits, and hands the whole operation to the server
-thread through the `on_execute` seam: the prepared document, the variables, the principal and a
-reply slot. An operation whose fields are all of the classes `any` and `snapshot` runs on the API
-thread at once.
+a tick per level of nesting. So the API thread never resolves a field of the classes `level` and
+`global`. It reads the request, authenticates it, applies the limits, and hands the whole operation
+to the thread of its level through the `on_execute` seam: the prepared document, the variables, the
+principal and a reply slot. While one server thread ticks every level, that is the server thread. An
+operation whose fields are all of the classes `any` and `snapshot` runs on the API thread at once.
 
 The server thread runs the waiting operations at two points, each with a budget.
 
@@ -779,13 +790,20 @@ state guards it itself.
 ### 7.10 The locks of a plugin
 
 With no global lock, a plugin guards its own state, as a Bukkit plugin does for its async handlers.
+The handlers of a plugin take `&self`, the shared handle of [11.1](#111-a-plugin-is-a-crate), and
 `golem-client` offers `PluginLock<T>`, a mutex whose guard is not `Send` and which counts the guards
-a thread holds. A hop that would wait while the thread holds a guard answers `HOP_WITH_LOCK_HELD` at
-once instead of waiting, so the deadlock of a thread that holds a lock and waits for the server
-thread, while a handler of the same plugin waits for that lock on the server thread, cannot happen
-with locks of the client. The `clippy.toml` of every plugin crate lists the locks of the standard
-library and of common crates under `disallowed-types`, so a conversion turns `synchronized` and the
-locks of Java into `PluginLock`. The watchdog names the deadlock of a lock it cannot see, see
+a thread holds. Bukkit fires `PlayerTeleportEvent` inside a move handler before `teleport` returns,
+so a nested event reaches the same plugin on the same thread. The runtime calls a plugin under a
+lock of its own that lets the thread which holds it in again, so the nested event enters the plugin
+at the next depth, while another thread waits for the lock, and a plugin whose manifest says that it
+may run on several level threads at once is called without it. A thread that asks for a guard of a
+`PluginLock` it already holds gets an error at once instead of a deadlock, and a hop that would wait
+while the thread holds a guard answers `HOP_WITH_LOCK_HELD` at once instead of waiting, so the
+deadlock of a thread that holds a lock and waits for the server thread, while a handler of the same
+plugin waits for that lock on the server thread, cannot happen with locks of the client. The
+`clippy.toml` of every plugin crate lists the locks of the standard library and of common crates
+under `disallowed-types`, so a conversion turns `synchronized` and the locks of Java into
+`PluginLock`. The watchdog names the deadlock of a lock it cannot see, see
 [11.4](#114-containment).
 
 ## 8. Names
@@ -824,7 +842,7 @@ block, and the level of the source for a proxied sender. A plugin runs a command
 `serverDispatchCommand(sender: "console", commandLine:)`, which the node
 `golem.api.mutation.serverdispatchcommand.console` guards, and the mod turns the id back into its
 source with the lookup of the table. `Sender::Console` and `Sender::Other` of the runtime of today
-map onto these kinds when the first area moves the senders onto the contract.
+map onto these kinds when the shared base moves the senders onto the contract.
 
 World names keep the names Arclight gave the levels of the live server, so the homes, warps and
 spawns that EssentialsX stored by world name keep working: the level name for the Overworld, the
@@ -836,7 +854,7 @@ exists.
 ### 8.2 Registries and closed sets
 
 Content of a registry is a `String` key in the schema, such as `minecraft:stone`, so the items,
-blocks and entities of the 265 mods work, which a GraphQL enum could not hold. That covers
+blocks and entities of the mods of the pack work, which a GraphQL enum could not hold. That covers
 `Material`, `EntityType`, `Biome`, `Sound`, `Particle`, `Enchantment`, `PotionEffectType`,
 `Attribute`, `Statistic`, `Art`, the variants of villagers, cats and frogs, the trims, the loot
 tables and the structures. The mapping names the registry of each such type. Across the JNI a key is
@@ -852,8 +870,8 @@ read. Closed sets of Bukkit, such as `GameMode`, `BlockFace`, `EventPriority`, `
 ### 8.3 Type names
 
 A GraphQL type keeps the simple name of its Bukkit type, and these rules make the names unique.
-`inventory.json` holds 47 simple names that more than one package uses, counted by
-`work-final-opus/scripts/counts.py` on 2026-11-06.
+`inventory.json` holds 47 simple names that more than one package uses, counted by the prototype
+`counts.py` on 2026-11-06.
 
 1. The legacy package `org.bukkit.material` gets no types. Its members map with `via`, see
    [section 14](#14-coverage), which removes 26 of the clashes.
@@ -869,8 +887,8 @@ A GraphQL type keeps the simple name of its Bukkit type, and these rules make th
 6. A type with subtypes is an interface, and the object type of its direct instances takes the
    suffix `Object`, such as `ZombieObject` and `EntityDamageEventObject`.
 7. `api/names.toml` names every remaining exception, which after these rules is one,
-   `org.bukkit.block.Structure` as `StructureBlock`, by `work-final/names.py` over the inventory on
-   2026-11-06.
+   `org.bukkit.block.Structure` as `StructureBlock`, by the prototype `names.py` over the inventory
+   on 2026-11-06.
 
 The generator refuses any name that two types would share, so a clash is a build error and never a
 silent rename.
@@ -908,10 +926,10 @@ document that sets two things sets them in its order, and no mutation hangs belo
 object, whose fields GraphQL would not order. The rules are what the generator writes into the
 skeleton of the mapping. The mapping holds the exact coordinate of every member, so a rule is a
 convenience and never the truth, and a person decides the 192 methods and 2 fields that the rules
-leave open, by the count of the prototype `scripts/coverage_rules.py` of the panel over
-`inventory.json` on 2026-11-06. Coordinates of Golem's own follow the same rule: reads of a world,
-such as `safeLocation`, are fields of `World`, and the tick stream is `Subscription.serverTick`,
-named like the `Server*` events.
+leave open, by the count of the prototype `coverage_rules.py` over `inventory.json` on 2026-11-06.
+Coordinates of Golem's own follow the same rule: reads of a world, such as `safeLocation`, are
+fields of `World`, and the tick stream is `Subscription.serverTick`, named like the `Server*`
+events.
 
 ## 9. The areas of the Bukkit API
 
@@ -1047,9 +1065,9 @@ that `handleContainerClick` read, and a cancel resends the menu with `sendAllDat
 
 | Bukkit | Golem |
 | --- | --- |
-| `runTask`, `runTaskLater`, `runTaskTimer` and the `scheduleSync` forms | `Subscription.schedule(delay:, period:)`, whose subscriber is the closure of the task on the server thread: `g.scheduler().run_later(20, |g| ...)` |
+| `runTask`, `runTaskLater`, `runTaskTimer` and the `scheduleSync` forms | `Subscription.schedule(delay:, period:)`, whose subscriber is the closure of the task on the server thread: `g.scheduler().run_later(20, \|g\| ...)` |
 | `runTaskAsynchronously` and the async timers | The pool `golem-async-<n>`, the closure gets an `AsyncGame` |
-| `callSyncMethod` | `g.on_server(|g| ...)`, a future, see [7.5](#75-hops) |
+| `callSyncMethod` | `g.on_server(\|g\| ...)`, a future, see [7.5](#75-hops) |
 | `cancelTask`, `cancelTasks(plugin)` | `Mutation.bukkitSchedulerCancelTask(taskId:)`, `Mutation.bukkitSchedulerCancelTasks(plugin:)`, and dropping the handle of the task |
 | `isQueued`, `isCurrentlyRunning`, `getPendingTasks`, `getActiveWorkers` | `Server.scheduler { pendingTasks { id plugin sync delay period } activeWorkers { id plugin } }` |
 | `BukkitRunnable` | A `lib` type of the client with the same methods |
@@ -1152,9 +1170,9 @@ exactly where CraftBukkit and so Arclight kept it on the live server.
 Vanilla drops the tags it does not know when it loads an entity, a block entity, a chunk or the
 level data, so the bridge carries these tags through `Entity.load` and `saveWithoutId`,
 `BlockEntity.load` and `saveAdditional`, `ChunkSerializer.read` and `write` and the level data with
-Mixins from the first day of the area, and the notebook of the area checks every key on a copy of
-the live world before and after a save. Without them, the persistent data that Bukkit plugins
-stored on the live server would vanish at the first save under Golem.
+Mixins from the first commit of persistent data, and the notebook of items and data checks every key
+on a copy of the live world before and after a save. Without them, the persistent data that Bukkit
+plugins stored on the live server would vanish at the first save under Golem.
 
 ### 9.12 Metadata
 
@@ -1304,8 +1322,8 @@ arguments and for the logger.
 ### 10.1 The shape in the schema
 
 `inventory.json` holds 268 event classes: 250 concrete, 180 of them cancellable, and 18 abstract,
-counted by `work-final-opus/scripts/counts.py` on 2026-11-06. Each is a GraphQL type: an interface
-where Bukkit has subclasses, such as `Event`, `PlayerEvent`, `EntityEvent`, `BlockEvent`,
+counted by the prototype `counts.py` on 2026-11-06. Each is a GraphQL type: an interface where
+Bukkit has subclasses, such as `Event`, `PlayerEvent`, `EntityEvent`, `BlockEvent`,
 `InventoryEvent`, `Cancellable` and `EntityDamageEvent`, with the `Object` type for the direct
 instances of a concrete class with subclasses, and an object type otherwise. The fields of an event
 type are its getters and those of its ancestors, `isCancelled` included, and its mutations are its
@@ -1354,7 +1372,10 @@ fix with its own issue.
 The mod listens to Forge events at the priority `LOW` with `receiveCanceled = true`. The chain of
 Golem starts with `cancelled` as the mods above left it, and its verdict is what the mods at
 `LOWEST` see, which the `[event]` table records per event. The chat chain runs after every listener
-of `ServerChatEvent`, see [7.6](#76-the-chat-and-login-chains).
+of `ServerChatEvent`, see [7.6](#76-the-chat-and-login-chains). The bridge that is built today
+listens to chat, deaths and the end of the tick at `LOWEST`, and its listeners keep that priority
+until the shared base moves them onto the generated hooks, so the comparison before the switch tests
+the bridge that serves on the day.
 
 ### 10.4 The synchronous answer of a cancellable event
 
@@ -1417,23 +1438,24 @@ mechanical. `/golem status` names a plugin that listens to a class C or D event 
 
 A remote client and a process plugin observe. After the chain of an event that has remote
 subscribers, the dispatcher copies the frame once into an owned snapshot, shared by every remote
-subscriber, and hands it to the API thread, which runs each selection over the copy and the
-[tick snapshot](#77-the-tick-snapshot). A field of the class `server` inside a remote subscription
-is refused when the document is prepared, with `SERVER_FIELD_IN_STREAM`, so the client asks for it
-with a query, and no field of an event is read later than the event. The server thread therefore
-pays one copy per event and nothing per subscriber. A remote subscription with a priority other
-than `MONITOR` is refused when it is prepared with the GraphTP status 403.1 Stream Not Allowed and
-the code `REMOTE_PRIORITY`, never downgraded in silence, and `ignoreCancelled: true` drops the
-events that ended cancelled. Each remote subscriber has a queue of at most 1,024 events and 1 MiB,
-and a subscriber that falls behind gets `EVENTS_LOST` with the count and the end of its stream, so
-it resubscribes and reads the state again. At 64 streams per principal that bounds the queues of a
-principal at 64 MiB. Coalescing to the latest value through the hub of Aosabi is kept for streams
-of state, such as `Subscription.serverTick`, where only the latest value matters.
+subscriber, and hands it to the API thread, which runs each selection over the copy and the [tick
+snapshot](#77-the-tick-snapshot). A field of the classes `level` and `global` inside a remote
+subscription is refused when the document is prepared, with `SERVER_FIELD_IN_STREAM`, so the client
+asks for it with a query, and no field of an event is read later than the event. The thread of the
+event therefore pays one copy per event and nothing per subscriber. A remote subscription with a
+priority other than `MONITOR` is refused when it is prepared with the GraphTP status 403.1 Stream
+Not Allowed and the code `REMOTE_PRIORITY`, never downgraded in silence, and `ignoreCancelled: true`
+drops the events that ended cancelled. Each remote subscriber has a queue of at most 1,024 events
+and 1 MiB. A stream of events that falls behind is closed with `EVENTS_LOST` and the count of the
+events it lost, chat and commands included, so the client resubscribes and reads the state again,
+and no stream of events loses an event in silence. At 64 streams per principal that bounds the
+queues of a principal at 64 MiB. Streams of state, such as `Subscription.serverTick` and the
+positions of the tick snapshot, keep the latest value, since only the latest value matters there.
 
 ### 10.8 Where the events come from
 
-The Forge 47.4.18 universal jar holds 236 classes under `net/minecraftforge/event`, by the count of
-the panel. A judgement from the two class lists, not a measurement, puts the 252 listenable events
+The Forge 47.4.18 universal jar holds 236 classes under `net/minecraftforge/event`, counted on
+2026-11-06. A judgement from the two class lists, not a measurement, puts the 252 listenable events
 of Bukkit into four hook classes, and the `[event]` table of each holds the class, the source and
 the rate class, which the coverage tool checks for each of the 252.
 
@@ -1477,9 +1499,11 @@ in `golem.mixins.json` and are remapped to SRG with their refmap by MixinGradle 
 with the Mixin 0.8.5 that Forge 47 ships. Each hook has one form: check the mask, check the interest
 table, write the frame, call `Host.event`, read the outcome. The mods of the pack already inject at
 2,569 points of the server code, by the scan of [Plan](plan.md#why-the-game-itself-stays-java), so
-the notebook `18_api_hooks` boots the full pack of 265 mods under `golem run` and asserts that every
-Mixin of the bridge applied and that every hook fires once in a scripted scene, before an area
-merges.
+the notebook `28_api_hooks` boots the full pack under `golem run` and asserts that every Mixin of
+the bridge applied and that every hook fires once in a scripted scene, before a part of the work
+merges. The vanilla client of the harness cannot join the pack, so the meaning of each hook is
+proven on stock Forge, where that client joins or a command triggers the event, and its apply and
+its conflicts on the full pack, one boot for several hooks.
 
 ## 11. Packaging and lifecycle
 
@@ -1524,7 +1548,7 @@ command-deadline-ms = 200
 A plugin is compatible with a schema exactly when its documents and the canonical operations its
 client methods use validate against that schema, which the build checks and the runtime checks
 again at `enable`, so a schema change that breaks a plugin breaks its build. For documents outside
-the workspace, the notebook `11_api_schema` diffs the schema against the last release and validates
+the workspace, the notebook `21_api_schema` diffs the schema against the last release and validates
 the corpus of every known document against it.
 
 ### 11.2 The states of a plugin
@@ -1546,8 +1570,8 @@ as the `STARTUP` load of Bukkit does, and a plugin enabled at `serverStarting` s
 worlds, as `POSTWORLD` does. The players join only once the ticks run, since the server thread
 places a player in `tick` of the login listener, so every plugin hears the first join, and a login
 that reaches `golem-net` earlier waits for the enables, see [7.6](#76-the-chat-and-login-chains).
-The `serverStarting` native of the first milestone and its doc comment in `Host.java` and
-`golem_bridge::Event`, which say "before the worlds load", fire after them.
+The `serverStarting` native that is built today fires after them as well, though its doc comments
+in `Host.java` and `golem_bridge::Event` say "before the worlds load".
 
 ### 11.3 The ledger
 
@@ -1587,28 +1611,29 @@ cannot. Every value below is a setting of `config/golem.toml`.
 
 A panic is caught with `catch_unwind` at every entry into plugin code, logged with the plugin and
 the event, counted, and passed as if the plugin passed, as the runtime does today. Golem builds with
-`panic = "unwind"`, which `17_plugin_lifecycle` checks, and a guard resets the ambient context of
-Aosabi after a caught panic inside a document, which the gates of section 20 prove first. An async
-call on `golem-async-<n>`, `golem-chat-<n>` or `golem-net-<n>` holds no tick, so it gets the warning
-and the quarantine alone. `13_api_events` holds every layer to a case with test plugins that sleep,
-loop, panic and deadlock.
+`panic = "unwind"`, which `27_plugin_lifecycle` checks, and a guard resets the ambient context of
+Aosabi after a caught panic inside a document, which the first measurements of section 20 prove. An
+async call on `golem-async-<n>`, `golem-chat-<n>` or `golem-net-<n>` holds no tick, so it gets the
+warning and the quarantine alone. `23_api_events` holds every layer to a case with test plugins that
+sleep, loop, panic and deadlock.
 
 ### 11.5 Process plugins
 
 A plugin that must be isolated is a native Rust binary built against `golem-client` with its feature
 `process`, with the same `plugin.toml` and `kind = "process"`. `golem` starts it as a child with one
-end of a socket pair on fd 3, `SOCK_SEQPACKET` through `homa::unix` on Linux and a stream pair of
-the standard library with prefixed AoFrame through `homa::stream::Framed` on macOS, where
+end of a socket pair on its stdin, `SOCK_SEQPACKET` through `homa::unix` on Linux and a stream pair
+of the standard library with prefixed AoFrame through `homa::stream::Framed` on macOS, where
 `homa::unix` does not build, so its identity is the process golem started, with no path and no
-token, and restarts it with a growing pause when it ends. It speaks documents over GraphTP to the
-API thread, under the principal `plugin:<name>`, whose grants of `plugin.toml` are a real boundary
-here. It observes events as a remote client does, answers commands later through
+token, and restarts it with a growing pause when it ends. A socket on stdin needs no unsafe code in
+the parent or the child ([Decisions](decisions.md)). It speaks documents over GraphTP to the API
+thread, under the principal `plugin:<name>`, whose grants of `plugin.toml` are a real boundary here.
+It observes events as a remote client does, answers commands later through
 `Mutation.commandSenderSendMessage`, completes through the future of
 [9.8](#98-commands-and-tab-completion), and cannot answer a cancellable event, since that answer
 belongs to code on the server thread. Only its documents move between the two kinds, since `Game`
 exists in the process of golem alone. Process plugins use the items A6 and A7 of Aosabi once they
 land and the fallbacks of [4.5](#45-what-golem-asks-of-aosabi) until then, on Linux and on macOS
-alike. The notebook `19_api_process` runs one through its whole life.
+alike. The notebook `29_api_process` runs one through its whole life.
 
 ## 12. Performance
 
@@ -1616,21 +1641,25 @@ alike. The notebook `19_api_process` runs one through its whole life.
 
 | What | Value | How |
 | --- | --- | --- |
-| `{__typename}` through `aosabi_core::Service::execute` | 8.8 to 10.2 µs with the 27 rules, 2.3 to 2.8 µs without | Spike `work-in-process-opus/spike-exec`, release with thin LTO, Aosabi `6e507dc`, 20,000 runs after 1,000 to warm up, 4 cores of an Intel Xeon at 2.10 GHz at a load average of 4 to 5, 2026-11-06 |
+| `{__typename}` through `aosabi_core::Service::execute` | 8.8 to 10.2 µs with the 27 rules, 2.3 to 2.8 µs without | A spike of 2026-11-06, release with thin LTO, Aosabi `6e507dc`, 20,000 runs after 1,000 to warm up, 4 cores of an Intel Xeon at 2.10 GHz at a load average of 4 to 5 |
 | `{player(name:"Steve"){health}}`, the same way | 15.9 to 23.9 µs with the rules, 6.9 to 8.3 µs without | The same spike |
-| A query of seven fields, the same way | 30.4 to 30.7 µs with the rules, 13.0 to 13.2 µs without, of which the parse is 1.75 µs and the validation 10.7 µs | The same spike, rerun by a judge at a load average of 1 with 12.8 µs, 32.5 µs, 1.78 µs and 11.0 µs (`work-judge-runtime/ipo-spike.txt`) |
-| The query of seven fields prepared once and run through `aosabi_execute::execute` over the parsed document | 5.4 to 6.5 µs | Spike `work-loadable-opus/spike`, release, the same machine, 2026-11-06, rerun in `work-judge-runtime/lo-spike.txt`. It runs outside the context of `Service`, so it bounds what item A2 can reach |
-| One whole chat event through a plugin, the selection, the payload, the call and the change | 3.6 to 4.3 µs | The same spike |
+| A query of seven fields, the same way | 30.4 to 30.7 µs with the rules, 13.0 to 13.2 µs without, of which the parse is 1.75 µs and the validation 10.7 µs | The same spike, rerun at a load average of 1 with 12.8 µs, 32.5 µs, 1.78 µs and 11.0 µs |
+| The query of seven fields prepared once and run through `aosabi_execute::execute` over the parsed document | 5.4 to 6.5 µs | A second spike, release, the same machine, 2026-11-06, rerun at a load average of 1. It runs outside the context of `Service`, so it bounds what the prepared operation of item A2 can reach |
+| One whole chat event through a plugin, the selection, the payload, the call and the change | 3.6 to 4.3 µs | The first spike |
 | `hasPermission` | 138 ns for four nodes of the seed | `golem-devtool permissions --repeat`, release, [Permissions](plugins/permissions.md), 2026-11-06 |
-| The wake of another thread | p50 21 to 26 µs parked, 3 to 5 µs spinning, a maximum of 1.9 to 3.7 ms | Spike `work-opus-oop/spike-rtt`, rerun by a judge at a load average of 1 (`work-judge-runtime/oopo-rtt.txt`), 2026-11-06 |
+| The wake of another thread | p50 21 to 26 µs parked, 3 to 5 µs spinning, a maximum of 1.9 to 3.7 ms | A third spike of 2026-11-06, rerun at a load average of 1 |
 
-A JNI call costs from about 100 ns by the figure of the brief, which no spike of the panel measured
-on the test server, so the gates of section 20 measure a stub with the out buffer there first, and
-a canonical operation through the `Service`. One small document through the executor costs as much
-as about 60 to 130 JNI calls, and a document of one field about 25 to 80. That ratio is the price of
-the ruling that every call runs through the executor, and it is why A2 comes first among the items
-of Aosabi, why a handler reads its event from the frame with no call, and why a read of many fields
-of one object is one document through a record.
+Every figure is a release build at the default opt-level of Cargo, 3, on an Intel Xeon in a
+container. The same figures at opt-level `z` and every figure on macOS are still open, and the first
+measurements of section 20 take each figure at both levels.
+
+A JNI call costs from about 100 ns by the figure the design assumes, which no spike measured on the
+test server, so the first measurements of section 20 measure a stub with the out buffer there first,
+and a canonical operation through the `Service`. One small document through the executor costs as
+much as about 60 to 130 JNI calls, and a document of one field about 25 to 80. That ratio is the
+price of the ruling that every call runs through the executor, and it is why the prepared operation
+matters most among the asks of Golem, why a handler reads its event from the frame with no call, and
+why a read of many fields of one object is one document through a record.
 
 ### 12.2 The cost model
 
@@ -1640,29 +1669,29 @@ of one object is one document through a record.
 | A registry table, `MaterialInfo`, the type of an entity type | A table in Rust | About 10 ns | Design |
 | A mirror or the tick snapshot | Rust, any thread | 10 to 50 ns | Design |
 | `hasPermission` | The tables of `golem-permissions` | About 35 ns a node | Measured above |
-| The JNI call of a live getter, `location`, `health`, `allowFlight` | One JNI call with primitives and the out buffer | 100 to 300 ns | The JNI figure of the brief and one lookup in Java, measured by `10_api_contract` |
-| A method of the client, a getter or a setter of an event included | One canonical operation through the `Service` and its JNI call | About 7 to 8 µs until A2 lands, lower after | The document of one field of 12.1, measured again by `10_api_contract` |
-| A record of one object | One JNI call that writes about 20 fields | 300 to 600 ns | Design, measured by `10_api_contract` |
+| The JNI call of a live getter, `location`, `health`, `allowFlight` | One JNI call with primitives and the out buffer | 100 to 300 ns | The JNI figure the design assumes and one lookup in Java, measured by `20_api_contract` |
+| A method of the client, a getter or a setter of an event included | One canonical operation through the `Service` and its JNI call | About 7 to 8 µs until the prepared operation of A2 lands, lower after | The document of one field of 12.1, measured again by `20_api_contract` |
+| A record of one object | One JNI call that writes about 20 fields, once item A9 lands | 300 to 600 ns | Design, measured by `20_api_contract` |
 | An event that nobody hears | `Host.WANTED` | One array load | Design |
 | An event that the interest table filters out | One array load and one test in Java | Nanoseconds | Design |
-| An event with subscribers | One JNI crossing and the frame | Under 1 µs plus the handlers | To be measured by `13_api_events` |
-| A document of seven fields | `Service::execute` with `validate: false` | About 13 µs, about 6 µs once A2 lands | Measured above |
+| An event with subscribers | One JNI crossing and the frame | Under 1 µs plus the handlers | To be measured by `23_api_events` |
+| A document of seven fields | `Service::execute` with `validate: false` | About 13 µs, about 6 µs once the prepared operation lands | Measured above |
 | A document of a remote client seen the first time | Parse, the 27 rules, execute | About 30 µs | Measured above |
 | A hop from another thread | `server.execute` and the waker | At most the rest of the tick | Design |
 
 Twenty players moving at 20 packets a second make 400 move events a second. With a subscriber that
 reads two fields of the frame and makes one call of the client, that is about 400 times 9 µs, 3.6
-ms a second or 0.18 ms a tick until A2 lands, where a document of seven fields per event would cost
-about 400 times 13 µs, 5.2 ms a second. A converter that adds `.changed_block(true)` keeps the moves
-inside one block in Java, the most common ones, and the cost falls by their share. A protection
-plugin that calls the client on every event of the class D pays the executor per event, which
-`13_api_events` measures before the areas of events start.
+ms a second or 0.18 ms a tick until the prepared operation lands, where a document of seven fields
+per event would cost about 400 times 13 µs, 5.2 ms a second. A converter that adds
+`.changed_block(true)` keeps the moves inside one block in Java, the most common ones, and the cost
+falls by their share. A protection plugin that calls the client on every event of the class D pays
+the executor per event, which `23_api_events` measures before the parts of events start.
 
 ### 12.3 The rules that keep it there
 
 - No document per event on the hot path. Handlers read the frame, which costs no call, and make one
-  operation of one field per Bukkit call, which parses until A2 lands and runs a plan of Aosabi
-  after.
+  operation of one field per Bukkit call, which parses until the prepared operation of A2 lands and
+  runs prepared after.
 - No string across the JNI unless the answer is text. Ids, places, registry ids and block state ids
   are numbers.
 - A read of several fields of one object is one call, through a record or the masked read.
@@ -1684,7 +1713,7 @@ plugin that calls the client on every event of the class D pays the executor per
 | Transport | Where | Who |
 | --- | --- | --- |
 | GraphTP on a Unix socket | `$XDG_RUNTIME_DIR/golem/api.graphtp` on Linux and `golem-data/run/api.graphtp` on macOS, the directory of mode 0700 and the socket of mode 0600, `SOCK_SEQPACKET` through `homa::unix` on Linux and a stream socket with prefixed AoFrame on macOS, through the adapter of [4.5](#45-what-golem-asks-of-aosabi) until item A6 lands, since `homa::unix` builds on Linux alone | Operators and tools on the host, as the owner ruled |
-| GraphTP on a socket pair | fd 3 of a process plugin, see [11.5](#115-process-plugins) | Process plugins |
+| GraphTP on a socket pair | The stdin of a process plugin, see [11.5](#115-process-plugins) | Process plugins |
 | HTTP | `127.0.0.1` only, reached from outside through the Cloudflare Tunnel of [Plan](plan.md#architecture), with `cors()` and `csrf()` of the facade over the one origin of the dashboard of the operator | Dashboards and tools that speak HTTP, the OpenID Connect login of operators |
 | HTTPS | TLS 1.3 of Aosabi, only when an operator binds an address that is no loopback, which Golem refuses without TLS | Rare |
 
@@ -1699,9 +1728,11 @@ and no token is the principal `local`, which the configuration maps to a group, 
 default, and a peer of another user is closed with no byte, as the Unix carrier of Aosabi does for
 HTTP. On macOS `aosabi-serve` reads no peer uid, so there the modes of the socket and its directory
 are the boundary, which `golem` checks when it binds, and a token is required until item A8 lands.
-Operators who log in through a browser use the OpenID Connect plugin of Aosabi. A process plugin is
-the principal `plugin:<name>`. The identity reaches the resolvers through `use_identity` of
-`aosabi-auth`, whose `Principal` carries the id and, as its roles, the groups of the principal.
+Operators log in through a browser once a plugin of OpenID Connect serves the provider they use,
+over the identity seam that `aosabi-auth` already offers, and use a token until then, so the login
+is the last piece of the remote clients. A process plugin is the principal `plugin:<name>`. The
+identity reaches the resolvers through `use_identity` of `aosabi-auth`, whose `Principal` carries
+the id and, as its roles, the groups of the principal.
 
 ### 13.3 What a principal may do
 
@@ -1729,7 +1760,7 @@ document the check collects every field of the selection, fragments included, an
 an interface every possible type it can reach, and checks each node. The verdict is kept per
 document, principal and revision of the permissions, so a prepared document is checked once.
 Arguments that widen what a field may do have nodes of their own, such as
-`golem.api.mutation.serverdispatchcommand.console`. A mutation of the class `server` that acts as a
+`golem.api.mutation.serverdispatchcommand.console`. A mutation of the class `level` that acts as a
 player, such as `playerPerformCommand`, is resolved as that player, so the permissions of the player
 apply as they would in the game. Every mutation of a remote principal goes to the audit log of
 `golem-store` with the principal, the coordinate, the document id and a digest of its arguments.
@@ -1772,7 +1803,7 @@ than one second. A document over a bound answers 400.5 Query Too Complex over Gr
 Aosabi defines. Text of a player never becomes part of a document, only of its variables.
 `Allow::Only` of the carrier policy of `aosabi-kernel` lists the subscription fields each carrier
 serves, so the HTTP carrier of the tunnel serves no event of the rate classes C and D.
-`Server.budgets` shows the bucket of every principal, and the notebook `15_api_remote` holds every
+`Server.budgets` shows the bucket of every principal, and the notebook `25_api_remote` holds every
 line of this section to a case over both carriers.
 
 ### 13.5 Writes from outside
@@ -1843,10 +1874,10 @@ for each status and the cells of the notebook.
 The report prints the three numbers per status, per area, per package and over all 15,089 members
 of the inventory: 1,247 types, 7,942 methods and 5,900 fields and constants, with the covered share
 of all members, `none` included, beside the share of the members that are not `none`. The prototype
-of the panel, `scripts/coverage_rules.py`, maps 14,834 of the members by rule alone, leaves 192
-methods and 2 fields to decide, and leaves the 61 methods of the 50 anonymous classes to the reason
-`anonymous`, so the first area starts with every member mapped by rule or listed for a person,
-present at the size of the vertical slice and proven at zero.
+`coverage_rules.py` of 2026-11-06 maps 14,834 of the members by rule alone, leaves 192 methods and 2
+fields to decide, and leaves the 61 methods of the 50 anonymous classes to the reason `anonymous`,
+so the shared base starts with every member mapped by rule or listed for a person, present at the
+size of the vertical slice and proven at zero.
 
 ### 14.4 The checks of the tool
 
@@ -1866,16 +1897,16 @@ name.
 
 ### 14.5 The notebook and CI
 
-The notebook `12_api_coverage` fetches the pinned jar and checks its SHA-256, writes the inventory
+The notebook `22_api_coverage` fetches the pinned jar and checks its SHA-256, writes the inventory
 again and fails when it differs from the committed one, prints the SDL with the builder of Aosabi
 and fails when it differs from `api/schema.graphql`, runs the checks of 14.4 and compares the
 numbers with `api/coverage.lock`. CI runs it on every push and every pull request. A number below
 the lock fails, and a number above it fails as well with the lines to write, so the lock always
 equals the state of `main` and every rise is visible in the history, in the commit that made it. The
-proven number comes from `16_api_corpus`, which boots the test server and runs in the notebooks job
+proven number comes from `26_api_corpus`, which boots the test server and runs in the notebooks job
 of CI on every push and every pull request, and the lock of the proven number follows the same rule
 in that job. The release notes of every version of golem carry the three numbers.
-Existence is not equivalence: each area also has a notebook that holds its coordinates to the
+Existence is not equivalence: each part also has a notebook that holds its coordinates to the
 semantics of CraftBukkit, such as the order of a chain with mixed priorities and `ignoreCancelled`,
 the leftovers of `addItem` and `removeItem`, the default of a permission for an operator and the
 nested teleport event.
@@ -1911,11 +1942,10 @@ the rule of the generator as the skeleton entry of a member that has none.
 
 ## 16. The EssentialsX port and the first game interface
 
-The first game interface that an agent builds now, the queries `players`, `location`, `respawn`,
-`spawn`, `mainHand`, `heights` and `safeLocation`, the actions `teleport` and `listName`, the
-handler of the Forge PermissionAPI and the level of a command sender, is the seed of this API. It
-keeps its strings joined by U+001F until the first area moves it, and nothing of its meaning is
-thrown away.
+The first game interface that is built today, the queries `players`, `location`, `respawn`, `spawn`,
+`mainHand`, `heights` and `safeLocation`, the actions `teleport` and `listName`, the handler of the
+Forge PermissionAPI and the level of a command sender, is the seed of this API. It keeps its strings
+joined by U+001F until the shared base moves it, and nothing of its meaning is thrown away.
 
 | Part of the first game interface | Becomes |
 | --- | --- |
@@ -1931,7 +1961,7 @@ thrown away.
 | The PermissionAPI handler | Stays, answering from `golem-permissions` as `Permissible.hasPermission` does |
 | The level of a sender | `CommandSender.permissionLevel`, Golem's own, and the default `OP` of a permission for a source without a profile |
 
-The first area writes these as the first entries of the mapping and of `api/golem-own.toml`, and
+The shared base writes these as the first entries of the mapping and of `api/golem-own.toml`, and
 `golem_bridge::Game` and `Context::game()` become a shim over `golem-client`, so `golem-essentials`,
 `golem-essentials-spawn` and the notebooks `04_plugins`, `05_bridge_build` and `07_forge_boot` keep
 working through the move. The scripted game of `golem-devtool` becomes the scripted contract that
@@ -1941,13 +1971,17 @@ them any more.
 `golem-essentials` and `golem-essentials-spawn` are translations of the Java of EssentialsX 2.22.0
 and EssentialsXSpawn 2.22.0 to clients of this schema, under the license of their upstream. Their
 commands that need only the first game interface, such as `tpa`, `home`, `warp`, `spawn` and `back`,
-go on now on the runtime of the first milestone and move to the client when the first area lands.
-`golem-devtool api slice` over the jar of EssentialsX 2.22.0 gives the members the port needs, 756
-methods, 211 constants and 42 events by the prototype `scripts/plugin_slice.py` of the panel on
-2026-11-06, the jar of EssentialsXSpawn adds its own, and every area of the fan out builds that
-slice first. The economy and the events of EssentialsX live in their schema part. The golden samples
-of [Plan](plan.md#verification), which run EssentialsX on Arclight against the port on Golem, stay
-the final judge, and every quirk the port fixes gets its issue, as CONTRIBUTING.md section 6 asks.
+run on the present runtime once they are ported, and move to the client when the shared base lands.
+The members that the ports call are the slice of the port: the 66 queries, actions and events of
+[EssentialsX bridge needs](plugins/essentials/bridge-needs.md), less what the port decides against.
+`golem-devtool api slice` over the jar of EssentialsX 2.22.0 counts what the jar references, 756
+methods, 211 constants and 42 events by the prototype `plugin_slice.py` on 2026-11-06, code that the
+port never translates included, so that count is the upper bound and the check of the corpus, and
+the jar of EssentialsXSpawn adds its own. Once the ports exist, `api slice` counts the slice again
+over their Rust. Every part of the API builds that slice first. The economy and the events of
+EssentialsX live in their schema part. The golden samples of [Plan](plan.md#verification), which run
+EssentialsX on Arclight against the port on Golem, stay the final judge, and every quirk the port
+fixes gets its issue, as CONTRIBUTING.md section 6 asks.
 
 ## 17. The Bukkit layer
 
@@ -1980,8 +2014,9 @@ Rust on Aosabi. This page fixes what the layer takes from the API, so the two st
   classes `any` and `snapshot`, and turns `NOT_ON_SERVER_THREAD` into the `IllegalStateException` of
   the `AsyncCatcher` of CraftBukkit.
 - A call from the layer crosses the JNI twice, Java to Rust and Rust to Java, about 200 to 600 ns by
-  the figure of the brief, plus one pass of the executor, about 7 to 8 µs until A2 lands, which the
-  gates measure with the stub of [6.2](#62-what-contract-gen-writes).
+  the figure the design assumes, plus one pass of the executor, about 7 to 8 µs until the prepared
+  operation of A2 lands, which the first measurements of section 20 measure with the stub of
+  [6.2](#62-what-contract-gen-writes).
 
 The layer is a client of this schema for level 1 only. The survey of [Bukkit
 layer](bukkit-layer.md), 503 plugins collected and counted by `tools/plugin-survey` on 2026-11-06,
@@ -2137,11 +2172,11 @@ fn on_player_chat(&self, g: &AsyncGame, event: &mut AsyncPlayerChatEvent<'_>) ->
 ```
 
 The chain runs on `golem-chat-<n>`, off the server thread as in Bukkit, and no thread of the game
-waits for it. `playerSetDisplayName` is of the class `server` with a unit answer, so from the chat
-thread it is queued, and the mirror of the display name changes when the server thread applies it.
-A handler that needs a live read here may wait for it with `g.on_server`, as a Bukkit chat handler
-may wait for `callSyncMethod`. The recipients are a list of the frame, which a Mixin at the
-broadcast of the chat applies.
+waits for it. `playerSetDisplayName` is of the class `level` with a unit answer, so from the chat
+thread it is queued, and the mirror of the display name changes when the thread of the level of the
+player applies it. A handler that needs a live read here may wait for it with `g.on_server`, as a
+Bukkit chat handler may wait for `callSyncMethod`. The recipients are a list of the frame, which a
+Mixin at the broadcast of the chat applies.
 
 ### 18.3 A listener registered at run time with a priority from the configuration
 
@@ -2300,7 +2335,7 @@ for the six fields.
 - No custom directive, no input struct, and no custom scalar until Aosabi offers them.
 - No rules or verdict caches of constant answers, no update mutation of every setter and no other
   coordinate of Golem's own that no Bukkit member and no part of the first game interface needs,
-  until `13_api_events` measures a need. In process a closure costs nanoseconds, and the interest
+  until `23_api_events` measures a need. In process a closure costs nanoseconds, and the interest
   tables and subject sets keep hot events in Java.
 - No legacy material types. `org.bukkit.material` maps through `via`.
 - No code of Arclight or CraftBukkit and no javadoc text of spigot-api.
@@ -2309,80 +2344,80 @@ for the six fields.
 
 | Risk | Why it matters | What answers it |
 | --- | --- | --- |
-| The plain path of Aosabi at full size | About 13,000 entity fields and 171 union enums have never gone through the builder | Gate 0 builds a generated skeleton at full size first, with the fallback of A1 |
+| The plain path of Aosabi at full size | About 13,000 entity fields and 171 union enums have never gone through the builder | The first measurements build a generated skeleton at full size first, with the fallback of A1 |
 | The embedding of `golem-api` | Golem cannot link a glued plain crate into its own binary today | Item A1, with the fallback of linking the generated copy |
-| The executor on every call | Every Bukkit call of a converted plugin pays one pass of the executor, about 7 to 8 µs until A2 lands, 25 to 80 times its JNI call | A2 first among the items of Aosabi, the frame and the records for hot reads, gate 0 and `10_api_contract` measuring a call of the client on the test server, and decision 1 of section 22 |
-| Nesting and panics through Aosabi | A document inside a handler nests an agent of Aosabi, and an unwind may leave its ambient context behind | Gate 0 proves both, and a guard resets the context after a caught panic |
-| Mixins in a heavily patched game | The mods inject at 2,569 points of the server code, and the hook class of every event is a judgement from two lists | Few injections, at heads, returns and single calls, gated by the mask, an `[event]` table per event before its area starts, and `18_api_hooks` on the full pack before each area merges |
-| The chat future | The Mixin at `getChatDecorator` sits where chat mods may hook as well | `18_api_hooks` sends chat through every chat mod of the pack, and the open item records each mod that decorates chat |
+| The executor on every call | Every Bukkit call of a converted plugin pays one pass of the executor, about 7 to 8 µs until the prepared operation of A2 lands, 25 to 80 times its JNI call | The prepared operation, the ask of Golem that matters most for speed, the frame and the records for hot reads, the first measurements and `20_api_contract` measuring a call of the client on the test server, and decision 1 of section 22 |
+| Nesting and panics through Aosabi | A document inside a handler nests an agent of Aosabi, and an unwind may leave its ambient context behind | The first measurements prove both, and a guard resets the context after a caught panic |
+| Mixins in a heavily patched game | The mods inject at 2,569 points of the server code, and the hook class of every event is a judgement from two lists | Few injections, at heads, returns and single calls, gated by the mask, an `[event]` table per event before its part starts, and `28_api_hooks` on the full pack before each part merges |
+| The chat future | The Mixin at `getChatDecorator` sits where chat mods may hook as well | `28_api_hooks` sends chat through every chat mod of the pack, and the open item records each mod that decorates chat |
 | The data that Arclight wrote | Persistent data and world names live in the forms of CraftBukkit | The Mixins of 9.11 and the names of 8.1 land before the switch, checked on a copy of the live world |
-| Re-entrancy and threads | The global lock goes, nested dispatch and hops come | The frame stack, the depth cap, `PluginLock`, the watchdog, and `13_api_events` with nested and cross thread cases |
-| macOS on the live server | The poll reactor of Aosabi, `homa::unix` that builds on Linux alone, no `SOCK_SEQPACKET` on Unix sockets, no peer uid | The stream adapter of 4.5 over `homa::stream::Framed` and the standard library, the hot wake source, the modes of the socket and a token, gate 0 on the Mac mini, and items A6 and A8 |
+| Re-entrancy and threads | The global lock goes, nested dispatch and hops come | The frame stack, the depth cap, `PluginLock`, the watchdog, and `23_api_events` with nested and cross thread cases |
+| macOS on the live server | The poll reactor of Aosabi, `homa::unix` that builds on Linux alone, no `SOCK_SEQPACKET` on Unix sockets, no peer uid | The stream adapter of 4.5 over `homa::stream::Framed` and the standard library, the hot wake source, the modes of the socket and a token, the first measurements on a macOS test host, never on the Mac mini while it serves, and items A6 and A8 |
 | Remote load on the server thread | One operation runs to its end once it starts, and a read of Bukkit may load a chunk | The cost estimate, the answer size, no chunk load and the deadline per operation of 13.4, for every principal |
-| The size of the work | 168 to 220 weeks of one engineer is the honest scale of every Bukkit plugin | The EssentialsX slice first and the three numbers as the measure of progress |
+| The size of the work | Every member of Bukkit gets its coordinate, its Java and its proof, the honest scale of every Bukkit plugin | The slice of EssentialsX first and the three numbers as the measure of progress |
 | The license of the reference | The inventory lists the signatures of a GPL jar | A `.license` file and a line in NOTICE, which the owner confirms |
 
-## 20. Work breakdown
+## 20. The parts of the work
 
-The areas stand in dependency order, in weeks of one engineer, as estimates that nobody measured.
-The events are planned at half a day for an event that Forge covers, one to one and a half days for
-one that needs Forge and a Mixin, and one and a half to two days for one that needs a Mixin alone,
-against the 265 mods of the pack. Area 0 decides before code lands, area 1 is the trunk that every
-later area builds on, and from area 3 on the areas run in parallel, each with its own files. Every
-area includes its notebook, its wiki page, its mapping entries and its coverage rows, as
-CONTRIBUTING.md asks. [API coverage](api-coverage.md) section 2.1 names the packages of the
-inventory that each area owns.
+The API is built in parts, each with its own files. Every part includes its notebook, its wiki
+page, its mapping entries and its coverage rows, as CONTRIBUTING.md asks, and [API
+coverage](api-coverage.md) section 2.1 names the packages of the inventory that each part owns. The
+first measurements decide whether the design holds at full size, the shared base builds what every
+other part builds on, and the parts after it each work in files of their own. The events are judged
+at three sizes: an event that Forge covers is the smallest, one that needs Forge and a Mixin is
+larger, and one that needs a Mixin alone is the largest, against the mods of the full pack.
 
-One prerequisite lies outside this breakdown, and the area that needs it says so: the usage audit
-of the Mac mini of [Plan](plan.md#before-the-port), which needs the live server and reads off it
-the world names of 8.1. The full pack of 265 mods boots under `golem run`, as `08_modpack_boot`
-shows, and the notebooks job of CI runs every notebook, the ones that boot Forge included.
+One prerequisite lies outside these parts, and the part that needs it says so: the usage audit of
+the Mac mini of [Plan](plan.md#before-the-port), which needs the live server and reads off it the
+world names of 8.1. The full pack boots under `golem run`, as `08_modpack_boot` shows, and the
+notebooks job of CI runs every notebook, the ones that boot Forge included. The items that Golem
+asks of Aosabi, A1 to A9 of [4.5](#45-what-golem-asks-of-aosabi), are no part of this work: Aosabi
+builds what it chooses in its own releases, and each part uses the fallback of 4.5 until the
+release that Golem pins carries the item.
 
-| # | Area | Delivers | Proven by | Needs | Weeks |
-| --- | --- | --- | --- | --- | ---: |
-| 0 | Gates | The builder and the boot of Aosabi on a generated skeleton of the whole entity tree, with the time of the build, the size of the glue, the growth of the binary and the boot of the schema. A stub with the out buffer and a frame on the test server, which measures a JNI call, and one canonical operation through the `Service`, which measures a call of the client. A document nested in a handler and a panic unwound through the executor. The hand over of `on_execute` with the wake source on Linux and on macOS, and `graphql-over-graphtp` served on the Mac mini through the stream adapter of 4.5 with the JVM running. The mount of a schema part through the generated copy. One Mixin of Golem booted beside the 265 mods | The first cells of `10_api_contract`, `11_api_schema` and `18_api_hooks` | Nothing | 3 |
-| 1 | The trunk | Everything that [section 21](#21-what-the-first-area-builds) lists: the mapping and its generators, the generated contract, `golem-game`, `golem-model`, the client, the coverage tool with its lock, the frames and a first dispatcher, the tick snapshot with the `tick` native that reads its records in one JNI call, a first runtime, the vertical slice, the first game interface on the contract | `10_api_contract`, `11_api_schema`, `12_api_coverage`, the first cells of `13_api_events`, `14_api_smoke` and `16_api_corpus`, and `04_plugins`, `05_bridge_build` and `07_forge_boot` unchanged | 0 | 17 to 22 |
-| 2 | The items of Aosabi | A1 to A8 of [4.5](#45-what-golem-asks-of-aosabi), in the repository of Aosabi, A1 and A2 first, and A6 with a build of the stream form of `homa::unix` for macOS and a kqueue reactor | The notebooks of Aosabi | 0 | 7 to 12, in Aosabi |
-| 3 | Remote clients | `golem-remote`: GraphTP on the Unix socket and on the socket pair, with the stream adapter of 4.5 on macOS, HTTP on loopback, tokens with `golem token create`, groups, the OpenID Connect login of 13.2, the nodes of the coordinates, the limits and buckets, the cost estimate, the answer size, the refusal of chunk loads and the deadline per operation of 13.4, `SERVER_BUSY`, the audit log, the preconditions, the remote streams, the carrier policies, the API slot and the serve point, the settings of `config/golem.toml` under `remote` | `15_api_remote` | 1. On macOS the stream adapter stands in for A6 and a token for A8 until they land | 5 to 7 |
-| 4 | The event core | The whole dispatcher: chains per handler list with class filters, priorities, `ignoreCancelled`, `MONITOR` read only, nesting to 16, the chains of `golem-chat` and `golem-net`, the wanted mask, filters, interest tables, subject sets, rate classes, `call<Event>`, the events of ports, the copies for remote subscribers | `13_api_events` | 1 | 3 to 4 |
-| 5 | The plugin runtime | The lifecycle with the native `serverAboutToStart` and the steps of 11.2, `plugin.toml`, the order, the ledger, a disable that never waits on the server thread, `Game` and `AsyncGame`, the hops, `PluginLock` and its lint, budgets per coordinate, the deadline, the watchdog, the degrade mode, the quarantine, the scheduler, services, the configuration library, metadata, conversations, the logger, `/golem status`, `/golem plugin enable` and `disable`, `config/golem.toml` with the settings of 11.4, the shim of the first game interface | `04_plugins` extended and `17_plugin_lifecycle` | 1 | 6 to 8 |
-| 6 | Entities | The 171 interfaces with their 1,147 methods, `World.entitiesOf`, spawning, attributes, potion effects, the types of modded entities, the records | `20_api_entities` and the corpus | 1, 4 | 14 to 18 |
-| 7 | Worlds and blocks | Worlds, chunks, blocks, block data, block states, ray traces, explosions, sounds, particles, the world border, game rules, the world names and `uid.dat` of 8.1 | `21_api_worlds` and the corpus, the names on a copy of the live world | 1, 4, and the usage audit, a prerequisite, for the names | 12 to 15 |
-| 8 | Items and data | Materials and the registries, `golem-nbt`, item meta, enchantments, persistent data with the Mixins of [9.11](#911-persistent-data-containers) | `22_api_items` and the corpus, with the keys on a copy of the live world | 1 | 8 to 10 |
-| 9 | Inventories | Inventories, views, custom inventories and menus, merchants, the preconditions of writes | `23_api_inventories` and the corpus | 8 | 6 to 8 |
-| 10 | Commands and permissions | Commands with the order of vanilla names, tab completion with the futures of process plugins, the senders that are no entity of 8.1, permissions with attachments and defaults, the command tree sent again on every change of 9.9, the PermissionAPI handler, help | `24_api_commands` and `06_permissions` extended | 5 | 5 to 6 |
-| 11 | Events of the classes F, P and G | About 115 events with their hooks, frames and setters, the chat future and the chains of `golem-net` of 7.6 among them | `18_api_hooks`, `13_api_events` and the corpus | 4, 6 to 9 | 17 to 22 |
-| 12 | Events of the class M | About 137 events with their Mixins | The same | 4, 6 to 9 | 41 to 55 |
-| 13 | Display | Scoreboards per player, boss bars, chat components, plugin messaging, titles, the player list | `25_api_display` | 6 | 7 to 9 |
-| 14 | Content | Maps and their renderers, recipes added at once with the table that adds them again after a reload, loot tables, advancements, structures, bans, profiles, statistics | `26_api_content` | 7, 8 | 8 to 10 |
-| 15 | World creation | Worlds made at run time, generators, biome providers | `27_api_worldgen` | 7 | 8 to 12 |
-| 16 | The seam of the Bukkit layer | `Host.call`, the subscribers of the layer in the chain, the error of the `AsyncCatcher`, the generated Java of the layer from the mapping, for the page of the layer to build on | `28_api_layer` | 1, 4 | 2 to 3 |
-| 17 | Process plugins | The socket pair on fd 3, spawn and restart, observation, commands answered later, completion through the future | `19_api_process` | 3 | 3 to 4 |
-| 18 | The conversion kit | The guide of the rules of [8.4](#84-member-names), a cookbook of Bukkit idioms, `api slice` and `api propose`, the corpus grown with every area | `16_api_corpus` | 1 | 3 to 4 |
+| Part | Delivers | Proven by | Needs |
+| --- | --- | --- | --- |
+| The first measurements | The builder and the boot of Aosabi on a generated skeleton of the whole entity tree, with the time of the build, the size of the glue, the growth of the binary and the memory of the booted schema. A stub with the out buffer and a frame on the test server, which measures a JNI call through the safe calls of the `jni` crate and with a cached method id, and one canonical operation through the `Service`, which measures a call of the client, each at opt-level `z` and 3. A document nested in a handler and a panic unwound through the executor, with the stack that each level of nesting uses. The hand over of `on_execute` with the wake source on Linux and on macOS, and `graphql-over-graphtp` served on a macOS test host through the stream adapter of 4.5 with the JVM running, never on the Mac mini while it serves. The mount of a schema part through the generated copy. One Mixin of Golem booted beside the full pack | The first cells of `20_api_contract`, `21_api_schema` and `28_api_hooks` | Nothing |
+| The shared base | Everything that [section 21](#21-what-the-shared-base-builds) lists: the mapping and its generators, the generated contract, `golem-game`, `golem-model`, the client, the coverage tool with its lock, the frames and a first dispatcher, the tick snapshot with the `tick` native that reads its records in one JNI call, the thread classes `level` and `global`, a first runtime, the vertical slice, the first game interface on the contract | `20_api_contract`, `21_api_schema`, `22_api_coverage`, the first cells of `23_api_events`, `24_api_smoke` and `26_api_corpus`, and `04_plugins`, `05_bridge_build` and `07_forge_boot` unchanged | The first measurements |
+| Remote clients | `golem-remote`: GraphTP on the Unix socket and on the socket pair, with the stream adapter of 4.5 on macOS, HTTP on loopback, tokens with `golem token create`, groups, the nodes of the coordinates, the limits and buckets, the cost estimate, the answer size, the refusal of chunk loads and the deadline per operation of 13.4, `SERVER_BUSY`, the audit log, the preconditions, the remote streams that close with `EVENTS_LOST` and the count, the carrier policies, the API slot and the serve point, the settings of `config/golem.toml` under `remote`, and last the browser login of 13.2 | `25_api_remote` | The shared base. On macOS the stream adapter stands in for A6 and a token for A8 until they land |
+| The event core | The whole dispatcher: chains per handler list with class filters, priorities, `ignoreCancelled`, `MONITOR` read only, nesting to 16, the chains of `golem-chat` and `golem-net`, the wanted mask, filters, interest tables, subject sets, rate classes, `call<Event>`, the events of ports, the copies for remote subscribers | `23_api_events` | The shared base |
+| The plugin runtime | The lifecycle with the native `serverAboutToStart` and the steps of 11.2, `plugin.toml`, the order, the ledger, a disable that never waits on the server thread, `Game` and `AsyncGame`, the hops with `on_level` and `on_global`, the snapshots per level, `PluginLock` with its lint and the lock of a plugin of 7.10, budgets per coordinate, the deadline, the watchdog, the degrade mode, the quarantine, the scheduler, services, the configuration library, metadata, conversations, the logger, `/golem status`, `/golem plugin enable` and `disable`, `config/golem.toml` with the settings of 11.4, the shim of the first game interface | `04_plugins` extended and `27_plugin_lifecycle` | The shared base |
+| Entities | The 171 interfaces with their 1,147 methods, `World.entitiesOf`, spawning, attributes, potion effects, the types of modded entities, the records | `30_api_entities` and the corpus | The shared base and the event core |
+| Worlds and blocks | Worlds, chunks, blocks, block data, block states, ray traces, explosions, sounds, particles, the world border, game rules, the world names and `uid.dat` of 8.1 | `31_api_worlds` and the corpus, the names on a copy of the live world | The shared base, the event core, and the usage audit, a prerequisite, for the names |
+| Items and data | Materials and the registries, `golem-nbt`, item meta, enchantments, persistent data with the Mixins of [9.11](#911-persistent-data-containers) | `32_api_items` and the corpus, with the keys on a copy of the live world | The shared base |
+| Inventories | Inventories, views, custom inventories and menus, merchants, the preconditions of writes | `33_api_inventories` and the corpus | Items and data |
+| Commands and permissions | Commands with the order of vanilla names, tab completion with the futures of process plugins, the senders that are no entity of 8.1, permissions with attachments and defaults, the command tree sent again on every change of 9.9, the PermissionAPI handler, help | `34_api_commands` and `06_permissions` extended | The plugin runtime |
+| Events of the classes F, P and G | About 115 events with their hooks, frames and setters, the chat future and the chains of `golem-net` of 7.6 among them | `28_api_hooks`, `23_api_events` and the corpus | The event core, entities, worlds and blocks, items and data, inventories |
+| Events of the class M | About 137 events with their Mixins | The same | The same |
+| Display | Scoreboards per player, boss bars, chat components, plugin messaging, titles, the player list | `35_api_display` | Entities |
+| Content | Maps and their renderers, recipes added at once with the table that adds them again after a reload, loot tables, advancements, structures, bans, profiles, statistics | `36_api_content` | Worlds and blocks, items and data |
+| World creation | Worlds made at run time, generators, biome providers | `37_api_worldgen` | Worlds and blocks |
+| The seam of the Bukkit layer | `Host.call`, the subscribers of the layer in the chain, the error of the `AsyncCatcher`, the generated Java of the layer from the mapping, for the page of the layer to build on | `38_api_layer` | The shared base and the event core |
+| Process plugins | The socket pair on stdin, spawn and restart, observation, commands answered later, completion through the future | `29_api_process` | Remote clients |
+| The conversion kit | The guide of the rules of [8.4](#84-member-names), a cookbook of Bukkit idioms, `api slice` and `api propose`, the corpus grown with every part | `26_api_corpus` | The shared base |
 
-The sum is 168 to 220 weeks of Golem work and 7 to 12 weeks in Aosabi, about 19 to 25 months with
-the two engineers of [Plan](plan.md#work-plan), and less once more engineers take areas of the fan
-out. That is far more than the 28 to 40 weeks the plan gives Golem without the native code, because
-every member of Bukkit gets its coordinate, its Java and its proof, and about 250 events get hooks
-in a game that 265 mods patch.
+Every member of Bukkit gets its coordinate, its Java and its proof, and about 250 events get hooks
+in a game that the mods of the pack patch, so the API is far larger than the port of EssentialsX,
+and the parts that need only the shared base can be built side by side.
 
-The port of EssentialsX does not wait for all of it. After the areas 0, 1, 3, 4 and 5, about 34 to
-44 weeks, every area of the fan out builds the slice of EssentialsX first, which this page expects
-at 12 to 16 weeks, so the port runs against a real API after about 46 to 60 weeks of API work, about
-five to seven months with two engineers, while its commands on the first game interface go on from
-today. Area 3 needs no item of Aosabi on the Mac mini, since the stream adapter of 4.5 and a token
-stand in for A6 and A8 there.
+The port of EssentialsX does not wait for all of it. Every part builds the members of the slice of
+EssentialsX of [section 16](#16-the-essentialsx-port-and-the-first-game-interface) first, and the
+port moves onto the client once the shared base and those members stand, with the first dispatcher
+and the first runtime that the shared base holds. Until then its commands run on the first game
+interface. The remote clients need no item of Aosabi on the Mac mini, since the stream adapter of
+4.5 and a token stand in for A6 and A8 there.
 
-## 21. What the first area builds
+## 21. What the shared base builds
 
-The trunk builds every shared part once, so that each later area adds mapping entries, expressions,
-hand written functions, Mixins and corpus documents in files of its own and never waits for another
-area.
+The shared base builds every shared part once, so that each later part adds mapping entries,
+expressions, hand written functions, Mixins and corpus documents in files of its own and never waits
+for another part.
 
 1. The mapping: the format of [API coverage](api-coverage.md) and its reader, `api inventory` from
    the pinned jar, the 1,247 skeleton files that the rules write from the inventory with the members
    to decide listed, `api/names.toml` with the rules of [8.3](#83-type-names) and the refusal of any
-   clash, `api/golem-own.toml` with the first game interface.
+   clash, `api/golem-own.toml` with the first game interface, and the thread classes `level` and
+   `global` of [7.1](#71-the-threads-and-what-they-may-do) in every entry.
 2. The contract: `api gen` for `bridge/contract/*.toml`, `contract gen` with its six outputs,
    `golem-game` with the ids, the server token, the safe views of the frame stack and of the out
    slots per depth, `Host.bindBuffers`, the hash and the `GetMethodID` check at `connect`, the
@@ -2400,41 +2435,42 @@ area.
    with `lib_items.rs`.
 5. The proof: `api coverage` with every check of [14.4](#144-the-checks-of-the-tool) and
    `api/coverage.lock` at the starting numbers, `api smoke`, the runner of the corpus and its first
-   documents, and the CI jobs of `12_api_coverage` and `16_api_corpus`, the second in the
-   notebooks job of CI.
+   documents, the prototypes of the counts under `tools/api/`, and the CI jobs of
+   `22_api_coverage` and `26_api_corpus`, the second in the notebooks job of CI.
 6. Events: the `[event]` tables, the generator of frames, and a dispatcher that runs one chain by
    priority with `ignoreCancelled` and a read only `MONITOR`.
 7. A first runtime: `Plugin::enable` with `subscribe` and `command`, and the shim of the first game
    interface over the client.
-8. The vertical slice, one of each kind through every layer, which every later area copies:
+8. The vertical slice, one of each kind through every layer, which every later part copies:
    `Entity.location` and `Player.allowFlight` with its setter from Java expressions,
    `Damageable.setHealth` from a hand written function, `World.name`, `Block.type`, `ItemStack` as a
    value through a first `golem-nbt`, `Inventory.item`, the event `playerMove` with `setTo` and the
-   cancel, one command with tab completion, one `lib` helper, one `key`, one `via` and one `none`,
-   each with its corpus document and its cell of `14_api_smoke`, and the first game interface moved
-   onto the contract.
+   cancel, the event `playerTeleport` with its Forge event, its Mixin, `setTo` and the cancel, one
+   command with tab completion, one `lib` helper, one `key`, one `via` and one `none`, each with its
+   corpus document and its cell of `24_api_smoke`, and the first game interface moved onto the
+   contract.
 
-Each later area owns the mapping files of its packages, which the key `area` of a file names and the
+Each later part owns the mapping files of its packages, which the key `area` of a file names and the
 table of [API coverage](api-coverage.md) section 2.1 assigns, the `[event]` tables in them, its
 modules of hand written coordinate functions, its Java classes and Mixins, the mirrors of
 [12.3](#123-the-rules-that-keep-it-there) that its hooks update, its corpus documents and its
 notebook. Generated files are written by the generators and never merged by hand, and
 `api/coverage.lock` is the one shared file, whose conflicts the tool resolves by running again. The
-numbers per area in the lock show each area its progress.
+numbers per value of `area` in the lock show each part its progress.
 
 ## 22. Decisions for the owner to confirm
 
-This page takes these decisions under the ruling that an agent answers its own blocking questions,
-for the owner to confirm or overrule on [Decisions](decisions.md).
+This page takes these decisions on its own, as the owner asked, for the owner to confirm or overrule
+on [Decisions](decisions.md).
 
 1. The client of section 5 is the schema spelled as Rust, generated from the SDL alone, and every
    method runs its canonical operation through the executor of Aosabi, as ruled. Two points go to
    the owner. First, a subscriber reads the frame of its event as the value its subscription
    delivers, with no operation, which this page reads as within the ruling, since the ruling names
-   the calls into the API. Second, should the gates show that one pass of the executor per call,
-   about 7 to 8 µs before A2, misses the budget of hot handlers, whether a method may call the
-   coordinate function that its resolver calls without the executor. This page does not do that
-   without such a ruling.
+   the calls into the API. Second, should the first measurements show that one pass of the executor
+   per call, about 7 to 8 µs before the prepared operation of A2, misses the budget of hot handlers,
+   whether a method may call the coordinate function that its resolver calls without the executor.
+   This page does not do that without such a ruling.
 2. The chat chain runs on a thread of Golem composed onto the chat future of Forge, after every
    listener of `ServerChatEvent`, so that no worker of world generation waits for a plugin.
 3. `inventory.json` enters the repository under the license of spigot-api with a `.license` file and
