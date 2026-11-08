@@ -5,7 +5,7 @@ type: Spec
 title: JVM host
 description: The JVM host of Golem as it is built, how golem-jvm reads the launch of a Forge server as the java launcher of JDK 17 reads it, the options Golem adds, the thread, the hooks, the stop path, the errors and where golem run finds the host jar.
 tags: [jvm, jni, launcher, forge, host, signals]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # JVM host
@@ -189,7 +189,10 @@ launcher does, with `RTLD_NOW | RTLD_GLOBAL`, and never unloads it, since thread
 outlive `DestroyJavaVM`. It creates the JVM with `JNI_VERSION_1_8` on a thread named `golem-jvm`,
 never on the main thread of the process, which macOS forbids for a JVM. The stack of the thread is
 8 MiB, or the size of the last `-Xss` when that is larger. The launcher gives its main thread the
-size of `-Xss`, or the default of the JVM, 1 MiB on Linux on x86_64 and 2040 KiB on aarch64.
+size of `-Xss`, or the default of the JVM, 1 MiB on Linux on x86_64 and 2040 KiB on aarch64. No run
+loop of AppKit runs on the main thread, so on macOS the server runs headless:
+`-Djava.awt.headless=true` comes from the options in `user_jvm_args.txt`, as the JVM array of
+`ServerMac.sh` sets it for Arclight, since golem adds no such option itself.
 
 On that thread `run` does what `JavaMain` of `java.c` does.
 
@@ -249,7 +252,8 @@ from the JVM too, and its default action would end the process without saving. S
 logs `[golem] SIGQUIT: printed the dump of every thread`. The thread attaches to the JVM under its
 own name, so the dump shows it as `golem-signals` and not as the `Thread-N` that the JNI gives a
 thread that attaches without a name. `jcmd` and `jstack` attach as under java, since HotSpot starts
-its attach listener at startup when `-Xrs` is set, with the socket `/tmp/.java_pid<pid>` on Linux.
+its attach listener at startup when `-Xrs` is set, with the socket `.java_pid<pid>` in `/tmp` on
+Linux and in the temporary folder of the user on macOS.
 
 Unlike java, golem cannot bring a removed socket back. A tool that finds the socket gone writes the
 trigger `.attach_pid<pid>` into the working directory of the process or into `/tmp` and sends

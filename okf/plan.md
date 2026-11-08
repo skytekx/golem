@@ -5,7 +5,7 @@ type: Plan
 title: Golem, the Rust hybrid server
 description: The plan for Golem as the owner set it on 2026-11-06, with the later rulings of that day: an Aosabi based Rust host that replaces Arclight, runs Forge 47.4.18 with every mod unchanged in an embedded JVM, adds a GraphQL API and ports EssentialsX, EssentialsXSpawn, LuckPerms and the Spigot world settings to Rust plugins.
 tags: [server, golem, arclight, aosabi, rust, graphql, plugins, performance]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Golem, the Rust hybrid server
@@ -15,11 +15,11 @@ the JVM inside itself and boots Minecraft 1.20.1 with Forge 47.4.18 and every mo
 unchanged. Around the game it adds a GraphQL API, a plugin runtime in Rust and native code for the
 hot paths of world generation. The Bukkit plugins the server uses today are ported to Golem plugins.
 
-Every duration on this page is an estimate that nobody measured. The owner changed some rulings
-later on 2026-11-06, and this page carries them: the license is the AGPL 3 only, a port of a
-plugin keeps the license of that plugin, the holder is Florian Kleber, the tree follows REUSE, and
-commits are Conventional Commits in the form of the kernel, signed off by the holder.
-[Decisions](decisions.md) lists each with its time, and [Index](index.md) says what is built.
+The owner changed some rulings later on 2026-11-06, and this page carries them: the license is
+the AGPL 3 only, a port of a plugin keeps the license of that plugin, the holder is Florian Kleber,
+the tree follows REUSE, and commits are Conventional Commits in the form of the kernel, signed off
+by the holder. [Decisions](decisions.md) lists each with its time, and [Index](index.md) says what
+is built.
 
 ## Owner requirements
 
@@ -135,8 +135,8 @@ rules as they are built.
   runs a changed Golem for players must offer those players its source. Under the GPL 2 or 3 the
   changes could stay private.
 - The AGPL 3 takes Apache-2.0 code, so Aosabi works as it is. Aosabi is MIT, but some of its files
-  are Apache-2.0, the code it takes from Pylon in `aosabi-core`, `aosabi-serve`, `aosabi-query` and
-  `aosabi-build` ([Aosabi
+  are Apache-2.0, the code in `aosabi-core`, `aosabi-serve`, `aosabi-query` and `aosabi-build` that
+  it takes from another project ([Aosabi
   licensing](https://github.com/netsnek/aosabi/blob/main/Documentation/licensing.md)), and its TLS
   stack uses `ring`, which is under Apache-2.0 and ISC terms. A license that is GPL 2 only could not
   take those parts.
@@ -384,9 +384,8 @@ The text below is the plan before those rulings.
 The Bukkit plugins in use are ported, so Golem needs no Bukkit layer for this server. A Bukkit layer
 stays an option for later. It has to be Java, because plugins are Java, and it would build Bukkit
 events only for event types that a plugin listens to and create the Bukkit wrapper objects only when
-a plugin asks for them. That is 6 to 12 months of work and only worth it if the owner wants other
-Bukkit plugins. The further ruling above replaces this paragraph: the layer is wanted, and every
-plugin must work through it.
+a plugin asks for them. It is only worth it if the owner wants other Bukkit plugins. The further
+ruling above replaces this paragraph: the layer is wanted, and every plugin must work through it.
 
 Dropping Bukkit is likely to pay off more through the mods it allows than through Arclight's own
 overhead. Arclight does not appear as a source in the worldgen profile of
@@ -416,9 +415,9 @@ Which admin commands operators really use is not known. The usage audit under
 | Warps | Commands `warp`, `warp.list`, admin `setwarp` and `delwarp` | Warps with an optional node per warp |
 | Messages | Commands `msg`, `mail`, `mail.send`, `ignore`, `me`, `helpop` | Private messages, reply, offline mail, an ignore list. Ops get `helpop` messages |
 | Info | Commands `list`, `seen`, `realname`, `motd`, `rules`, `help`, `ping`, `getpos`, `compass`, `depth` | Read only commands. The commands `motd` and `rules` read text files |
-| Status | Command `afk` | AFK flag with automatic AFK after idle time and a mark in the player list |
+| Status | Command `afk` | AFK flag set by hand, with the tag `[AFK]` in the list of players and no automatic AFK, as on the live server |
 | Other | Command `suicide` | Kills the player through the vanilla damage source so mods see a normal death |
-| Economy | Commands `balance`, `balancetop`, `pay`, `worth`, admin `eco` | Accounts per player with the values of `worth.yml`, exposed through the GraphQL API |
+| Economy | Commands `balance`, `balancetop`, `pay`, `worth`, admin `eco` | Accounts per player in whole cents with the values of `worth.yml`, ported only if the usage audit shows a player using them, else dropped with the balances migrated for the record |
 | Signs | Node `signs.use.*` | Only built if the sign audit finds Essentials signs in the world |
 | Admin | Command `gm` and its forms `gmc`, `gms`, `gma`, `gmsp`, and the others the audit finds | Thin wrappers over vanilla commands where vanilla has one |
 
@@ -437,7 +436,8 @@ leads to the world spawn of the Overworld.
 The port is `golem-permissions` with groups, inheritance, nodes with wildcards, values per player
 and a store in SQLite next to the world. It registers itself as the permission handler of Forge's
 PermissionAPI, so mods that ask Forge for permissions see the same groups. Operators change groups
-in game with `/perm`, over the GraphQL API, or during the switch over RCON.
+with `/lp` and its alias `/perm`, in game, on the console and over RCON, and over the GraphQL API
+once it exists.
 
 ### Telemetry
 
@@ -512,14 +512,17 @@ The scan shows that no Forge patch, no Arclight patch and no mod touches `Simple
   reads world state from patched classes all the time, so it may not pay off.
 
 C2MEF, the Forge port of C2ME, spreads chunk work over several cores and stacks with the native
-code. It is tested in the measurement step. The expected gain of the native code is roughly 1.2 to
+code. It is measured with the native code. The expected gain of the native code is roughly 1.2 to
 1.6 times faster chunk generation per core. That number is a judgement, not a measurement.
 
 ## Verification
 
-- A comparison with the same world copy, the same pregen and 20 simulated players: Arclight as
-  today, plain Forge, plain Forge with Radium or Canary and ServerCore, and later Golem. Each run
-  records Spark profiles, GC logs, MSPT and chunks per second.
+- A comparison on the same world copy with the same pregen and a load of players: Arclight as
+  today against Golem before the switch, and plain Forge and plain Forge with Radium or Canary and
+  ServerCore after it. Each run records Spark profiles, GC logs, MSPT and chunks per second.
+  Whether the load comes from a bot client of 20 modded players or from a session of real players
+  on the LAN waits for a decision of the owner, since the client of the harness is a vanilla client
+  that the pack turns away.
 - Golden samples for the plugin port. Scenarios such as `tpa` with timeout, `back` after death,
   homes across dimensions, mail to an offline player and `pay` run on Arclight with EssentialsX and
   on Golem, and the resulting positions, messages and stored data must match.
@@ -532,23 +535,21 @@ code. It is tested in the measurement step. The expected gain of the native code
 
 ## Work plan
 
-Two engineers. Durations in weeks of one engineer.
+| Work | Content |
+|---|---|
+| Before the port | Load test setup, the baseline of Arclight for the comparison, command usage audit from the logs of the Mac mini, sign audit of the world |
+| JVM host | Golem boots unchanged Forge with the full mod set and the Halloween world, stop path, logs, crash recovery, launchd and systemd units |
+| Bridge mod | Events to Rust, action queue on the server thread, native method registration |
+| GraphQL API | Schema above, auth, server sent events, the Cloudflare Tunnel route |
+| Plugin runtime | Rust plugin trait, server thread calls with time budgets, config and SQLite store |
+| Permissions | Plugin `golem-permissions`, Forge PermissionAPI handler, LuckPerms import |
+| Essentials port | Plugin `golem-essentials` and the spawn commands, economy, migration tool, golden sample scenarios, the issues of [Quirks and security](#quirks-and-security) |
+| World settings | Plugin `golem-world` with activation range, tracking range and the other hooks |
+| Switch | Test copy run, migration on the Mac mini, launchers, docs in this wiki |
+| Native acceleration | Golden sample recorder, noise, density functions, region files |
 
-| Work | Content | Effort |
-|---|---|---|
-| Before the port | Load test setup, the four way comparison, command usage audit from the Mac mini logs, sign audit of the world | 2 to 3 |
-| JVM host | Golem boots unchanged Forge with the full mod set and the Halloween world, stop path, logs, crash recovery, launchd and systemd units | 3 to 4 |
-| Bridge mod | Events to Rust, action queue on the server thread, native method registration | 3 to 4 |
-| GraphQL API | Schema above, auth, server sent events, the Cloudflare Tunnel route | 3 to 5 |
-| Plugin runtime | Rust plugin trait, server thread calls with time budgets, config and SQLite store | 3 to 4 |
-| Permissions | Plugin `golem-permissions`, Forge PermissionAPI handler, LuckPerms import | 3 to 4 |
-| Essentials port | Plugin `golem-essentials` and the spawn commands, economy, migration tool, golden sample scenarios, the issues of [Quirks and security](#quirks-and-security) | 7 to 10 |
-| World settings | Plugin `golem-world` with activation range, tracking range and the other hooks | 2 to 3 |
-| Switch | Test copy run, migration on the Mac mini, launchers, docs in this wiki | 2 to 3 |
-| Native acceleration | Golden sample recorder, noise, density functions, region files | 20 to 32 |
-
-Golem without the native code is 28 to 40 weeks of work, about 4 to 5 months with two engineers. The
-native code runs in parallel and ends about 8 to 10 months after the start.
+The native code runs beside the rest of the work. [Features](features.md) lists every feature with
+its state.
 
 ### Before the port
 
@@ -556,7 +557,8 @@ native code runs in parallel and ends about 8 to 10 months after the start.
   operators really use.
 - Scan the world's region files for signs whose first line is an Essentials sign tag such as
   `[Buy]`, `[Sell]`, `[Warp]` or `[Balance]`.
-- Run the four way comparison above and record the numbers on
+- Measure Arclight on a copy of the live world as the baseline of the comparison under
+  [Verification](#verification) and record the numbers on
   [Performance](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/server/performance.md).
 
 ## Risks

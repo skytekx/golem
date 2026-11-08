@@ -8,12 +8,13 @@ replaces Arclight. Around the game it adds a plugin runtime in Rust, and it will
 built on [Aosabi](https://github.com/netsnek/aosabi) and native code for the hot paths of world
 generation.
 
-The first milestone is built. `golem run` boots the Forge server of a directory unchanged in its
-embedded JVM and stops it through the server thread on a signal. A Forge mod in `bridge/` reports
-the game to the natives of Golem, which hand it to the plugins in Rust, the first of them the
-command `golem` with the offer of the source. The permissions that replace LuckPerms are a crate
-with the seed of SkyTekx. The GraphQL API and the ports of EssentialsX come next. The
-[wiki](okf/index.md) holds the state and the design.
+`golem run` boots the Forge server of a directory unchanged in its embedded JVM and stops it
+through the server thread on a signal. A Forge mod in `bridge/` reports the game to the natives of
+Golem, which hand it to the plugins in Rust, the first of them the command `golem` with the offer
+of the source. The permissions that replace LuckPerms are a crate with the seed of SkyTekx. The
+ports of EssentialsX and EssentialsXSpawn on the plugin runtime, the switch of the SkyTekx server
+from Arclight to Golem and the GraphQL API are planned. The [wiki](okf/index.md) holds the state
+and the design, and [Features](okf/features.md) lists what is built and what is planned.
 
 ## License
 
@@ -30,8 +31,8 @@ and the work of others that NOTICE names.
 ## Tests
 
 Every test of Golem is a Jupyter notebook under [tests/notebooks/](tests/notebooks/), run by
-papermill through `tests/run.py`, as in Aosabi. [Documentation/testing.md](Documentation/testing.md)
-says how to run them and how to write one.
+papermill through `tests/run.py`. [Documentation/testing.md](Documentation/testing.md) says how to
+run them and how to write one.
 
 ## Contributing
 

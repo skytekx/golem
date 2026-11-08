@@ -25,10 +25,10 @@ Oldest first. Times are UTC.
   count, and the spike stopped it through the server thread and saw `DestroyJavaVM` return 0. A
   second spike proved that a Forge mod calls a native method of a class on the module path that the
   host registered. See [Bridge](bridge.md).
-- The Cargo workspace of the first milestone went in, with the crates `golem`, `golem-jvm`,
-  `golem-bridge`, `golem-plugin`, `golem-permissions` and `golem-devtool`.
-- Four agents built the parts of the first milestone in parallel, each in a work tree of its own,
-  and their commits went onto the branch one part after the other:
+- The Cargo workspace went in, with the crates `golem`, `golem-jvm`, `golem-bridge`, `golem-plugin`,
+  `golem-permissions` and `golem-devtool`.
+- Four agents built the first four parts of Golem in parallel, each in a work tree of its own, and
+  their commits went onto the branch one part after the other:
   - The JVM host: `golem-jvm` reads the argument files and the launch of a Forge server as the java
     launcher of JDK 17 does and runs it in a JVM on the thread `golem-jvm`, and `golem run` boots
     the server of a directory with `-Xrs` and the host jar. Notebook `03_launch_args`. See
@@ -57,9 +57,9 @@ Oldest first. Times are UTC.
   of `tests/fetch.py` and caches for cargo, the downloads and Gradle. The first green run took six
   minutes for the notebooks.
 - The issues [#1](https://github.com/skytekx/golem/issues/1) to
-  [#7](https://github.com/skytekx/golem/issues/7) record the quirks that the first milestone fixes:
+  [#7](https://github.com/skytekx/golem/issues/7) record the quirks that these four parts fix:
   three of the permissions, the stop path of Arclight and three of the java launcher.
-- An adversarial review of the merged milestone, six reviewers with a skeptic each, confirmed 20
+- An adversarial review of the merged parts, six reviewers with a skeptic each, confirmed 20
   findings and refuted 4. Each confirmed one is fixed with a notebook case where it had a behaviour:
   the lock of the handler, `SIGSEGV` and `SIGBUS` chained to the handler of Rust, `SIGQUIT` that
   ended the server, `SIGHUP` under nohup, the answers of plugin commands that `sendCommandFeedback`
@@ -277,3 +277,9 @@ Oldest first. Times are UTC.
   them the order in which the two branches of the bundle land, the crate of the ports of
   EssentialsX, how Golem takes Aosabi, the numbers of the new notebooks and how the levels tick at
   the switch.
+- The README, `HANDOVER.md`, [Plan](plan.md), [Open items](open-items.md) and
+  [Decisions](decisions.md) say what is built and what is planned in plain words, with no durations
+  and no order of work, and Plan names the comparison that the switch needs: Arclight against Golem
+  on one copy of the live world under the load of players, with the other comparisons after the
+  switch. [JVM host](jvm-host.md) says that the server runs headless on macOS and where the attach
+  socket stands there.

@@ -5,7 +5,7 @@ type: Backlog
 title: Open items
 description: What is still open on Golem, from the decisions that the owner has still to make to the parts not built yet and what remains open in the parts that are built.
 tags: [open-items, backlog, todo]
-timestamp: 2026-11-07
+timestamp: 2026-11-08
 ---
 
 # Open items
@@ -28,10 +28,10 @@ A number such as H03 names a finding of the bug hunt of 2026-11-06, see [Change 
   [Bukkit layer](bukkit-layer.md#13-decisions-for-the-owner).
 - Whether golem drops `-Xrs` and takes `SIGINT`, `SIGTERM` and `SIGHUP` through handlers of the JVM
   in the host jar, with a new native, so that HotSpot keeps `SIGQUIT` and creates an attach socket
-  that a cleaner of `/tmp` removed again, which goes against the plan, where Golem passes `-Xrs`
-  (H03). Until then a line of tmpfiles.d keeps the socket, see
-  [JVM host](jvm-host.md#the-stop-path), and golem could refresh the times of the socket, which
-  keeps it from a cleaner by age without that decision.
+  that a cleaner removed again, which goes against the plan, where Golem passes `-Xrs` (H03). Until
+  then a line of tmpfiles.d keeps the socket on Linux, see [JVM host](jvm-host.md#the-stop-path).
+  macOS has no tmpfiles.d and cleans the temporary folder of the user by age, so a touch of the
+  socket by golem once a day on every host is planned, which keeps it without that decision.
 - Whether a command of a mod that a plugin command names moves to `minecraft:<name>` as a command of
   the game does, as the bridge moves it and as Arclight wrapped the commands of the mods on the live
   server, while decision 6 of [Plugin API](api.md#22-decisions-for-the-owner-to-confirm) names the
@@ -65,9 +65,10 @@ Golem API.
 - The GraphQL API on Aosabi, which [Plugin API](api.md) designs, the Bukkit layer, which
   [Bukkit layer](bukkit-layer.md) surveys, the ports of EssentialsX, EssentialsXSpawn and the
   Spigot world settings, the migration tool and the native acceleration of world generation. See
-  [Plan](plan.md#work-plan).
-- The usage audit and the sign audit of the Mac mini, and the four way comparison of
-  [Plan](plan.md#before-the-port), which need the live server.
+  [Features](features.md).
+- The usage audit and the sign audit, which read copies of the logs and of the world of the Mac
+  mini, and the comparison of Arclight and Golem under [Plan](plan.md#verification), which needs a
+  copy of the live world.
 
 ## Open in what is built
 
@@ -107,15 +108,34 @@ Golem API.
   commit. A build outside the checkout of Golem names the commit unknown, and a build whose files
   differ from HEAD names `<hash>-dirty`, and `/golem source` gives the repository alone as the link
   of both.
-- The launcher on macOS, where the path of `libjvm.dylib` comes from reading the sources alone.
+- The launcher on macOS takes `lib/server/libjvm.dylib` of the Java home
+  (`crates/golem-jvm/src/lib.rs` 160 to 167), and no run of CI on macOS proves it yet, see
+  [Features](features.md#the-jvm-host-and-macos).
+- golem logs the line about a shutdown signal that the process started with ignored before its
+  banner (`crates/golem/src/main.rs` 492 to 504 and 604 to 610), so a launch under `nohup`, or by
+  any parent that ignores `SIGHUP`, fails the check of a clean boot in notebook 08, which expects
+  the banner first. The banner is planned as the first line on every host.
+- `tests/fetch.py` takes only the `.jar` files of `local-mods/` and fetches from
+  `cdn.modrinth.com` and `github.com` alone, while the master branch of the server repository
+  keeps a pointer file in `local-mods/` for a jar whose author allows it in a modpack but no repost
+  elsewhere, so a pack of master lacks that jar. Reading the pointer as the tool of the server
+  repository reads it is planned, with the size and the SHA-1 checked and the jar kept out of git
+  and out of every public artifact.
+- The pin of `tests/fetch.py` names a commit that lies on a side branch of the server repository
+  and not in the history of its master, and the fetch by hash fails once that branch goes. The pin
+  is planned to move to the pack commit of 3.1.4 on master, with a check that every later pin is
+  reachable from master.
+- The case of notebook 08 on the names of a refusal in NFC and NFD assumes Linux. git on macOS
+  precomposes the names of files, so the refusal names both in NFC there.
 - Notebook 08 compares the spawn, the datapacks and the folders of the dimensions of the worlds
   under java, golem and Arclight, not the chunks in them, so a change in the generation under
   golem would pass, see [Modpack](modpack.md#what-is-not-checked). A comparison of the content of
   chunks is open.
-- The repository of the server holds skytekx-compat 2.1.3 and marks Nostalgic Tweaks as required
-  on the server, while the live server runs 2.1.6 without Nostalgic Tweaks. Once the repository
-  holds the live pack, the pin of `tests/fetch.py` moves to it, see issue
-  [#102](https://github.com/skytekx/golem/issues/102).
+- The pack of the server repository keeps skytekx-compat 2.1.3, as the server repository records
+  it, while the live server runs 2.1.6, and its index still marks Nostalgic Tweaks as required on
+  the server, which the live server moved out of `mods/` by hand. A place for jars that the server
+  alone loads, which holds the compat of the server and the bridge jar, is planned in the server
+  repository, see issue [#102](https://github.com/skytekx/golem/issues/102).
 - The first call of `/golem player`, `/golem world` and `/golem teleport`, the tools of operators
   that ask the game through the JNI, goes over the default budget of 1 ms. A boot of stock Forge
   47.4.18 with the bridge under `golem run`, in the cloud container of the session on 2026-11-07,
@@ -140,11 +160,6 @@ Golem API.
   `git commit`, so `--cleanup=whitespace`, `--cleanup=verbatim` and `--no-verbose` on the command
   line count only through the configuration, and the hook may judge such a message otherwise than
   git stores it. The range lint of CI judges the message that git stored.
-- No run of CI holds the fixes of the bug hunt yet. It shows whether the notebooks job is green,
-  whether `11_toolchain` passes on the runner with the network and the disk that
-  [Testing](../Documentation/testing.md) names, and whether `08_modpack_boot` passes there with the
-  fixes of the bridge and of `tests/fetch.py`. No fixer could boot notebook 08 for lack of disk, and
-  it passed with all the fixes in the cloud container of the session on 2026-11-07, in 838 s.
 - No issue records a finding of the bug hunt yet, while #8 to #27 and #108 to #172 record those of
   the reviews before it. H28, the switches of EssentialsX in the group admin, and H35, the rank of a
   group without a weight, are quirks of the port of LuckPerms, which section 6 of CONTRIBUTING.md

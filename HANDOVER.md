@@ -42,9 +42,9 @@ These rules stand in `okf/decisions.md` and `CONTRIBUTING.md`. The ones an agent
 1. **Answer your own blocking questions** with the choice that fits the plan and the code best, and
    record each answer in the table Answers of the agents of `okf/decisions.md`. Ask the owner only
    what only the owner can decide, and keep working on the default meanwhile.
-2. **Two models on everything.** Every design is written and judged by Opus and by Fable, every
-   build is checked by the other model before it is merged, and an Opus judge settles the points
-   where they disagree. The owner wants every part correct and every quirk and bug found and
+2. **Two models on everything.** Every design is written and judged by two models, every build is
+   checked by the second model before it is merged, and the points where they disagree are settled
+   on their evidence. The owner wants every part correct and every quirk and bug found and
    recorded.
 3. **Record every quirk and every bug.** A quirk of the old server, Forge or Minecraft gets an open
    issue with the label `quirk` and the sections Old behaviour, Evidence, Golem and, where needed,
@@ -88,10 +88,10 @@ These rules stand in `okf/decisions.md` and `CONTRIBUTING.md`. The ones an agent
 
 ## 3. The unfinished work in `handover/`
 
-The last workflow wired the store and the permissions into `golem run` and closed the gaps of the
-bridge for the port of EssentialsX. It was stopped for this hand over before its notebooks ran and
-before the check of Fable. Its commits are kept in the git bundle `handover/port.bundle`, two
-branches on `5fe5a38`.
+The last work on Golem wired the store and the permissions into `golem run` and closed the gaps of
+the bridge for the port of EssentialsX. It stopped for this hand over before its notebooks ran and
+before the check of the second model. Its commits are kept in the git bundle
+`handover/port.bundle`, two branches on `5fe5a38`.
 
 | Branch in the bundle | Commits | State |
 | --- | --- | --- |
@@ -101,78 +101,46 @@ branches on `5fe5a38`.
 Take them with `git fetch handover/port.bundle port/wiring:port/wiring port/bridge:port/bridge`.
 Both branches start at `5fe5a38`. They conflict with each other in `Documentation/testing.md` and
 `crates/golem-devtool/src/bridge.rs`, so merge the second after the first. What is left of the
-bridge branch is items 4, 5 and 6 of
-`okf/plugins/essentials/bridge-needs.md` section What the comparison shows: the small queries, the
-quit position, chat to a subset of players and kill with a damage type, then the core plugin tools,
-notebook 07 and the pages. Then check both parts with Fable, settle with Opus, run all notebooks,
-push and record. The task of each part is written out in full in the section Next steps below.
+bridge branch is items 4, 5 and 6 of `okf/plugins/essentials/bridge-needs.md` section What the
+comparison shows: the small queries, the quit position, chat to a subset of players and kill with a
+damage type, then the core plugin tools, notebook 07 and the pages. Then the second model checks
+both parts, its findings are settled, all notebooks run, and the work is pushed and recorded. Each
+part is written out in the section What is planned below.
 
 ## 4. Aosabi
 
-Aosabi is `netsnek/aosabi`, the GraphQL framework that Golem builds its API on. The owner wants the
-next agent to patch it as Golem needs. Its work branch for this work is
-`claude/aosabi-license-setup-9185l4`. It equals `main` at `6e507dc` (release 0.1.0) and does not
-exist on GitHub yet. Golem has changed nothing in Aosabi so far.
+Aosabi is `netsnek/aosabi`, the GraphQL framework that the API of Golem is built on, a project of
+its own with its own rules and releases. Golem takes a tagged release of it and changes nothing in
+it. What the design of the API asks of the framework, and what Golem does until each item is met,
+stands in `okf/api.md` section 4.5 and in the section What Golem asks of Aosabi of
+`okf/features.md`. The switch of the live server from Arclight needs nothing of Aosabi.
 
-The design of the API asks eight items of Aosabi, each with a fallback that Golem uses until it
-lands. They are table A1 to A8 of `okf/api.md` section 4.5:
+## 5. The feature list
 
-| Item | What | Needed for |
-| --- | --- | --- |
-| A1 | An entry to link the generated copy of a plain crate into a host program and answer its `Service` without `serve_app` | The first area of the API, on the critical path |
-| A2 | The document table of milestone M12: run a persisted operation by its id on the thread of the caller | Every call of a plugin, which parses its text until then, about 7 to 8 µs |
-| A3 | One shared name for an input type used at several sites | A cleaner schema |
-| A4 | Custom scalars on the plain path (`UUID`, `Key`, `SNBT`, `Component`) | A cleaner schema |
-| A5 | A trait with supertraits read as an interface that implements its supertraits | The hierarchies of entities, blocks and items |
-| A6 | GraphTP on Unix sockets on macOS, with a kqueue reactor (`homa::unix` builds on Linux alone) | Remote clients on the Mac mini of the live server |
-| A7 | The Rust GraphTP client | Plugins in a process of their own |
-| A8 | The peer uid of a Unix socket on macOS | Local tools on the Mac mini |
+The feature list is `okf/features.md`, one row per feature with its source, its state and the
+notebook that holds it, kept current as features land. It gathers the parts of the API of
+`okf/api.md`, the parts of the Bukkit layer of `okf/bukkit-layer.md`, which make 498 of the 503
+surveyed plugins work, the specs of the port of EssentialsX, the plan, the open items and the open
+issues of `skytekx/golem`.
 
-The branch `claude/wasm-webgpu-rust-rewrite-8o2855` of Aosabi stands at `4361ee4`, six commits on
-`main` from another session of 2026-11-06. Despite its name its commits add an embedding entry:
-`aosabi::embed` and `aosabi_core::embed`, the macro `embed_output` with `take_artifacts` in a build
-script, the guide `Documentation/guides/embedding.md`, the fixtures `tests/fixtures/rs/embed-app`
-and `embed-host`, and the notebook `07_embed`. That is most of item A1. Judge it against A1, find
-out from its name, its changes of `roadmap/` and its changelog what more the branch was meant to
-hold, and build on it rather than beside it. The rules of Aosabi are its own CONTRIBUTING.md.
+## 6. What is planned
 
-## 5. The feature list the owner asks for
-
-The owner asks the next agent to write a feature list and implement it. Write it as a page of the
-wiki, with one row per feature, its source, its state and the notebook that will hold it, and keep
-it current as features land. Gather it from:
-
-- The work breakdown of the API, `okf/api.md` sections 20 and 21, and its decisions in section 22.
-- The order of work of the Bukkit layer, `okf/bukkit-layer.md`, 23 steps that make 500 of the 503
-  surveyed plugins work.
-- The commands, nodes, texts and quirk fixes of the spec of EssentialsX,
-  `okf/plugins/essentials/teleport.md`, `social.md` and `bridge-needs.md`.
-- The plan, `okf/plan.md`: the migration tool, the world settings of Spigot, the native code of
-  world generation and the comparison before the switch.
-- `okf/open-items.md` and the open issues of `skytekx/golem`.
-- The items A1 to A8 of Aosabi and whatever the branch `claude/wasm-webgpu-rust-rewrite-8o2855`
-  was meant to bring.
-
-## 6. Next steps, in the order that makes the live server switch soonest
-
-1. Finish the port foundations of section 3.
-   - **Wiring:** the store opens beside the world and closes on every stop path, plugins check
-     nodes for every kind of sender, the PermissionAPI answers as LuckPerms did through Arclight
-     until the owner rules on #105, and the commands of LuckPerms work in game and on the console.
-   - **Bridge:** items 1, 2, 4, 5 and 6 of the bridge needs.
-2. Port the teleport side of EssentialsX and EssentialsXSpawn after
-   `okf/plugins/essentials/teleport.md`: tpa and its kin, back, homes, warps, spawn. Use the
-   player matching that the spec asks for, exact name or UUID and never a substring, and the fixes
-   of its quirk issues, with the defaults of section 7 where the owner has not ruled.
-3. Port the social, info, status, economy and admin side after `social.md`: messages, mail, ignore,
-   AFK, suicide, balance, pay, worth, eco, gamemode, kick, ban.
-4. Finish the port of LuckPerms and write the migration tool from the data of EssentialsX and the
-   H2 database of LuckPerms on the Mac mini into the store, with the rules of `okf/plan.md` section
-   Data migration.
-5. Run area 0 of the API, the gates of `okf/api.md` section 20, which measure Aosabi as it is. Give
-   its notebooks numbers above 11 first: `okf/api.md` plans `10_api_contract` and `11_api_schema`,
-   which collide with `10_docs_lint` and `11_toolchain`.
-6. Land A1 and A2 in Aosabi, on top of the branch of section 4, then the trunk of the API, area 1.
+- The work of section 3, landed: the store opens beside the world and closes on every stop path,
+  plugins check nodes for every kind of sender, the PermissionAPI answers as LuckPerms did through
+  Arclight until the owner rules on #105, the commands of LuckPerms work in game and on the
+  console, and items 1, 2, 4, 5 and 6 of the bridge needs are met.
+- The port of the teleport side of EssentialsX and of EssentialsXSpawn after
+  `okf/plugins/essentials/teleport.md`: tpa and its kin, back, homes, warps, spawn, with the player
+  matching that the spec asks for, exact name or UUID and never a substring, and the fixes of its
+  quirk issues, with the defaults of section 7 where the owner has not ruled.
+- The port of the social, info, status, economy and admin side after `social.md`: messages, mail,
+  ignore, AFK, suicide, balance, pay, worth, eco, gamemode, kick, ban.
+- The migration tool from the data of EssentialsX and the export of LuckPerms into the store, with
+  the rules of `okf/plan.md` section Data migration.
+- Golem on the Mac mini under launchd, the comparison of Arclight and Golem on a copy of the live
+  world, and the switch.
+- The GraphQL API after `okf/api.md`, on a tagged release of Aosabi, with its notebooks numbered
+  20 to 38, since 10 and 11 exist and 12 to 19 hold the switch.
 
 ## 7. Decisions open with the owner, and the default in force
 
@@ -192,20 +160,20 @@ issue numbers are of `skytekx/golem`.
 | 9 | #31: dark red names of operators | Off, and never in stored data |
 | 10 | #96: help lists Bukkit commands alone | Help lists the Golem commands a player may use |
 | 11 | #97: suicide and then back | A death by suicide sets no back point |
-| 12 | `okf/api.md` 22.1: may a method of the client skip the executor if the gates show it is too slow | No, unless the owner allows it |
+| 12 | `okf/api.md` 22.1: may a method of the client skip the executor if the first measurements show it is too slow | No, unless the owner allows it |
 | 13 | `okf/api.md` 22.2 to 22.7 | As the page proposes |
 | 14 | Paper plugins and the Paper API in the Bukkit layer | Yes, after the work of Spigot |
 | 15 | Java 21 and 25 class files of plugins on the Java 17 of Forge 47 | Boot the pack on Java 21 first, else downgrade at load |
 | 16 | The injection of the permissible of LuckPerms early | No, LuckPerms is ported |
 | 17 | Golem's checks ask a Bukkit permission plugin that owns the decision | Yes |
-| 18 | #175: drop `-Xrs` so that jcmd attaches again | No, keep `-Xrs` with the rule of `tmpfiles.d` |
+| 18 | #175: drop `-Xrs` so that jcmd attaches again | No, keep `-Xrs`, with the line of `tmpfiles.d` on Linux, and a touch of the socket by golem once a day on every host once it is built, since macOS has no `tmpfiles.d` |
 | 19 | #186: a plugin command takes the name of a command of a mod | Yes, as for vanilla |
 | 20 | #206: a group without a weight ties with default | Keep, as documented |
 | 21 | #216: pin every package of the harness with hashes | Yes |
 | 22 | #217: CI runs twice on a branch with an open pull request | Keep |
 | 23 | #223: the commit lint holds the sign off to the holder | No |
 | 24 | #228: the width of a tab for the 100 columns of the Java of the bridge | 8, and rewrap the 65 lines |
-| 25 | #102: the server repository commits skytekx-compat 2.1.6 and drops Nostalgic Tweaks | The owner has to do it, the jar is on the Mac mini |
+| 25 | #102: skytekx-compat and Nostalgic Tweaks in the server repository | The pack keeps skytekx-compat 2.1.3, as the server repository records it, and a place for jars that the server alone loads takes the newer release. Whether Nostalgic Tweaks leaves the server stays with the owner |
 
 The owner also has to file the six private advisories of section 2, point 4. The issue tool strips
 the footer of Claude Code from the bodies of issues, and the owner ruled that it is not needed then.
@@ -217,8 +185,8 @@ the footer of Claude Code from the bodies of issues, and the owner ruled that it
   1.4 GiB. A pack fetched before `5fe5a38` must be fetched again, notebook 08 says so.
 - The harness of the notebooks is the Python of `tests/pyproject.toml`. Install it in a venv and
   run `python tests/run.py --only <id>`, or all of `tests/matrix.yaml`. A scratch copy of the matrix
-  can override the server port of a notebook. Notebook 08 runs about 15 minutes with four boots of
-  up to 7.5 GiB each, the CI job about 35 minutes in all.
+  can override the server port of a notebook. Notebook 08 runs about 19 minutes in the cloud
+  container, with four boots of up to 7.5 GiB each, the CI job about 35 minutes in all.
 - The cloud container has 4 CPUs and 16 GB, a small disk allowance and restarts without warning.
   Commit each finished piece at once, run one Minecraft server at a time, give parallel agents their
   own ports and worktrees, and delete scratch directories and build output you no longer need.
