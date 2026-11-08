@@ -283,3 +283,7 @@ Oldest first. Times are UTC.
   on one copy of the live world under the load of players, with the other comparisons after the
   switch. [JVM host](jvm-host.md) says that the server runs headless on macOS and where the attach
   socket stands there.
+- The owner ruled that the dress rehearsal runs on a fresh copy of the live server with an export of
+  LuckPerms, and that two or three players play on it on the LAN for an hour, since only players
+  make the load that the comparison of Arclight and Golem needs. [Decisions](decisions.md) records
+  the ruling, and [Features](features.md) and the verification of [Plan](plan.md) follow it.

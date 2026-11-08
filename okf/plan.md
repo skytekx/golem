@@ -517,12 +517,12 @@ code. It is measured with the native code. The expected gain of the native code 
 
 ## Verification
 
-- A comparison on the same world copy with the same pregen and a load of players: Arclight as
-  today against Golem before the switch, and plain Forge and plain Forge with Radium or Canary and
-  ServerCore after it. Each run records Spark profiles, GC logs, MSPT and chunks per second.
-  Whether the load comes from a bot client of 20 modded players or from a session of real players
-  on the LAN waits for a decision of the owner, since the client of the harness is a vanilla client
-  that the pack turns away.
+- A comparison on the same world copy with the same pregen and a load of players: Arclight as today
+  against Golem before the switch, and plain Forge and plain Forge with Radium or Canary and
+  ServerCore after it. Each run records Spark profiles, GC logs, MSPT and chunks per second. The
+  load comes from two or three players on the LAN, as the owner ruled on 2026-11-08 in
+  [Decisions](decisions.md), since the client of the harness is a vanilla client that the pack turns
+  away.
 - Golden samples for the plugin port. Scenarios such as `tpa` with timeout, `back` after death,
   homes across dimensions, mail to an offline player and `pay` run on Arclight with EssentialsX and
   on Golem, and the resulting positions, messages and stored data must match.
