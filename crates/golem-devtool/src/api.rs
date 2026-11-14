@@ -51,9 +51,10 @@
 //! server token, and with a token whose frame is closed.
 //!
 //! The steps of `api coordinate` are the functions of `golem_model::coordinate` by their
-//! paths, `entity::find` with a `uuid` and `player::allow_flight` with a `uuid`, an `id` and a
-//! `level`. A step answers `{"value": ...}`, or `{"error": "<code>", "message": "..."}` with
-//! the code of the error.
+//! paths, `entity::find` with a `uuid`, `player::allow_flight` with a `uuid`, an `id` and a
+//! `level`, and `server::bukkit_version`, which takes no token and so answers the same
+//! wherever it is asked. A step answers `{"value": ...}`, or `{"error": "<code>", "message":
+//! "..."}` with the code of the error.
 //!
 //! Both print the answers of the steps, `calls`, the count of the calls that the contract over
 //! `entities` answered, and `innerCalls`, that of the contract over `inner`.
@@ -202,6 +203,8 @@ enum Asked {
     Find(Uuid),
     /// The function `player::allow_flight`.
     AllowFlight(EntityRef),
+    /// The function `server::bukkit_version`.
+    BukkitVersion,
 }
 
 impl Asked {
@@ -214,6 +217,7 @@ impl Asked {
             (Layer::Contract, other) => Err(format!("the contract has no call {other}")),
             (Layer::Coordinate, "entity::find") => Ok(Self::Find(uuid_of(step.uuid.as_ref())?)),
             (Layer::Coordinate, "player::allow_flight") => Ok(Self::AllowFlight(entity_of(step)?)),
+            (Layer::Coordinate, "server::bukkit_version") => Ok(Self::BukkitVersion),
             (Layer::Coordinate, other) => {
                 Err(format!("golem-model has no coordinate function {other}"))
             }
@@ -250,6 +254,7 @@ impl Asked {
             Self::AllowFlight(player) => function(token, |server| {
                 Ok(json!(coordinate::player::allow_flight(server, player)?))
             }),
+            Self::BukkitVersion => answered(coordinate::server::bukkit_version().map(Value::from)),
         }
     }
 }

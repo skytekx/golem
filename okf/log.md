@@ -297,9 +297,9 @@ Oldest first. Times are UTC.
 
 - The first code of the [Plugin API](api.md) stands in the tree, below the schema and without a JVM.
   The crate `golem-game` holds the names `Uuid` and `EntityRef`, the server token with its frames
-  and one function per call of the contract. The crate `golem-model` holds the coordinate function
-  of `Player.allowFlight` and the lookup of an entity by its id. `bridge/contract/` holds the two
-  calls `entityFind` and `playerAllowFlight`, written by hand. A scripted contract answers in place
-  of the game, `golem-devtool contract call` and `golem-devtool api coordinate` drive it, and the
-  notebook `20_api_contract` holds the call to the page. No line of the bridge mod answers a call
-  yet.
+  and one function per call of the contract. The crate `golem-model` holds the coordinate functions
+  of `Player.allowFlight` and of `Server.bukkitVersion`, which answers on any thread, and the lookup
+  of an entity by its id. `bridge/contract/` holds the two calls `entityFind` and
+  `playerAllowFlight`, written by hand. A scripted contract answers in place of the game,
+  `golem-devtool contract call` and `golem-devtool api coordinate` drive it, and the notebook
+  `20_api_contract` holds the call to the page. No line of the bridge mod answers a call yet.

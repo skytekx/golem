@@ -66,6 +66,6 @@ entries:
 
   # One coordinate of the API below the schema: its call of the contract, the function of that call,
   # the server token with its frames and the coordinate function, against a scripted contract and
-  # without a JVM.
+  # without a JVM. And one coordinate of the thread class any, which answers on every thread.
   - notebook: 20_api_contract
     cell_timeout: 1800

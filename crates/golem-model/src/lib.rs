@@ -5,7 +5,7 @@
  *
  * A coordinate of the API has one function here that holds its meaning, so that every way into
  * the game runs the same code and two ways in cannot drift apart. A function of a coordinate
- * that lives in a level takes the server token.
+ * that lives in a level takes the server token, and one that is safe on any thread takes none.
  *
  * okf/api.md sections 1, 6 and 7 are the design of this crate. Today golem-devtool is the one
  * caller of these functions: no schema stands above them yet, and the program golem does not

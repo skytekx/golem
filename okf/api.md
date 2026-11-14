@@ -21,11 +21,11 @@ nothing else, as the owner ruled on 2026-11-06 ([Decisions](decisions.md)).
 This page is the one design that the two designs of 2026-11-06 settle into, each point where they
 differed ruled on its evidence. Its first lines are built, below the schema: the crates `golem-game`
 and `golem-model` hold the coordinate `Player.allowFlight` from its call of the contract to its
-coordinate function, in safe Rust, and a scripted contract answers in place of the game. No schema
-is built, and no call reaches a JVM. [Index](index.md) says what is built, and [the parts of the
-work](#20-the-parts-of-the-work) say what each part delivers and needs. Every measured number names
-the spike or the notebook, the machine and the day. [API coverage](api-coverage.md) holds the exact
-format of the mapping files.
+coordinate function and the coordinate `Server.bukkitVersion`, in safe Rust, and a scripted contract
+answers in place of the game. No schema is built, and no call reaches a JVM. [Index](index.md) says
+what is built, and [the parts of the work](#20-the-parts-of-the-work) say what each part delivers
+and needs. Every measured number names the spike or the notebook, the machine and the day. [API
+coverage](api-coverage.md) holds the exact format of the mapping files.
 
 ## 1. The design in short
 
