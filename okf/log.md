@@ -465,3 +465,10 @@ Oldest first. Times are UTC.
   of LuckPerms for a failed save, the plugin logs why, and the generations, the checks and the store
   stay where the last change that the store took left them. See
   [Plugins](plugins/index.md#permissions).
+- `07_forge_boot` runs the commands of LuckPerms in game. Olga, an operator of level 1 by
+  `ops.json`, uses a selector, since the PermissionAPI answers an operator a node that nothing
+  names, and runs no command of LuckPerms and no tool of operators. Tester, no operator and in the
+  group `admin`, makes a group with `golem.player` in game and puts Olga into it, after which the
+  tool answers Olga, and the stop by `SIGTERM` reads the group, its node and its member from the
+  file of the store. With it every case that the port of LuckPerms lacked is in. See
+  [Plugins](plugins/index.md#permissions).

@@ -58,7 +58,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
 | [The bridge](#the-bridge) | 2 | 4 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
-| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 5 | 0 | 2 | 0 | 0 | 0 | 5 | 5 | 0 | 0 | 17 |
+| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 6 | 0 | 2 | 0 | 0 | 0 | 4 | 5 | 0 | 0 | 17 |
 | [The store](#the-store) | 4 | 0 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
@@ -75,7 +75,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 17 | 4 | 12 | 74 | 23 | 25 | 134 | 31 | 6 | 52 | 378 |
+| All | 18 | 4 | 12 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 378 |
 
 ## The JVM host and macOS
 
@@ -153,7 +153,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Every sender checked for a node: the console holds every node, another source from level 2, a player through `golem-permissions` | Permissions (the check of a sender), issue #1 | Built | 04, 07 |
 | The PermissionAPI of Forge answers every Boolean node of a mod as LuckPerms answered it through Arclight | Plugins (permissions), Permissions (Arclight forwards every permission), issue #105 | Built | 04, 06, 07 |
 | The commands of LuckPerms 5.5.71: user, group, creategroup, deletegroup, listgroups and 15 subcommands, with `/perm` as an alias | Permissions (the commands of LuckPerms), Plan (LuckPerms 5.5.71) | Built | 04, 06, 07 |
-| The cases that the port of LuckPerms still lacks: `/lp` in game, the PermissionAPI for an operator and a node that nothing names and the bridge under `golem run` | Permissions, Store (the place in the program golem) | Open | 07 |
+| Every command of the port of LuckPerms held to a case with its node, the operator levels that the plugin keeps, a change that the store refuses, `/lp` in game and the PermissionAPI for an operator of level 1 and a node that nothing names | Permissions, Store (the place in the program golem) | Built | 04, 06, 07 |
 | The quirk of LuckPerms that `/lp deletegroup` leaves `group.<name>` on its members without `--update-parent-lists`, filed as an issue: the port removes the group from every group and player that names it | Permissions (the commands of LuckPerms), issue #231 | Built | 06 |
 | The quirk issue of `commands-allow-op`, the option of LuckPerms that the port does not have | Permissions (the commands of LuckPerms), a decision open with the owner | Held | 06 |
 | A group without a weight ties with `default`, kept and documented | Issue #206, commits e12b336 and d340aec | Part | 06 |
