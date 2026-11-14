@@ -303,3 +303,12 @@ Oldest first. Times are UTC.
   `playerAllowFlight`, written by hand. A scripted contract answers in place of the game,
   `golem-devtool contract call` and `golem-devtool api coordinate` drive it, and the notebook
   `20_api_contract` holds the call to the page. No line of the bridge mod answers a call yet.
+- golem logs its banner as the first line on every host. `golem run` installs the handlers of the
+  signals before the banner and starts the thread that takes them behind it, so the line about a
+  shutdown signal that the process started with ignored follows the banner, and a signal that
+  follows the banner never meets its default action. A signal that waits during the start is
+  taken by the main thread behind the banner, before the JVM is created, and ends golem there.
+  `07_forge_boot` holds the order on a boot
+  with `SIGHUP` ignored. Notebook 08 still holds the lines behind the banner to its list, so a run
+  of it under `nohup` waits for the notebook to take that line. See
+  [JVM host](jvm-host.md#golem-run) and [Open items](open-items.md#open-in-what-is-built).

@@ -31,8 +31,8 @@ Three of the columns work as follows.
   port/bridge" lives in the git bundle `handover/port.bundle` and not yet on a pushed branch. This
   page as the source marks a feature that no other page, issue or file names yet, and "a decision
   open with the owner" marks a feature whose default stands until the owner rules.
-- The column State holds one of ten values. A Built feature is on the pushed branch at `e4da1d2`, a
-  Handover feature on a branch of the bundle, and a Part feature built in part. A Specified feature
+- The column State holds one of ten values. A Built feature is on the branch `master`, a Handover
+  feature on a branch of the bundle, and a Part feature built in part. A Specified feature
   is written in a spec of a port or in [Store](store.md), a Designed one in [Plugin API](api.md),
   and a Surveyed one measured by the survey of [Bukkit layer](bukkit-layer.md). An Open feature has
   no page beyond this one. A Held feature waits for a decision of the owner, and the default of the
@@ -54,7 +54,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 
 | Area | Built | Handover | Part | Specified | Designed | Surveyed | Open | Held | None | Out | All |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [The JVM host and macOS](#the-jvm-host-and-macos) | 1 | 0 | 1 | 0 | 0 | 0 | 13 | 1 | 0 | 0 | 16 |
+| [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
 | [The bridge](#the-bridge) | 1 | 5 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 0 | 1 | 0 | 0 | 1 | 0 | 11 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 0 | 4 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
@@ -73,15 +73,15 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The Bukkit layer](#the-bukkit-layer) | 0 | 0 | 0 | 0 | 0 | 25 | 4 | 1 | 0 | 0 | 30 |
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
-| [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 15 | 0 | 1 | 0 | 20 |
-| All | 3 | 11 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 375 |
+| [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 21 |
+| All | 4 | 11 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 376 |
 
 ## The JVM host and macOS
 
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
 | The launch and the stop path: `golem run` boots Forge 47.4.18 unchanged in its embedded JVM as the java launcher reads `unix_args.txt` and stops it through the server thread, and the pull request that names the quirks #4 to #7 closes them | JVM host, issues #4, #5, #6, #7, commits 975ea85, cf5be98, 175ba9f, 3cd89bf, 4d59755 | Built | 03, 07 |
-| golem logs its banner as the first line on every host, before the line about a shutdown signal that the process started with ignored, so a launch under `nohup` passes the check of a clean boot | Golem crates/golem/src/main.rs 492 to 504 and 604 to 610, Modpack (what the notebook checks) | Open | 03, 08 |
+| golem logs its banner as the first line on every host, before the line about a shutdown signal that the process started with ignored, with the handlers of the signals installed before the banner | JVM host (golem run, the stop path), Modpack (what the notebook checks) | Built | 07, 08 |
 | The build of `golem` and `golem-devtool` for aarch64-apple-darwin on a macOS test host, with the path `lib/server/libjvm.dylib` of `JavaHome::libjvm` proven by a run | Open items (the launcher on macOS), crates/golem-jvm/src/lib.rs 160 to 167 | Open | 03, 17 |
 | A smoke run on a macOS test host: notebook 03 and one boot of stock Forge under `golem run`, every finding filed as an issue | This page | Open | 03, 07 |
 | Notebooks 04 to 09 on macOS: the `.so` builds of 05 and 06 as `.dylib`, the cells of 07 on the attach socket `/tmp/.java_pid`, and the reads of `/proc` in 08 and in the devtool | Notebooks 05, 06, 07, 08, crates/golem-devtool/src/store.rs | Open | 04 to 09, 17 |
@@ -556,6 +556,7 @@ of Golem until it lands.
 | The conflict of two proxies of rustup on `bin/cargo-fmt` reproduced or closed, with the step that installs the components before any cargo kept | Open items (two proxies of rustup) | Open | 11 |
 | The commit-msg hook judges the options of `git commit` as git stores the message, or the page says where it cannot | Open items (the commit-msg hook) | Open | 02 |
 | Notebook 08 tells a call over the budget on a loaded machine from a fault of a plugin | Open items (notebook 08 fails a boot) | Open | 08 |
+| Notebook 08 takes the line about a shutdown signal that the process started with ignored behind the banner, so a run of the notebook under `nohup` passes its check of a clean boot | Open items (notebook 08 holds the lines), JVM host (the stop path) | Open | 08 |
 | The harness reads the pointer files of `local-mods/` with the keys of the tool of the server repository, allows the host of each pointer for that file alone, checks the size and the SHA-1, records the SHA-512, and keeps the jar out of git and out of every artifact of CI | SRV tools/fetch_local_mods.py at master, Golem tests/fetch.py 117, 475 and 614 | Open | 08, 11 |
 | The pin of `tests/fetch.py` moved to the pack commit of 3.1.4 on master, `dc03fb4e6365`, with the counts of its pack in notebook 08, and a check that every later pin is reachable from master | Golem tests/fetch.py 110 to 111 and 354 to 372, SRV master | Open | 08 |
 | The case of notebook 08 on the names of a refusal compares both names after NFC and accepts either form, since git on macOS precomposes the names of files | Golem tests/fetch.py 381 to 388, notebook 08 | Open | 08 |

@@ -5,7 +5,7 @@ type: Backlog
 title: Open items
 description: What is still open on Golem, from the decisions that the owner has still to make to the parts not built yet and what remains open in the parts that are built.
 tags: [open-items, backlog, todo]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Open items
@@ -111,10 +111,10 @@ Golem API.
 - The launcher on macOS takes `lib/server/libjvm.dylib` of the Java home
   (`crates/golem-jvm/src/lib.rs` 160 to 167), and no run of CI on macOS proves it yet, see
   [Features](features.md#the-jvm-host-and-macos).
-- golem logs the line about a shutdown signal that the process started with ignored before its
-  banner (`crates/golem/src/main.rs` 492 to 504 and 604 to 610), so a launch under `nohup`, or by
-  any parent that ignores `SIGHUP`, fails the check of a clean boot in notebook 08, which expects
-  the banner first. The banner is planned as the first line on every host.
+- Notebook 08 holds the lines that golem logs behind its banner to its list of a clean boot, and
+  the line about a shutdown signal that the process started with ignored is none of them, so a
+  run of the notebook under `nohup`, or by any parent that ignores `SIGHUP`, still fails its
+  check of a clean boot, now behind the banner. The notebook is planned to take that line.
 - `tests/fetch.py` takes only the `.jar` files of `local-mods/` and fetches from
   `cdn.modrinth.com` and `github.com` alone, while the master branch of the server repository
   keeps a pointer file in `local-mods/` for a jar whose author allows it in a modpack but no repost

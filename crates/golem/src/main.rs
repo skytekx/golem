@@ -272,6 +272,15 @@ fn attach(vm: &jni::JavaVM) -> jni::errors::Result<jni::JNIEnv<'_>> {
     Ok(env)
 }
 
+/// Ends golem on a shutdown signal while no JVM runs. There is nothing to save, so golem exits at
+/// once with `status`, 128 plus the number of the signal, as the java launcher would end.
+fn exit_before_jvm(status: i32) -> ! {
+    log(format_args!(
+        "the JVM does not run yet, so golem exits with {status}"
+    ));
+    std::process::exit(status);
+}
+
 /// Ends the JVM as the java launcher does on a signal, with System.exit and the exit status
 /// 128 plus the number of the signal, so the shutdown hook of the server stops it and saves the
 /// worlds. Before the JVM exists there is nothing to save, and golem exits at once.
@@ -282,10 +291,7 @@ fn attach(vm: &jni::JavaVM) -> jni::errors::Result<jni::JNIEnv<'_>> {
 /// signal thread of the JVM does under java.
 fn exit_through_jvm(status: i32) {
     let Some(vm) = JVM.get() else {
-        log(format_args!(
-            "the JVM does not run yet, so golem exits with {status}"
-        ));
-        std::process::exit(status);
+        exit_before_jvm(status);
     };
     let spawned = std::thread::Builder::new()
         .name("golem-exit".to_owned())
@@ -471,7 +477,51 @@ enum Stop {
     Exiting,
 }
 
-/// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own.
+/// The watch of the signals between its two steps: the handlers stand, and the thread that takes
+/// the signals does not run yet.
+struct Watch {
+    /// The signals that arrive, which wait here until `watch_signals` takes them.
+    signals: signal_hook::iterator::Signals,
+    /// The names of the shutdown signals that the process started with ignored.
+    ignored: Vec<&'static str>,
+}
+
+/// Installs the handlers of SIGQUIT and of the shutdown signals SIGINT, SIGTERM and SIGHUP, and
+/// logs nothing, so golem run installs them before its banner and the banner stays its first
+/// line.
+///
+/// A shutdown signal that the process started with ignored stays ignored, as `HotSpot` leaves it,
+/// so a server under nohup keeps running on a hangup. A signal that arrives before
+/// [`watch_signals`] runs waits until that function takes it.
+fn install_signals() -> Result<Watch, String> {
+    use signal_hook::consts::{
+        SIGHUP,
+        SIGINT,
+        SIGQUIT,
+        SIGTERM, //
+    };
+
+    let mut watched = vec![SIGQUIT];
+    let mut ignored = Vec::new();
+    for signal in [SIGINT, SIGTERM, SIGHUP] {
+        if golem_jvm::signal_ignored(signal) {
+            ignored.push(signal_hook::low_level::signal_name(signal).unwrap_or("a signal"));
+        } else {
+            watched.push(signal);
+        }
+    }
+    let signals = signal_hook::iterator::Signals::new(watched)
+        .map_err(|error| format!("could not watch the signals: {error}"))?;
+    Ok(Watch { signals, ignored })
+}
+
+/// Turns SIGINT, SIGTERM and SIGHUP into the stop of an operator, on a thread of its own, once it
+/// logged which of them the process started with ignored. golem run calls it behind its banner,
+/// so no line about a signal stands before the banner.
+///
+/// A signal that came since [`install_signals`] is taken first, on the calling thread, before any
+/// JVM exists. A shutdown signal among them ends golem there with 128 plus its number, and a
+/// SIGQUIT finds no thread to dump.
 ///
 /// While the server ticks, the first signal queues save-all flush and stop, which the mod runs
 /// on the server thread at the end of the next tick. No tick drains the queue without the bridge,
@@ -481,29 +531,28 @@ enum Stop {
 /// the stop is on its way, since a second stop would only race it, and it logs how the first one
 /// goes. SIGQUIT prints the dump of every thread and stops nothing, as under java, also while the
 /// shutdown hooks run.
-fn watch_signals(actions: Actions) -> Result<(), String> {
-    use signal_hook::consts::{
-        SIGHUP,
-        SIGINT,
-        SIGQUIT,
-        SIGTERM, //
-    };
+fn watch_signals(watch: Watch, actions: Actions) -> Result<(), String> {
+    use signal_hook::consts::SIGQUIT;
 
-    // A shutdown signal that the process started with ignored stays ignored, as HotSpot leaves
-    // it, so a server under nohup keeps running on a hangup.
-    let mut watched = vec![SIGQUIT];
-    for signal in [SIGINT, SIGTERM, SIGHUP] {
-        if golem_jvm::signal_ignored(signal) {
-            let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
-            log(format_args!(
-                "{name} is ignored, as the process started with it ignored, so it does not stop the server"
-            ));
-        } else {
-            watched.push(signal);
-        }
+    for name in &watch.ignored {
+        log(format_args!(
+            "{name} is ignored, as the process started with it ignored, so it does not stop the server"
+        ));
     }
-    let mut signals = signal_hook::iterator::Signals::new(watched)
-        .map_err(|error| format!("could not watch the signals: {error}"))?;
+    let mut signals = watch.signals;
+    // A signal that came since the handlers stand has waited until here. The main thread takes it
+    // now, before a JVM exists, so no signal of the start meets a JVM that is being created.
+    for signal in signals.pending() {
+        if signal == SIGQUIT {
+            print_thread_dump();
+            continue;
+        }
+        let name = signal_hook::low_level::signal_name(signal).unwrap_or("a signal");
+        log(format_args!(
+            "{name}: came during the start, so golem starts no JVM"
+        ));
+        exit_before_jvm(128 + signal);
+    }
     std::thread::Builder::new()
         .name("golem-signals".to_owned())
         .spawn(move || {
@@ -602,13 +651,16 @@ fn run(arguments: &[OsString]) -> Result<ExitCode, String> {
     spec.arguments.extend(options.arguments);
 
     let actions = install_plugins(options.budget);
-    watch_signals(actions)?;
+    // The handlers of the signals stand before the banner, so a signal that follows the banner
+    // never meets its default action, and every line about a signal follows the banner.
+    let watch = install_signals()?;
     log(format_args!(
         "Golem {VERSION} at {COMMIT} runs {} of {} in the JVM of {}",
         spec.main_class,
         server.display(),
         java_home.0.display()
     ));
+    watch_signals(watch, actions)?;
     Ok(report(golem_jvm::run(&java_home, &spec, register)))
 }
 
