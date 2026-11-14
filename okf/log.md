@@ -5,7 +5,7 @@ type: Log
 title: Change log
 description: Chronological change log of Golem from the plan of 2026-11-06 on.
 tags: [log, history]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Change log
@@ -292,3 +292,14 @@ Oldest first. Times are UTC.
   [Open items](open-items.md), [Plugin API](api.md), [API coverage](api-coverage.md) and
   [Features](features.md) say `master` where they said `main` or named the old branch, and
   [Decisions](decisions.md) records the ruling.
+
+## 2026-11-15
+
+- The first code of the [Plugin API](api.md) stands in the tree, below the schema and without a JVM.
+  The crate `golem-game` holds the names `Uuid` and `EntityRef`, the server token with its frames
+  and one function per call of the contract. The crate `golem-model` holds the coordinate function
+  of `Player.allowFlight` and the lookup of an entity by its id. `bridge/contract/` holds the two
+  calls `entityFind` and `playerAllowFlight`, written by hand. A scripted contract answers in place
+  of the game, `golem-devtool contract call` and `golem-devtool api coordinate` drive it, and the
+  notebook `20_api_contract` holds the call to the page. No line of the bridge mod answers a call
+  yet.

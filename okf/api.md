@@ -5,7 +5,7 @@ type: Spec
 title: Plugin API
 description: The plugin API of Golem, one GraphQL schema on Aosabi that covers an equivalent of the whole Bukkit API of spigot-api 1.20.1, with native Rust plugins compiled into golem that reach it through the executor of Aosabi on the thread of the caller, the mapping that generates the schema, the contract and the client, the threads, the synchronous answer of cancellable events, remote clients, the coverage check and the parts of the work.
 tags: [api, graphql, aosabi, plugins, bukkit, events, coverage]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Plugin API
@@ -19,10 +19,13 @@ every Bukkit or Spigot plugin converts to a Golem plugin. Plugins are native Rus
 nothing else, as the owner ruled on 2026-11-06 ([Decisions](decisions.md)).
 
 This page is the one design that the two designs of 2026-11-06 settle into, each point where they
-differed ruled on its evidence. Nothing of it is built yet. [Index](index.md) says what is built,
-and [the parts of the work](#20-the-parts-of-the-work) say what each part delivers and needs. Every
-measured number names the spike or the notebook, the machine and the day. [API
-coverage](api-coverage.md) holds the exact format of the mapping files.
+differed ruled on its evidence. Its first lines are built, below the schema: the crates `golem-game`
+and `golem-model` hold the coordinate `Player.allowFlight` from its call of the contract to its
+coordinate function, in safe Rust, and a scripted contract answers in place of the game. No schema
+is built, and no call reaches a JVM. [Index](index.md) says what is built, and [the parts of the
+work](#20-the-parts-of-the-work) say what each part delivers and needs. Every measured number names
+the spike or the notebook, the machine and the day. [API coverage](api-coverage.md) holds the exact
+format of the mapping files.
 
 ## 1. The design in short
 
@@ -139,7 +142,7 @@ coverage](api-coverage.md) holds the exact format of the mapping files.
 | `golem-nbt` | Binary NBT and SNBT, for item meta, block states and persistent data | No | AGPL-3.0-only |
 | `golem-permissions` | As today, plus attachments, defaults and the API nodes | No | MIT, the port of LuckPerms |
 | `golem-store` | As today, plus the hashes of tokens and the audit log | No | AGPL-3.0-only |
-| `golem-devtool` | New subcommands `contract gen`, `api inventory`, `api propose`, `api gen`, `api client`, `api ops`, `api sdl`, `api coverage`, `api slice`, `api smoke` and `api lib` | No | AGPL-3.0-only |
+| `golem-devtool` | The subcommands `contract call` and `api coordinate`, which are built and run the calls of the contract and the coordinate functions against a scripted contract, and the new subcommands `contract gen`, `api inventory`, `api propose`, `api gen`, `api client`, `api ops`, `api sdl`, `api coverage`, `api slice`, `api smoke` and `api lib` | No | AGPL-3.0-only |
 
 The crates depend on each other in this order and no crate names one above it: `golem-jvm`,
 `golem-bridge`, `golem-game`, `golem-model`, `golem-events`, `golem-api`, `golem-client`,
@@ -506,6 +509,9 @@ doc = "Allows or forbids flight, and ends a flight in progress when it forbids i
 | The resolver | `crates/golem-api/src/entity/*.rs` | The field `allowFlight` of every object type that implements `Player` |
 | The client method | `crates/golem-client/src/entity/player.rs` | `fn allow_flight(&self, g: &Game<'_>) -> Result<bool>` of the trait `Player` |
 
+A call that fails, since the game threw or its answer did not read, answers a `JniFault` in the
+stub, which is the error `GAME_FAULT` of its coordinate.
+
 A member whose Java needs more than an expression names `read = "hand"` or `write = "hand"`, a
 method of `bridge/mod/.../game/<Area>Hand.java` that a person writes with the semantics of
 CraftBukkit, read and not copied, and the generator checks that it exists with the signature the
@@ -523,7 +529,8 @@ of the contract.
 primitive arguments and the layout of its answer in the out buffer, every record and every event
 with the layout of its frame. The files are checked in so that a reviewer sees the surface of the
 JNI, and CI writes them again and fails on a difference. `contract gen` reads them and writes the
-rest.
+rest. Until `api gen` is built, the two files that stand there, `entities.toml` and `players.toml`,
+are written by hand, with the calls `entityFind` and `playerAllowFlight`.
 
 | Output | Where | What it is |
 | --- | --- | --- |

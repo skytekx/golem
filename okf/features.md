@@ -5,7 +5,7 @@ type: Backlog
 title: Features
 description: Every feature of Golem, from the work of the hand over to the switch of the live server, the plugin API, the Bukkit layer, the native code and the items Golem asks of Aosabi, each with its source, its state and its notebook.
 tags: [features, backlog, golem]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Features
@@ -39,13 +39,13 @@ Three of the columns work as follows.
   decision stands meanwhile. A None row has nothing to build and says why. An Out feature lands in
   another repository, the server repository or Aosabi.
 - The column Notebook names the notebook that holds the row once it lands. The notebooks 01 to 11
-  exist, and 12 to 19 are new for the switch: `12_essentials_teleport`, `13_essentials_social`,
-  `14_essentials_economy`, `15_essentials_admin`, `16_migration`, `17_macos_host`,
-  `18_world_settings` and `19_switch_rehearsal`. The numbers 20 to 38 hold the API, from
-  `20_api_contract` to `38_api_layer`, as [Plugin API](api.md) section 20 names them. The numbers 40
-  to 44 hold the levels: `40_level_ticks`, `41_level_budgets`, `42_level_loops`, `43_level_handoff`
-  and `44_mod_state_audit`. The numbers 50 to 53 hold the native code and 60 to 64 the Bukkit layer.
-  A notebook of Aosabi carries the name of its repository.
+  and 20 exist, and 12 to 19 are new for the switch: `12_essentials_teleport`,
+  `13_essentials_social`, `14_essentials_economy`, `15_essentials_admin`, `16_migration`,
+  `17_macos_host`, `18_world_settings` and `19_switch_rehearsal`. The numbers 20 to 38 hold the API,
+  from `20_api_contract` to `38_api_layer`, as [Plugin API](api.md) section 20 names them. The
+  numbers 40 to 44 hold the levels: `40_level_ticks`, `41_level_budgets`, `42_level_loops`,
+  `43_level_handoff` and `44_mod_state_audit`. The numbers 50 to 53 hold the native code and 60 to
+  64 the Bukkit layer. A notebook of Aosabi carries the name of its repository.
 
 Every open issue of `skytekx/golem` stands in the column Source of at least one row. Issue #36
 appears by its number alone. The closed issues record pushed fixes and need no row.
@@ -69,12 +69,12 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The audits, the comparison and the rehearsal](#the-audits-the-comparison-and-the-rehearsal) | 0 | 0 | 0 | 0 | 0 | 0 | 17 | 1 | 0 | 0 | 18 |
 | [The world parity](#the-world-parity) | 0 | 0 | 0 | 0 | 0 | 0 | 17 | 2 | 0 | 0 | 19 |
 | [The levels](#the-levels) | 0 | 0 | 0 | 0 | 0 | 0 | 16 | 2 | 0 | 0 | 18 |
-| [The GraphQL API of Golem](#the-graphql-api-of-golem) | 0 | 0 | 0 | 0 | 20 | 0 | 8 | 1 | 0 | 1 | 30 |
+| [The GraphQL API of Golem](#the-graphql-api-of-golem) | 0 | 0 | 1 | 0 | 19 | 0 | 8 | 1 | 0 | 1 | 30 |
 | [The Bukkit layer](#the-bukkit-layer) | 0 | 0 | 0 | 0 | 0 | 25 | 4 | 1 | 0 | 0 | 30 |
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 15 | 0 | 1 | 0 | 20 |
-| All | 3 | 11 | 11 | 74 | 24 | 25 | 139 | 30 | 6 | 52 | 375 |
+| All | 3 | 11 | 12 | 74 | 23 | 25 | 139 | 30 | 6 | 52 | 375 |
 
 ## The JVM host and macOS
 
@@ -415,7 +415,7 @@ own, which stays on a test server until it keeps the pace of the protected level
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
 | The first measurements: the builder on a generated skeleton of the whole entity tree, a stub with the out buffer and a frame, one canonical operation through the `Service`, a document nested in a handler and a panic unwound through the executor, the hand over of `on_execute` with a wake source on Linux and macOS, GraphTP through the stream adapter with the JVM running on a macOS test host, the mount of a part, one Mixin beside the mods, and the first call measured beside the steady one | API 20 | Designed | 20_api_contract, 21_api_schema, 28_api_hooks |
-| The shared base: the mapping and its generators, the contract, `golem-game`, `golem-model`, `golem-api` over the embedding or its fallback, `api client` and `g.run`, the coverage lock, a first dispatcher and runtime, and the vertical slice | API 20 and 21 | Designed | 20, 21, 22_api_coverage, 23_api_events, 24_api_smoke, 26_api_corpus |
+| The shared base: the mapping and its generators, the contract, `golem-game`, `golem-model`, `golem-api` over the embedding or its fallback, `api client` and `g.run`, the coverage lock, a first dispatcher and runtime, and the vertical slice | API 20 and 21 | Part | 20, 21, 22_api_coverage, 23_api_events, 24_api_smoke, 26_api_corpus |
 | The items that Golem asks of Aosabi, held by the rows of [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | API 20 and 4.5 | Out | Aosabi |
 | The remote clients: GraphTP on the Unix socket and the socket pair, HTTP on loopback, tokens, groups, the OpenID Connect login, nodes, limits, buckets, cost, answer size, no chunk load, the deadline, `SERVER_BUSY`, the audit log, streams and the serve point | API 13 and 20 | Designed | 25_api_remote |
 | The event core: chains, priorities, `ignoreCancelled`, `MONITOR`, nesting to 16, `golem-chat` and `golem-net`, masks, filters, interest tables, rates, `call<Event>`, the events of ports and remote copies | API 10 and 20 | Designed | 23_api_events |

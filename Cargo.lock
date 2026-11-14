@@ -103,7 +103,9 @@ name = "golem-devtool"
 version = "0.1.0"
 dependencies = [
  "golem-bridge",
+ "golem-game",
  "golem-jvm",
+ "golem-model",
  "golem-permissions",
  "golem-plugin",
  "golem-store",
@@ -120,6 +122,10 @@ name = "golem-essentials-spawn"
 version = "0.1.0"
 
 [[package]]
+name = "golem-game"
+version = "0.1.0"
+
+[[package]]
 name = "golem-jvm"
 version = "0.1.0"
 dependencies = [
@@ -127,6 +133,13 @@ dependencies = [
  "jni-sys 0.3.1",
  "libc",
  "libloading",
+]
+
+[[package]]
+name = "golem-model"
+version = "0.1.0"
+dependencies = [
+ "golem-game",
 ]
 
 [[package]]

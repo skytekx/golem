@@ -21,7 +21,9 @@ repository = "https://github.com/skytekx/golem"
 
 [workspace.dependencies]
 golem-bridge = { path = "crates/golem-bridge" }
+golem-game = { path = "crates/golem-game" }
 golem-jvm = { path = "crates/golem-jvm" }
+golem-model = { path = "crates/golem-model" }
 golem-permissions = { path = "crates/golem-permissions" }
 golem-plugin = { path = "crates/golem-plugin" }
 golem-store = { path = "crates/golem-store" }

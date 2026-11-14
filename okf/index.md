@@ -5,7 +5,7 @@ type: Project
 title: Golem
 description: Knowledge base of Golem, the Rust hybrid server of SkyTekx, with its state, the parts that are built and a map of every page.
 tags: [golem, server, rust, forge, overview]
-timestamp: 2026-11-08
+timestamp: 2026-11-15
 ---
 
 # Golem
@@ -18,7 +18,7 @@ the SkyTekx 3 server and its modpack stay in the
 [wiki of the server](https://github.com/skytekx/skytekx3-1201-server/blob/master/okf/index.md), but
 for [Modpack](modpack.md), which answers whether Golem runs that pack.
 
-## State on 2026-11-08
+## State on 2026-11-15
 
 | Area | State | Details |
 | --- | --- | --- |
@@ -31,7 +31,7 @@ for [Modpack](modpack.md), which answers whether Golem runs that pack.
 | Permissions | Built as the crate `golem-permissions` with the seed of SkyTekx, held by `06_permissions`. The store holds the groups, nodes and players and hands them to the crate as the same TOML, held by `09_store`. No plugin answers the PermissionAPI with them yet, and `golem run` loads neither | [Permissions](plugins/permissions.md) |
 | Store | Built: `golem-store` keeps the data of the plugins in one SQLite file, answers the server thread from its cache and writes on a thread of its own, held by `09_store`. `golem run` does not open it yet | [Store](store.md) |
 | Modpack | Checked: `golem run` boots the 289 mods of the pack of the live server as java does and opens the world that Arclight wrote, held by `08_modpack_boot` | [Modpack](modpack.md) |
-| Plugin API | Designed, not built: GraphQL on Aosabi, called in process through the executor, an equivalent of the whole Bukkit API that a coverage check holds to `spigot-api` 1.20.1 | [Plugin API](api.md), [API coverage](api-coverage.md) |
+| Plugin API | Designed, and its first lines built: GraphQL on Aosabi, called in process through the executor, an equivalent of the whole Bukkit API that a coverage check holds to `spigot-api` 1.20.1. Built below the schema are the crates `golem-game` and `golem-model`, with the coordinate `Player.allowFlight` from its call of the contract to its coordinate function and a scripted contract in place of the game, held by `20_api_contract`. No schema is built, and no call reaches a JVM | [Plugin API](api.md), [API coverage](api-coverage.md) |
 | Bukkit layer | Surveyed, not built: a survey of 503 plugins measures the three levels of the layer that runs Bukkit and Spigot plugins unchanged on the Golem API | [Bukkit layer](bukkit-layer.md) |
 | Next | The work of the hand over merged from its bundle, the foundation and the ports of EssentialsX, EssentialsXSpawn and LuckPerms, Golem on macOS and the switch of the live server. The feature list holds 375 rows and marks each feature whose decision is open with the owner, and Open items names the open decisions | [Features](features.md), [Open items](open-items.md) |
 

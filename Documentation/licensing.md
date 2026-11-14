@@ -175,9 +175,9 @@ copyright line for each holder of the upstream beside the one of Florian Kleber,
 Its `Cargo.toml` states the license itself instead of the one of the workspace, and
 [NOTICE](../NOTICE) has a section on its upstream with the notice its license asks to keep. Since
 a port stays under the license of its upstream, it may translate the code, the messages and the
-texts of that upstream into Golem. The code of Golem itself, the crates `golem`, `golem-jvm`,
-`golem-bridge`, `golem-plugin`, `golem-store` and `golem-devtool` and the bridge mod, takes no code
-of an upstream and stays under the AGPL 3 only.
+texts of that upstream into Golem. The code of Golem itself, the crates `golem`,
+`golem-jvm`, `golem-bridge`, `golem-game`, `golem-model`, `golem-plugin`, `golem-store` and
+`golem-devtool` and the bridge mod, takes no code of an upstream and stays under the AGPL 3 only.
 
 The GPL 3 and the AGPL 3 each allow, in their section 13, to combine a work under one with a work
 under the other into one program, and the MIT license combines with both. The program `golem`

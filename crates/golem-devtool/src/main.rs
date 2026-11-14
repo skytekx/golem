@@ -11,6 +11,7 @@
 
 //! The primitives of the Golem crates for the notebooks.
 
+mod api;
 mod bridge;
 mod game;
 mod jvm;
@@ -32,6 +33,8 @@ const SUBCOMMANDS: &[Subcommand] = &[
     bridge::TICK_STATS,
     bridge::NATIVES,
     game::GAME_WIRE,
+    api::CONTRACT,
+    api::API,
     store::SCRIPT,
     store::DESCRIBE,
     store::BENCH,

@@ -17,7 +17,9 @@ publish = false
 
 [dependencies]
 golem-bridge.workspace = true
+golem-game = { workspace = true, features = ["testing"] }
 golem-jvm.workspace = true
+golem-model.workspace = true
 golem-permissions.workspace = true
 golem-plugin.workspace = true
 golem-store = { workspace = true, features = ["testing"] }

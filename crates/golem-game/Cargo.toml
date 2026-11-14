@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The game as Rust names it: the ids of its objects, the server token, the calls of the contract
+# with the bridge mod and, behind a feature, a contract that answers from a script.
+
+[package]
+name = "golem-game"
+description = "The ids of the game, the server token and the calls of the contract with the bridge mod."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+
+[features]
+# The scripted contract, which answers the calls from a list of entities in place of the game, so
+# that a notebook judges the calls without a JVM. golem-devtool turns it on.
+testing = []
+
+[lints]
+workspace = true

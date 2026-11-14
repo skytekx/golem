@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The calls of the contract between Rust and the bridge mod that read and change players. The
+# file is written by hand until the generator of okf/api.md section 6.2 writes it from the
+# mapping, and no line of the bridge mod answers a call yet.
+#
+# A call names the thread class it runs on, its arguments and its answer. The argument `entity`
+# stands for the runtime id, the level and the two longs of the UUID of an entity. An answer names
+# each of its values with its type. A call that takes an entity may miss, when the entity is gone
+# or is of another kind, and then it answers nothing.
+
+[calls.playerAllowFlight]
+thread = "level"
+arguments = ["entity"]
+answer = ["allowFlight: boolean"]

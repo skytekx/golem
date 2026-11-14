@@ -63,3 +63,9 @@ entries:
   # rust-toolchain.toml with its components first, which a rustup home of the notebook holds.
   - notebook: 11_toolchain
     cell_timeout: 1200
+
+  # One coordinate of the API below the schema: its call of the contract, the function of that call,
+  # the server token with its frames and the coordinate function, against a scripted contract and
+  # without a JVM.
+  - notebook: 20_api_contract
+    cell_timeout: 1800

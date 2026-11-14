@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
+#
+# The meaning of the coordinates of the API of Golem: one function per coordinate, which the
+# schema and the client of plugins both reach, so that no state of the game exists twice.
+
+[package]
+name = "golem-model"
+description = "One function per coordinate of the API of Golem, over the calls of the contract."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+golem-game.workspace = true
+
+[lints]
+workspace = true
