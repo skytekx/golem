@@ -312,6 +312,9 @@ Where the port differs from LuckPerms:
   then the command takes the UUID of a player who is offline.
 - `/lp` names `Running LuckPerms v5.5.71, as ported to Golem.`, and `permission check` names the
   processor `golem-permissions` and the reason of the decision as its cause.
+- The store takes a node and the name of a group of at most 256 bytes, see
+  [Store](../store.md#refusals). A command with a longer one answers its line and then the line
+  of LuckPerms for a failed save, the plugin logs why the store refused, and nothing changes.
 
 `golem-devtool permissions-command <script.json>` runs commands on a configuration with a sender
 and the players a server knows, and prints for each its lines, its changes, the configuration

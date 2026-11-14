@@ -457,3 +457,11 @@ Oldest first. Times are UTC.
   `deletegroup` of a group that a group inherits, two pages of the members of a group and the first
   steps of a server without permissions. See
   [Permissions](plugins/permissions.md#the-commands-of-luckperms).
+- `04_plugins` holds the operator levels that the plugin of the permissions keeps and a change that
+  the store refuses. A check beside the server thread answers an operator of level 1 as an operator,
+  knows a player from their join, takes a level that it did not hold on the twentieth tick, which
+  reads the players, and has no answer once a player left or the server stops. A command of the port
+  whose node or group name is longer than the 256 bytes of the store answers its line and the line
+  of LuckPerms for a failed save, the plugin logs why, and the generations, the checks and the store
+  stay where the last change that the store took left them. See
+  [Plugins](plugins/index.md#permissions).
