@@ -442,3 +442,18 @@ Oldest first. Times are UTC.
   `07_forge_boot` a selector and a tool of operators that follow a node which the console sets, with
   the change in the file of the store after a stop by `SIGTERM` and after a stop without the bridge.
   See [Plugins](plugins/index.md#permissions) and [Open items](open-items.md).
+- `06_permissions` holds every command of the port of LuckPerms to a case. The cases it lacked are
+  in: `setweight`, `parent set`, `parent clear`, `permission clear` and `clear` for a group and for
+  a player, with the configuration after each, the three pages of `permission info` of the group
+  `default` and the two of `listgroups` over ten groups, with a page that the list does not hold,
+  the aliases `g`, `t` and `i` in each of their places, a subcommand that the port does not know,
+  the kinds of a UUID of version 3, 2 and 1, the usage and the refusals of `creategroup` and
+  `deletegroup`, and the node of each of the 29 commands, which lets its command run alone and
+  refuses it when it alone is denied. The paths that those cases leave are in as well: a parent that
+  is removed, a parent as the node `group.<name>`, a denied parent, the check of a node of the
+  holder's own, of the results false and undefined and of a group, the usage of a group and of a
+  command behind too many words, a group name that the format refuses, an alias in upper case, the
+  commands that the port does not take, each under the command that holds it in LuckPerms,
+  `deletegroup` of a group that a group inherits, two pages of the members of a group and the first
+  steps of a server without permissions. See
+  [Permissions](plugins/permissions.md#the-commands-of-luckperms).

@@ -315,8 +315,8 @@ Where the port differs from LuckPerms:
 
 `golem-devtool permissions-command <script.json>` runs commands on a configuration with a sender
 and the players a server knows, and prints for each its lines, its changes, the configuration
-after it and the line of a failed save, so `06_permissions` holds the commands to their texts
-without a store and without a JVM.
+after it and the line of a failed save, so `06_permissions` holds every command of the table above
+to its texts and to its node without a store and without a JVM.
 
 ## The cost of a check
 
