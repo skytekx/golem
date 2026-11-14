@@ -19,9 +19,9 @@ licenses of their upstreams, which combine with it under section 13 of the GPL 3
 see [Licensing](../Documentation/licensing.md). The migration tool of the
 [plan](plan.md#data-migration) writes it from the data of EssentialsX and LuckPerms.
 
-SQLite is the amalgamation 3.53.2 that `libsqlite3-sys` 0.38.2 bundles, through `rusqlite` 0.40.2,
+SQLite is the amalgamation 3.54.0 that `libsqlite3-sys` 0.39.0 bundles, through `rusqlite` 0.41.0,
 both pinned exactly in the `Cargo.toml` of the workspace, since `rusqlite` asks for any
-`libsqlite3-sys` 0.38. So every host runs the same SQLite whatever its system has, and the build
+`libsqlite3-sys` 0.39. So every host runs the same SQLite whatever its system has, and the build
 compiles it with the C compiler of the host. `golem_store::sqlite_version()` answers the version the
 store runs. `rusqlite` and `libsqlite3-sys` are MIT and SQLite is in the public domain, so
 `cargo deny check` passes them against `deny.toml` with no new license.
@@ -573,7 +573,7 @@ opens it again and times 2000 calls of each kind one by one, with a flush after 
 gives the mean and the 99th percentile of a call in microseconds, of a debug build and of a release
 build, each in a run of `golem-devtool store-bench --players 5000 --repeat 2000` on 2026-11-07 in
 the cloud container of the session with an Intel Xeon at 2.10 GHz and 4 cores that other agents
-shared.
+shared. The store ran SQLite 3.53.2 then, and the figures were not taken again on 3.54.0.
 
 | Call | Kind | Debug mean | Debug p99 | Release mean | Release p99 |
 | --- | --- | --- | --- | --- | --- |

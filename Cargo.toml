@@ -44,8 +44,8 @@ signal-hook = "0.3.18"
 # changes the engine under the file and its durability, which a commit of its own names. rusqlite
 # asks for libsqlite3-sys with a caret, so the pin of libsqlite3-sys, which bundles the
 # amalgamation, is what holds the SQLite itself.
-rusqlite = { version = "=0.40.2", default-features = false, features = ["bundled"] }
-libsqlite3-sys = { version = "=0.38.2", default-features = false, features = ["bundled"] }
+rusqlite = { version = "=0.41.0", default-features = false, features = ["bundled"] }
+libsqlite3-sys = { version = "=0.39.0", default-features = false, features = ["bundled"] }
 
 [workspace.lints.rust]
 # Unsafe code lives only where the JNI needs it, and each such module allows it by name.

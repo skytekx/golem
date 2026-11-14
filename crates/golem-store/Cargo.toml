@@ -17,7 +17,7 @@ publish = false
 
 [dependencies]
 # The crate that bundles the amalgamation of SQLite, named here only so that the exact pin of the
-# workspace holds the SQLite of the store, which rusqlite would take in any 0.38 version.
+# workspace holds the SQLite of the store, which rusqlite would take in any 0.39 version.
 libsqlite3-sys.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
