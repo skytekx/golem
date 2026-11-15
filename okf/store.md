@@ -579,10 +579,11 @@ Issue: [#107](https://github.com/skytekx/golem/issues/107).
    `golem_jvm::on_exit`, which the exit hook of `golem-jvm` runs after the shutdown hooks of Java,
    see [JVM host](jvm-host.md#the-hooks). It closes the store and logs `the JVM exits with status
    143, so golem closed the store <path> with every change in the file`. The exit hook cannot change
-   the status, so a close that fails there is logged and golem still ends with the status of the
-   exit of Java. A shutdown signal before the JVM exists closes the store before golem exits with
-   128 plus the number of the signal, see [JVM host](jvm-host.md#the-stop-path). Every close after
-   the first answers as the first, so the two paths never close one store twice.
+   the status, so a close that fails there is logged with its reason, `the JVM exits with status
+   143, and the store <path> did not close cleanly: ...`, and golem still ends with the status of
+   the exit of Java. A shutdown signal before the JVM exists closes the store before golem exits
+   with 128 plus the number of the signal, see [JVM host](jvm-host.md#the-stop-path). Every close
+   after the first answers as the first, so the two paths never close one store twice.
 
 The file holds player data, so the repository of the server must ignore `golem-store.db`, its log
 `golem-store.db-wal` and the index of the log `golem-store.db-shm`, which the open leaves beside the

@@ -357,3 +357,9 @@ Oldest first. Times are UTC.
   level, and `07_forge_boot` the tools for a player with the node, for an operator without it and
   for a player with neither. See [Permissions](plugins/permissions.md#the-check-of-a-sender) and
   [Core plugin](plugins/core.md#the-command-golem).
+- `07_forge_boot` holds a close of the store that fails in the exit hook. A server without the
+  bridge that `SIGTERM` ends through `System.exit` runs under a limit on the size of a file, so the
+  close cannot fold the seed into the file: golem logs `the JVM exits with status 143, and the store
+  <path> did not close cleanly` with the reason and ends with 143, the status of the exit of Java,
+  and the next run finds the seed in the log of SQLite. See
+  [Store](store.md#the-place-in-the-program-golem).
