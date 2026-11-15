@@ -509,3 +509,12 @@ Oldest first. Times are UTC.
   and with it, and `/golem whoami` for the console and a command block that run it as that operator.
   See [Bridge](bridge.md#the-host-class) and
   [Permissions](plugins/permissions.md#the-check-of-a-sender).
+- The answer of a command goes to what made the command run. The mod sends the lines of a plugin
+  command as the game sends the feedback of its own commands, with `sendSuccess` on a copy of the
+  stack whose source accepts every line and hands it on: to the player who typed the command, the
+  console, the client of RCON or the last output of a command block, whatever entity the command
+  runs as. So a command that runs as a player through `execute as` writes no line into the chat of
+  that player. An answer still does not depend on the game rule `sendCommandFeedback`, and a silent
+  source still sees no line. `05_bridge_build` holds the answer of a command that the console runs
+  as a player, and `07_forge_boot` holds the answers of the commands that an operator, the console
+  and a command block run as a player. See [Bridge](bridge.md#commands).

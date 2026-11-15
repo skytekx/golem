@@ -23,6 +23,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.tree.RootCommandNode;
 import com.skytekx.golem.host.Host;
 import java.util.Set;
+import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -113,10 +114,14 @@ public final class PluginCommands {
 	}
 
 	/**
-	 * Runs the command in the plugin and sends every line of its answer to the sender, as a system
-	 * message, which the game rule sendCommandFeedback does not suppress. A silent source, such
-	 * as a function, still sees no line, since the game drops every message to it. A link in a
-	 * line, such as the one to the source that /golem source offers, opens on a click.
+	 * Runs the command in the plugin and sends every line of its answer to what made the command
+	 * run, as the game sends the feedback of its own commands with sendSuccess: to the player who
+	 * typed it, the console, the client of RCON or the output of a command block, whatever
+	 * entity the command runs as. The lines go through a copy of the stack whose source accepts
+	 * every line, so the game rule sendCommandFeedback does not suppress them. A silent source,
+	 * such as a function, still sees no line, since the game drops the feedback of such a stack.
+	 * A link in a line, such as the one to the source that /golem source offers, opens on a
+	 * click.
 	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
@@ -126,12 +131,46 @@ public final class PluginCommands {
 					+ " failed, and the log of the server says why"));
 			return 0;
 		}
+		CommandSourceStack answer = source.withSource(new Answer(source.source));
 		for (String line : lines) {
 			if (line != null) {
-				source.sendSystemMessage(Links.text(line));
+				answer.sendSuccess(() -> Links.text(line), false);
 			}
 		}
 		return Command.SINGLE_SUCCESS;
+	}
+
+	/**
+	 * Takes the lines of an answer in place of what made the command run and hands each on to
+	 * it. It accepts every line, where a player and a command block accept feedback only under
+	 * the game rule sendCommandFeedback, and it tells no operator.
+	 */
+	private static final class Answer implements CommandSource {
+		private final CommandSource made;
+
+		Answer(CommandSource made) {
+			this.made = made;
+		}
+
+		@Override
+		public void sendSystemMessage(Component line) {
+			made.sendSystemMessage(line);
+		}
+
+		@Override
+		public boolean acceptsSuccess() {
+			return true;
+		}
+
+		@Override
+		public boolean acceptsFailure() {
+			return true;
+		}
+
+		@Override
+		public boolean shouldInformAdmins() {
+			return false;
+		}
 	}
 
 	/**

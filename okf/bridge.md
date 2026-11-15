@@ -134,17 +134,18 @@ level 4, or a level outside 0 to 4.
 
 The mod registers every name of `commandNames()` with Brigadier as a literal that runs on its own
 and as the same literal with one argument `arguments` of the type greedy string. Both run
-`command`, and the mod sends every line of the answer to the source of the command as a system
-message, with `sendSystemMessage`, so the game rule `sendCommandFeedback` does not hide it, as it
-hides the feedback of `sendSuccess`. That keeps the offer of the source that `/golem source` makes
-to every player. A silent source still sees no line, since `sendSystemMessage` of Minecraft 1.20.1
-drops every message to a source whose output is suppressed, such as a function. The answer goes to
-the player of the source when it has one, so a command that runs as a player through `execute as`
-answers that player, and else to the source itself, such as the console, a command block or the
-player who typed a command that runs as another entity. A command of a plugin needs no permission
-level in Brigadier: the plugin judges the sender itself, a player by the nodes that
-`golem-permissions` grants them and every other source by its level, see
-[Permissions](plugins/permissions.md#the-check-of-a-sender).
+`command`, and the mod sends every line of the answer to what made the command run, as the game
+sends the feedback of its own commands: to the player who typed the command, to the console, to the
+client of RCON, or into the last output of a command block, whatever entity the command runs as. So
+a command that the console, a command block or another player runs as a player through `execute as`
+writes no line into the chat of that player. The mod takes `sendSuccess` of the game for it, on a
+copy of the stack whose source accepts every line and hands it on, so the game rule
+`sendCommandFeedback` does not hide an answer, as it hides the feedback of a command of the game.
+That keeps the offer of the source that `/golem source` makes to every player. A silent source still
+sees no line, since Minecraft 1.20.1 drops the feedback of a source whose output is suppressed, such
+as a function. A command of a plugin needs no permission level in Brigadier: the plugin judges the
+sender itself, a player by the nodes that `golem-permissions` grants them and every other source by
+its level, see [Permissions](plugins/permissions.md#the-check-of-a-sender).
 
 The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
 of the chat, so a player would type the link to the source that `/golem source` offers by hand.
