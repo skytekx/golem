@@ -55,7 +55,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Area | Built | Handover | Part | Specified | Designed | Surveyed | Open | Held | None | Out | All |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
-| [The bridge](#the-bridge) | 1 | 5 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
+| [The bridge](#the-bridge) | 2 | 4 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 2 | 2 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
 | [The store](#the-store) | 1 | 0 | 2 | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 8 |
@@ -74,7 +74,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 21 |
-| All | 9 | 7 | 12 | 74 | 23 | 25 | 138 | 30 | 6 | 52 | 376 |
+| All | 10 | 6 | 12 | 74 | 23 | 25 | 138 | 30 | 6 | 52 | 376 |
 
 ## The JVM host and macOS
 
@@ -105,7 +105,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Styled text built in Rust and sent as a component, and a broadcast that skips hidden players | Bridge needs (need 2), issues #35, #64, #76, commit 699bb0b on port/bridge | Handover | 04, 05 |
 | The small queries: the respawn point with its angle and forced flag, the respawn place, the inventory, flight, the dimensions with sea level and day time, and the most players, split from one unfinished commit into four, with the natives counted 18 | Bridge needs (need 4), issues #28, #86, #91, commit ca30d08 on port/bridge | Handover | 04, 05, 07 |
 | The game still answers during `playerLeft`, with the quit position | Bridge needs (need 5), issues #55, #89, commit ca30d08 on port/bridge | Handover | 05, 07 |
-| The block of notebook 05 set where its chunk is loaded | Commit c80d6b6 on port/bridge | Handover | 05 |
+| The block of notebook 05 set where its chunk is loaded | tests/notebooks/05_bridge_build.ipynb | Built | 05 |
 | The tools of operators move onto the teleport ids, so `/golem teleport` reports the end of the teleport in place of whether it is queued | HANDOVER.md section 3, crates/golem-plugin/src/operator.rs on port/bridge | Open | 07 |
 | The sea level that the bridge answers per dimension checked against the sources of Minecraft 1.20.1 | Commit ca30d08 on port/bridge (GameQueries.java 181 to 182), Social (depth) | Open | 05, 07 |
 | Chat to a subset of players: a chat verdict with a filter of recipients, so ignore works and the signature of the message stays | Bridge needs (need 6), issue #72, Social Q31 | Specified | 05, 07 |
