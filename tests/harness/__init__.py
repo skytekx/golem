@@ -27,6 +27,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,3 +104,70 @@ def run(argv, cwd=None, timeout=120, check=False) -> Result:
             "%s exited %d\n--- stdout\n%s--- stderr\n%s" % (argv, result.returncode, result.stdout, result.stderr)
         )
     return result
+
+
+class ServerLog:
+    """What a server writes to its log from now on, also when the logger rolls the file over.
+
+    The logger of the game rolls `logs/latest.log` over at the change of the day and when a server
+    starts beside the log of an earlier run: it moves the file away under the name of its day,
+    packs it and starts a new file. So the file of that name holds the whole log of a boot only
+    while no roll falls into the boot. The reader is made before the server starts and keeps the
+    file open while a thread reads what the server appends. After a roll it still holds the file
+    that the logger moved away, so it reads that file to its end and goes on with the new one. Of
+    a file that an earlier run left it reads only what follows, so the log is that of this boot.
+
+        log = ServerLog(server)
+        ...the server starts, runs and ends...
+        text = log.text()
+    """
+
+    #: How long the thread waits between two looks at the file, in seconds. The reader follows
+    #: every roll that no second roll follows within that time.
+    PAUSE = 0.1
+
+    def __init__(self, server, name="latest.log"):
+        self.path = Path(server) / "logs" / name
+        self.data, self.file, self.ended = bytearray(), None, threading.Event()
+        try:
+            self.file = open(self.path, "rb")
+            self.file.seek(0, os.SEEK_END)
+        except FileNotFoundError:
+            pass
+        self.thread = threading.Thread(target=self._follow, name="log-" + Path(server).name, daemon=True)
+        self.thread.start()
+
+    def _follow(self):
+        # Reads until the end is asked for, and then once more, so nothing written before it is lost.
+        last = False
+        while not last:
+            last = self.ended.wait(self.PAUSE)
+            self._read()
+        if self.file is not None:
+            self.file.close()
+
+    def _read(self):
+        # Takes what the open file holds now, and after a roll its rest and then the new file.
+        while True:
+            if self.file is None:
+                try:
+                    self.file = open(self.path, "rb")
+                except FileNotFoundError:
+                    return
+            self.data += self.file.read()
+            try:
+                same = os.path.samestat(os.stat(self.path), os.fstat(self.file.fileno()))
+            except FileNotFoundError:
+                same = False
+            if same:
+                return
+            # The logger closed the file before it moved it away, so what it holds now is its end.
+            self.data += self.file.read()
+            self.file.close()
+            self.file = None
+
+    def text(self) -> str:
+        """Ends the reading and answers the log, for a server that ended."""
+        self.ended.set()
+        self.thread.join()
+        return self.data.decode("utf-8", "replace")

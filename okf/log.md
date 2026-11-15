@@ -5,7 +5,7 @@ type: Log
 title: Change log
 description: Chronological change log of Golem from the plan of 2026-11-06 on.
 tags: [log, history]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Change log
@@ -363,3 +363,14 @@ Oldest first. Times are UTC.
   <path> did not close cleanly` with the reason and ends with 143, the status of the exit of Java,
   and the next run finds the seed in the log of SQLite. See
   [Store](store.md#the-place-in-the-program-golem).
+
+## 2026-11-16
+
+- The harness reads the log of a server across the rolls of its file. The logger of the game rolls
+  `logs/latest.log` over at the change of the day, so the file of that name held the whole log of a
+  boot only while no midnight fell into the boot, and the notebooks 05, 07 and 08, which read that
+  file alone, lost every line of the day before. `ServerLog` of `tests/harness/` follows the file
+  from before the start of a server and across every roll, and the three notebooks read their log
+  through it. `07_forge_boot` boots its copy without the mod with a roll every five seconds and
+  holds the log that the harness read to every line of the console. See
+  [Testing](../Documentation/testing.md).

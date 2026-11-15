@@ -5,7 +5,7 @@ type: Backlog
 title: Features
 description: Every feature of Golem, from the work of the hand over to the switch of the live server, the plugin API, the Bukkit layer, the native code and the items Golem asks of Aosabi, each with its source, its state and its notebook.
 tags: [features, backlog, golem]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Features
@@ -73,8 +73,8 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The Bukkit layer](#the-bukkit-layer) | 0 | 0 | 0 | 0 | 0 | 25 | 4 | 1 | 0 | 0 | 30 |
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
-| [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 1 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 21 |
-| All | 10 | 6 | 12 | 74 | 23 | 25 | 138 | 30 | 6 | 52 | 376 |
+| [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
+| All | 11 | 6 | 12 | 74 | 23 | 25 | 138 | 30 | 6 | 52 | 377 |
 
 ## The JVM host and macOS
 
@@ -555,6 +555,7 @@ of Golem until it lands.
 | A half install of Forge or Gradle that `tests/fetch.py` leaves behind is found, not taken as in place | Open items (a half install) | Open | 11 |
 | The conflict of two proxies of rustup on `bin/cargo-fmt` reproduced or closed, with the step that installs the components before any cargo kept | Open items (two proxies of rustup) | Open | 11 |
 | The commit-msg hook judges the options of `git commit` as git stores the message, or the page says where it cannot | Open items (the commit-msg hook) | Open | 02 |
+| The harness reads the log of a server across the rolls of `latest.log`, which the logger of the game rolls over at the change of the day, so a notebook whose boot crosses midnight still reads every line | Issue #230 | Built | 05, 07, 08 |
 | Notebook 08 tells a call over the budget on a loaded machine from a fault of a plugin | Open items (notebook 08 fails a boot) | Open | 08 |
 | Notebook 08 takes the line about a shutdown signal that the process started with ignored behind the banner, so a run of the notebook under `nohup` passes its check of a clean boot | Open items (notebook 08 holds the lines), JVM host (the stop path) | Open | 08 |
 | The harness reads the pointer files of `local-mods/` with the keys of the tool of the server repository, allows the host of each pointer for that file alone, checks the size and the SHA-1, records the SHA-512, and keeps the jar out of git and out of every artifact of CI | SRV tools/fetch_local_mods.py at master, Golem tests/fetch.py 117, 475 and 614 | Open | 08, 11 |
