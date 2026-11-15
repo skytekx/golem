@@ -100,10 +100,11 @@ impl Drop for Frame {
 /// open on it.
 ///
 /// A token belongs to the frame it was taken in. It carries the depth and the serial of that
-/// frame, and a call with a token whose frame is closed is refused and never made. The
-/// lifetime `'t` is nominal: it stands where the borrow of one native call will stand and
-/// binds nothing yet, so the check at the call is what holds a token to its frame. The token
-/// is neither `Send` nor `Sync`, so it never leaves its thread.
+/// frame. A call with it is answered in that frame alone, also while a frame is open inside
+/// it, and a call with a token whose frame is closed is refused and never made. The lifetime
+/// `'t` is nominal: it stands where the borrow of one native call will stand and binds
+/// nothing yet, so the check at the call is what holds a token to its frame. The token is
+/// neither `Send` nor `Sync`, so it never leaves its thread.
 pub struct Server<'t> {
     depth: usize,
     serial: u64,

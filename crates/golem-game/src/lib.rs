@@ -26,9 +26,11 @@
 //!
 //! A call of the contract takes the server token. [`server`] answers the token of the innermost
 //! [`Frame`] that is open on the calling thread, so a thread that holds no frame gets no token
-//! and makes no call, and a call with a token whose frame is closed is refused. In the design a
-//! frame stands for one native call of the bridge mod on the thread of a level. Today
-//! golem-devtool alone opens a frame, over the scripted contract, and no call reaches a JVM.
+//! and makes no call. A call is answered in the frame of its token alone, so the token of an
+//! outer frame stays good while a frame is open inside it, and a call with a token whose frame
+//! is closed is refused. In the design a frame stands for one native call of the bridge mod on
+//! the thread of a level. Today golem-devtool alone opens a frame, over the scripted contract,
+//! and no call reaches a JVM.
 //!
 //! The crate holds no test, which is the rule of CONTRIBUTING.md section 5. The notebook
 //! `tests/notebooks/20_api_contract.ipynb` drives the calls through golem-devtool.

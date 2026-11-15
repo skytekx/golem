@@ -22,9 +22,12 @@ pub enum Error {
     /// about: the entity is gone, or it is of another kind, as a zombie that is asked as a
     /// player.
     EntityGone,
-    /// The coordinate lives in a level, and the calling thread holds no server token, or the
-    /// token of the call was of a frame that is closed.
+    /// The coordinate lives in a level, and the calling thread holds no server token.
     NotOnServerThread,
+    /// The coordinate lives in a level, and its call was refused and never made, since the
+    /// server token of the call was of a frame that is closed. The fault is that of the
+    /// refused call, whose message says so.
+    Refused(JniFault),
     /// The call of the contract failed: the game threw, or its answer did not read.
     Fault(JniFault),
 }
@@ -34,7 +37,7 @@ impl Error {
     pub const fn code(&self) -> &'static str {
         match self {
             Self::EntityGone => "ENTITY_GONE",
-            Self::NotOnServerThread => "NOT_ON_SERVER_THREAD",
+            Self::NotOnServerThread | Self::Refused(_) => "NOT_ON_SERVER_THREAD",
             Self::Fault(_) => "GAME_FAULT",
         }
     }
@@ -45,6 +48,7 @@ impl fmt::Display for Error {
         match self {
             Self::EntityGone => formatter.write_str("The entity is gone or is of another kind."),
             Self::NotOnServerThread => fmt::Display::fmt(&NotOnServerThread, formatter),
+            Self::Refused(fault) => fmt::Display::fmt(fault, formatter),
             Self::Fault(fault) => write!(formatter, "The game gave no answer: {fault}"),
         }
     }
@@ -61,7 +65,7 @@ impl From<NotOnServerThread> for Error {
 impl From<JniFault> for Error {
     fn from(fault: JniFault) -> Self {
         if fault.is_refusal() {
-            Self::NotOnServerThread
+            Self::Refused(fault)
         } else {
             Self::Fault(fault)
         }

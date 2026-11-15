@@ -35,14 +35,18 @@
 //! - `ending`: on a thread of its own while it ends, in the destructor of a thread local that
 //!   the thread made before its frames, so that the frames of the thread are gone already.
 //! - `nested`: in a frame over `entities`, then in a frame over `inner` that is opened inside
-//!   the first, then in the first again once the second is closed. It answers
-//!   `{"before": ..., "inside": ..., "after": ...}`.
+//!   the first, there also with the token that was taken in the first, then in the first again
+//!   once the second is closed. It answers
+//!   `{"before": ..., "inside": ..., "outer": ..., "after": ...}`.
 //! - `stale`: with a token that was taken in a frame over `entities` which is closed since,
 //!   first with no frame open and then while a frame over `inner` is open in its place. It
 //!   answers `{"closed": ..., "replaced": ...}`.
 //! - `unordered`: once a frame over `entities` was dropped while a frame over `inner`, opened
 //!   inside it, was still kept. It asks with the token that the thread answers then and with
-//!   the token that was taken in the second frame, and answers `{"fresh": ..., "kept": ...}`.
+//!   the token that was taken in the second frame. Then it opens a frame over `entities` and
+//!   one over `inner` inside it again, drops the guard of the old second frame while they
+//!   stand, and asks with the token that the thread answers. It answers
+//!   `{"fresh": ..., "kept": ..., "reopened": ...}`.
 //!
 //! The steps of `contract call` are the calls of `bridge/contract/` by their names,
 //! `entityFind` with a `uuid` and `playerAllowFlight` with a `uuid`, an `id` and a `level`. A
@@ -162,11 +166,13 @@ enum On {
     Thread,
     /// On a thread of its own while it ends, once the frames of that thread are gone.
     Ending,
-    /// Before, inside and after a second frame that is opened inside the first.
+    /// Before, inside and after a second frame that is opened inside the first, and inside it
+    /// also with the token of the first.
     Nested,
     /// With a token whose frame is closed.
     Stale,
-    /// Once an outer frame was dropped before the frame that was opened inside it.
+    /// Once an outer frame was dropped before the frame that was opened inside it, and once
+    /// the guard of that inner frame was dropped while two new frames stand.
     Unordered,
 }
 
@@ -305,11 +311,17 @@ fn run(script: &Script, layer: Layer) -> Result<Value, String> {
             On::Nested => {
                 let _first = Frame::open(outer.clone());
                 let before = asked.ask(None);
-                let inside = {
+                let token = golem_game::server().map_err(|refusal| refusal.to_string())?;
+                let (inside, with_outer) = {
                     let _second = Frame::open(inner.clone());
-                    asked.ask(None)
+                    (asked.ask(None), asked.ask(Some(&token)))
                 };
-                json!({"before": before, "inside": inside, "after": asked.ask(None)})
+                json!({
+                    "before": before,
+                    "inside": inside,
+                    "outer": with_outer,
+                    "after": asked.ask(None),
+                })
             }
             On::Stale => {
                 let frame = Frame::open(outer.clone());
@@ -324,9 +336,15 @@ fn run(script: &Script, layer: Layer) -> Result<Value, String> {
                 let second = Frame::open(inner.clone());
                 let token = golem_game::server().map_err(|refusal| refusal.to_string())?;
                 drop(first);
-                let answered = json!({"fresh": asked.ask(None), "kept": asked.ask(Some(&token))});
+                let fresh = asked.ask(None);
+                let kept = asked.ask(Some(&token));
+                // Two frames stand again at the depths of the two before them when the guard
+                // of the old inner frame is dropped. A drop that did not hold a frame to its
+                // serial would close the new inner frame here.
+                let _third = Frame::open(outer.clone());
+                let _fourth = Frame::open(inner.clone());
                 drop(second);
-                answered
+                json!({"fresh": fresh, "kept": kept, "reopened": asked.ask(None)})
             }
         };
         answers.push(json!({"op": step.op, "on": step.on.name(), "answer": answered}));
