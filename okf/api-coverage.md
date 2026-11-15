@@ -3,9 +3,9 @@
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
 type: Spec
 title: API coverage
-description: The exact format of the mapping that holds the Golem API to every member of spigot-api 1.20.1, one TOML file per type keyed by the lines of inventory.json, with the keys that generate the schema, the contract and the client, the event tables, the statuses with three filled examples of each, the other files of the check, the three numbers, the notebook that computes them and how CI holds them so that they only rise.
+description: The exact format of the mapping that holds the Golem API to every member of spigot-api 1.20.1, one TOML file per type keyed by the lines of the inventory, with the keys that generate the schema, the contract and the client, the event tables, the statuses with three filled examples of each, the other files of the check, the three numbers, the notebook that computes them and how CI holds them so that they only rise.
 tags: [api, coverage, bukkit, mapping, graphql, ci]
-timestamp: 2026-11-08
+timestamp: 2026-11-16
 ---
 
 # API coverage
@@ -15,15 +15,18 @@ The Golem API covers an equivalent of the whole Bukkit API of `spigot-api`
 format of the files that hold it to that reference. The mapping files are at once the input of the
 generators, which write the schema, the contract with the bridge mod and the plugin client from
 them, and the input of the coverage check, so a coordinate cannot exist without its mapping entry
-and the reverse. [Plugin API](api.md#14-coverage) says why the check is shaped this way. Nothing of
-it is built yet. Every number on this page names the script, the day and the machine that counted
-it.
+and the reverse. [Plugin API](api.md#14-coverage) says why the check is shaped this way. Built of
+it is the inventory, with `golem-devtool api inventory`, which writes it, and `golem-devtool api
+numbers`, which counts it. The notebook `22_api_coverage` holds the committed inventory to the
+pinned jar, and the counts that this page and [Plugin API](api.md) give for the reference to the
+inventory. Nothing else of it is built yet. Every other number on this page names the script, the
+day and the machine that counted it.
 
 ## 1. The files
 
 | Path | Written by | Holds |
 | --- | --- | --- |
-| `api/spigot-api-1.20.1-R0.1-20230921.163938-66.json` | `golem-devtool api inventory` | The inventory of the reference: every public type of the jar with its kind, its modifiers, its `extends`, its `implements`, its methods and its fields as `javap -public` prints them, 1,247 types, 7,942 methods and 5,900 fields and constants |
+| `api/spigot-api-1.20.1-R0.1-20230921.163938-66.json` | `golem-devtool api inventory` | The inventory of the reference: every class of the jar but the `package-info` of its 65 packages, with its kind, its modifiers, its `extends`, its `implements`, its public methods and its public fields as `javap -public` prints them, and the names of the parameters of its methods, 1,247 types, 7,942 methods and 5,900 fields and constants. 1,186 of the types are public, 50 are anonymous classes and 11 are classes with a name that are not public, whose public members javap prints as well |
 | `api/bukkit/<package>/<Type>.toml` | `golem-devtool api propose` once, then people | The mapping of one type of the inventory and of each of its members, 1,247 files, such as `api/bukkit/org.bukkit.entity/LivingEntity.toml` and `api/bukkit/org.bukkit/ChatColor$1.toml` |
 | `api/events.toml` | `golem-devtool api gen` | The overview of the 252 listenable events, one row per `[event]` table of the mapping |
 | `api/names.toml` | People | The names of GraphQL types that the rules of [Plugin API](api.md#83-type-names) do not give |
@@ -51,6 +54,40 @@ Bukkit project. The jar itself stays in the cache of `tests/fetch.py`, pinned by
 The sources jar gives the names of the parameters, which javap does not print. Golem reads it for
 the names alone and copies no javadoc text of it.
 
+### 1.1 The inventory
+
+The inventory is JSON in a layout of its own: its first line names the command that wrote it, and
+every field and every method of a type stands on a line of its own, so that a change of the
+reference reads as a diff of lines.
+
+| Key | Value |
+| --- | --- |
+| `generated-by` | `golem-devtool api inventory` |
+| `jar`, `jar-sha256` | The name of the jar, which carries the version of the reference, and its SHA-256 |
+| `sources`, `sources-sha256` | The name of the sources jar and its SHA-256 |
+| `types` | One object per type, in the order of the bytes of the names |
+
+A type holds its `name`, the binary name, and its `line` as javap prints it, without the brace that
+opens its body. The parts of that line follow: its `kind`, `class` or `interface`, its `modifiers`,
+and the types after `extends` and after `implements`, each as a list. Its `fields` are the lines of
+its public fields and constants. Its `methods` hold one object per public method and constructor,
+with its `line` and with `names`, the names of its parameters in their order. A line of a member is
+what javap prints without the indent and the semicolon, and it is the key of the member in the
+mapping file.
+
+A method without parameters has an empty list of names. `names` is `null` where the sources jar
+declares no such method, which is so for 212 of the 3,763 methods with parameters: the
+`valueOf(String)` that the compiler adds to each of the 182 enums, 28 methods of anonymous classes
+and 2 methods that `YamlRepresenter` does not declare itself. A bridge method, which the compiler
+adds for a method with a type parameter, takes the names of that method.
+
+`golem-devtool api inventory --jar <jar> --sources <sources jar> --javap <javap> --out <file>`
+writes the file and prints its numbers, and `golem-devtool api numbers <file>` prints the numbers
+of a written one. The tool lists the classes of the jar and reads the Java files of the sources jar
+with a reader of zip archives of its own, on the standard library, which checks every file it reads
+by its CRC-32. It skips every comment of a Java file, takes the declarations of the types, the
+methods and the constructors and skips every body, and it runs no class of either jar.
+
 ## 2. The mapping file
 
 A mapping file is TOML with the SPDX lines of every TOML file of Golem. Its path is the package of
@@ -59,9 +96,9 @@ the type as a directory and the simple binary name of the type as the file, so t
 level describes the type, its table `members` holds one table per method and per field, whose key is
 the line of the inventory byte for byte, and an event class adds the table `event`. The check is a
 comparison of strings, and TOML itself refuses a line that appears twice. No type of the inventory
-holds the same line twice, by a count over `inventory.json` on 2026-11-06, and a bridge method, such
-as `public java.lang.Object clone()` beside `public org.bukkit.Location clone()`, is a line of its
-own. A key and the text of a Java expression are data and may be wider than 100 columns.
+holds the same line twice, which `22_api_coverage` holds, and a bridge method, such as `public
+java.lang.Object clone()` beside `public org.bukkit.Location clone()`, is a line of its own. A key
+and the text of a Java expression are data and may be wider than 100 columns.
 
 ### 2.1 The keys of the type
 
@@ -110,9 +147,9 @@ A more specific package wins over a shorter one, so `org.bukkit.inventory.meta` 
 `org.bukkit.util.noise` is `worldgen`. An inner type goes with its outer type, such as
 `PlayerTeleportEvent$TeleportCause` with its event, and a type of an event package that is no event
 class, such as `org.bukkit.event.inventory.InventoryType` or `org.bukkit.event.block.Action`, goes
-with `event-core`. The 65 packages of the inventory, counted on 2026-11-06, each have a slug by
-these rules. The first measurements, the remote clients, the seam of the Bukkit layer, the process
-plugins and the conversion kit build no member and own no file.
+with `event-core`. The 65 packages of the inventory, as `golem-devtool api numbers` counts them,
+each have a slug by these rules. The first measurements, the remote clients, the seam of the Bukkit
+layer, the process plugins and the conversion kit build no member and own no file.
 
 ### 2.2 The keys of a member
 
@@ -158,8 +195,8 @@ the function that `rust` names.
 
 ### 2.4 The table of an event
 
-The mapping file of every event class that a listener can name, 252 of the 268 by the prototype
-`counts.py` on 2026-11-06, holds one table `event`:
+The mapping file of every event class that a listener can name, 252 of the 268 as `golem-devtool
+api numbers` counts them, holds one table `event`:
 
 | Key | Value | Checked against |
 | --- | --- | --- |
@@ -208,8 +245,7 @@ prints the count per reason.
 
 ## 5. Three examples of each status
 
-The keys below are real lines of `inventory.json` of spigot-api 1.20.1-R0.1-20230921.163938-66,
-copied from it on 2026-11-06.
+The keys below are real lines of the inventory of spigot-api 1.20.1-R0.1-20230921.163938-66.
 
 ### 5.1 `schema`
 
@@ -683,7 +719,7 @@ that are present by every member, `none` included, beside the share of the membe
 6. Every `lib` path is in `lib_items.rs`, and `golem-client` builds.
 7. Every `via` target is a coordinate or a key, present or counted not present.
 8. Every `none` has a reason of the closed list of section 4 and a `why`.
-9. Every listenable event, 252 by the prototype `counts.py` on 2026-11-06, has a table `event`
+9. Every listenable event, 252 as `golem-devtool api numbers` counts them, has a table `event`
    with every key of section 2.4, its `chain` and `cancellable` agree with the inventory,
    and every field of `writable` is the `frame` of one of its setters and every setter writes a
    field of `writable`. An event with `cancellable = true` and a hook of the class `F` names in
@@ -711,7 +747,7 @@ that are present by every member, `none` included, beside the share of the membe
 | Cell | What it does |
 | --- | --- |
 | Parameters | The version of the reference, the SHA-256 of the jar and of the sources jar, the path of the cache |
-| Fetch | `python3 -I tests/fetch.py --only spigot-api`, which downloads both jars from the Spigot repository and checks their SHA-256 |
+| Jars | Holds that both jars stand in the cache with the SHA-256 that `tests/fetch.py` pins, and says what to run where one is missing: `python3 -I tests/fetch.py --only spigot-api` downloads both from the Spigot repository. The notebook downloads nothing |
 | Inventory | `golem-devtool api inventory` writes the inventory again with the javap of the pinned JDK, and the cell fails when it differs from the committed file by one byte |
 | Generated | `golem-devtool api gen`, `contract gen`, `api client` and `api lib` write their files again, and the cell fails on a difference |
 | Schema | `golem-devtool api sdl` prints the SDL with the builder of Aosabi over `golem-api`, splits off the parts of ports by their `part.toml`, and the cell fails when the rest differs from `api/schema.graphql` or a part from the `schema.graphql` of its port |
@@ -720,6 +756,11 @@ that are present by every member, `none` included, beside the share of the membe
 | Lock | The cell compares every number of the report with `api/coverage.lock` and prints the lines to write when they differ |
 | Proven | The cell reads `target/api/proven.json` of the last run of `26_api_corpus` when the job has one, and otherwise carries the proven numbers of the lock |
 | Slice | `golem-devtool api slice` over the jar of EssentialsX 2.22.0, which prints the members the port needs with their three states |
+
+The notebook holds the cells Parameters, Jars and Inventory today. One more cell holds the counts
+that this page and [Plugin API](api.md) give for the reference to `golem-devtool api numbers` and to
+a second count in Python, one the names of the parameters to the declarations of the sources jar,
+and one what the two subcommands refuse. The other cells follow with the parts they check.
 
 `26_api_corpus` boots the test server under `golem run` with the corpus plugin, runs every document
 of `tests/corpus/api/` through the API, compares each answer with its golden answer, and writes

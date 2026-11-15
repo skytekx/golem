@@ -5,7 +5,7 @@ type: Backlog
 title: Open items
 description: What is still open on Golem, from the decisions that the owner has still to make to the parts not built yet and what remains open in the parts that are built.
 tags: [open-items, backlog, todo]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Open items
@@ -66,6 +66,11 @@ Golem API.
   [Bukkit layer](bukkit-layer.md) surveys, the ports of EssentialsX, EssentialsXSpawn and the
   Spigot world settings, the migration tool and the native acceleration of world generation. See
   [Features](features.md).
+- The jar of the reference of the plugin API and its sources jar come from the snapshots repository
+  of SpigotMC, a host of a third party, and from no other place. The inventory under `api/` and its
+  hashes stay good without that host, but nothing could write the inventory again if the two files
+  went, and a run of CI with a cold cache fails while the host does not answer. `tests/fetch.py`
+  pins both files by their SHA-256.
 - The usage audit and the sign audit, which read copies of the logs and of the world of the Mac
   mini, and the comparison of Arclight and Golem under [Plan](plan.md#verification), which needs a
   copy of the live world.

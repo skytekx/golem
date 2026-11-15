@@ -3,7 +3,8 @@
 /*
  * The subcommands of golem-game and golem-model: contract call makes the calls of the contract
  * with the bridge mod against a scripted contract, and api coordinate calls the coordinate
- * functions over one, each step on the thread and under the frames that the script names.
+ * functions over one, each step on the thread and under the frames that the script names. The
+ * other verbs of api are those of the mapping, which the module mapping holds.
  */
 
 //! The primitives of golem-game and golem-model.
@@ -98,6 +99,7 @@ use crate::{
         finish,
         read, //
     },
+    mapping,
 };
 
 pub const CONTRACT: Subcommand = (
@@ -108,7 +110,7 @@ pub const CONTRACT: Subcommand = (
 
 pub const API: Subcommand = (
     "api",
-    "coordinate <script.json> the coordinate functions over a scripted contract",
+    "coordinate, inventory or numbers: the coordinate functions and the reference of the API",
     api,
 );
 
@@ -270,7 +272,15 @@ fn contract(arguments: &[String]) -> i32 {
 }
 
 fn api(arguments: &[String]) -> i32 {
-    script("api", "coordinate", Layer::Coordinate, arguments)
+    match arguments {
+        [] => finish(
+            "api",
+            Err(String::from("api takes a verb and its arguments")),
+        ),
+        [verb, rest @ ..] if verb == "inventory" => mapping::inventory(rest),
+        [verb, rest @ ..] if verb == "numbers" => mapping::numbers(rest),
+        _ => script("api", "coordinate", Layer::Coordinate, arguments),
+    }
 }
 
 /// Runs the script of the subcommand `family verb`, whose steps `layer` reads.

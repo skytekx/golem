@@ -2,12 +2,14 @@ Golem
 Copyright (C) 2026 Florian Kleber <opensource@skytekx.com>
 
 Golem is licensed under the GNU Affero General Public License version 3
-only, whose text LICENSE holds, except for its ports. A Golem plugin that
-ports a Bukkit plugin keeps the license of that plugin and names its holders,
-as ports.toml lists them. This file names the work of others that Golem
-carries or derives code or data from, with the license of each, whose text
-the folder LICENSES/ holds as <identifier>.txt. It adds attribution and no
-condition to the license of Golem or of a port.
+only, whose text LICENSE holds, except for its ports and for the inventory of
+the reference of its plugin API. A Golem plugin that ports a Bukkit plugin
+keeps the license of that plugin and names its holders, as ports.toml lists
+them. The inventory lists the signatures of the jar of spigot-api and takes
+the license of the Bukkit project. This file names the work of others that
+Golem carries or derives code or data from, with the license of each, whose
+text the folder LICENSES/ holds as <identifier>.txt. It adds attribution and
+no condition to the license of Golem or of a port.
 
 Each entry names the project, the version Golem follows, the files of Golem
 that derive from it, the license under which Golem takes the work, and the
@@ -139,3 +141,24 @@ Copyright the EssentialsX contributors
 The crate golem-essentials-spawn is the port of EssentialsXSpawn 2.22.0 to
 Golem and keeps the license of EssentialsX, under which the module is
 published.
+
+
+Spigot-API
+==========
+
+Project: Spigot-API, the Bukkit API with the patches of SpigotMC
+URL: https://www.spigotmc.org/
+Version: 1.20.1-R0.1-20230921.163938-66
+Files: api/spigot-api-1.20.1-R0.1-20230921.163938-66.json
+License: GPL-3.0-only
+Copyright the Bukkit contributors
+Copyright the Spigot contributors
+
+The file is the inventory of the jar of that version, the reference that the
+plugin API of Golem is held to: the names of its classes, the lines of their
+public members as javap prints them, and the names of the parameters from its
+sources jar. It holds no code and no text of the javadoc. Neither the jar, its
+pom nor its sources name a license or a holder. The Bukkit project publishes
+its API under the GNU General Public License version 3, so the inventory takes
+that license, whose text is LICENSES/GPL-3.0-only.txt. Golem carries neither
+jar: tests/fetch.py downloads both into a cache that git ignores.

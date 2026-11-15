@@ -69,3 +69,9 @@ entries:
   # without a JVM. And one coordinate of the thread class any, which answers on every thread.
   - notebook: 20_api_contract
     cell_timeout: 1800
+
+  # The reference of the plugin API: the jar of spigot-api that tests/fetch.py pins, the inventory
+  # under api/ that golem-devtool api inventory writes from it with javap, and the numbers that the
+  # pages name for it. It boots no server.
+  - notebook: 22_api_coverage
+    cell_timeout: 1800

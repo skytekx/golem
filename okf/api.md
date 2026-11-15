@@ -5,7 +5,7 @@ type: Spec
 title: Plugin API
 description: The plugin API of Golem, one GraphQL schema on Aosabi that covers an equivalent of the whole Bukkit API of spigot-api 1.20.1, with native Rust plugins compiled into golem that reach it through the executor of Aosabi on the thread of the caller, the mapping that generates the schema, the contract and the client, the threads, the synchronous answer of cancellable events, remote clients, the coverage check and the parts of the work.
 tags: [api, graphql, aosabi, plugins, bukkit, events, coverage]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Plugin API
@@ -22,9 +22,10 @@ This page is the one design that the two designs of 2026-11-06 settle into, each
 differed ruled on its evidence. Its first lines are built, below the schema: the crates `golem-game`
 and `golem-model` hold the coordinate `Player.allowFlight` from its call of the contract to its
 coordinate function and the coordinate `Server.bukkitVersion`, in safe Rust, and a scripted contract
-answers in place of the game. No schema is built, and no call reaches a JVM. [Index](index.md) says
-what is built, and [the parts of the work](#20-the-parts-of-the-work) say what each part delivers
-and needs. Every measured number names the spike or the notebook, the machine and the day. [API
+answers in place of the game. The inventory of the reference stands under `api/`, the first file of
+the mapping. No schema is built, and no call reaches a JVM. [Index](index.md) says what is built,
+and [the parts of the work](#20-the-parts-of-the-work) say what each part delivers and needs. Every
+measured number names the spike or the notebook, the machine and the day. [API
 coverage](api-coverage.md) holds the exact format of the mapping files.
 
 ## 1. The design in short
@@ -48,7 +49,7 @@ coverage](api-coverage.md) holds the exact format of the mapping files.
    then runs it by the `u32` id that Golem gives it at `enable`. A document of several fields pays
    the executor once for all of them. Golem writes no plan and no compiler of documents of its own.
 5. One mapping file per Bukkit type, `api/bukkit/<package>/<Type>.toml`, keyed by the exact lines
-   of `inventory.json`, names the coordinate of every member and how it is built: a Java expression
+   of the inventory, names the coordinate of every member and how it is built: a Java expression
    from which a generator writes the contract call, the Java, the Rust stub, the coordinate
    function, the resolver and the client method, or a function written by hand where the meaning of
    Bukkit needs Rust. Most getters and setters need no hand written code.
@@ -142,7 +143,7 @@ coverage](api-coverage.md) holds the exact format of the mapping files.
 | `golem-nbt` | Binary NBT and SNBT, for item meta, block states and persistent data | No | AGPL-3.0-only |
 | `golem-permissions` | As today, plus attachments, defaults and the API nodes | No | MIT, the port of LuckPerms |
 | `golem-store` | As today, plus the hashes of tokens and the audit log | No | AGPL-3.0-only |
-| `golem-devtool` | The subcommands `contract call` and `api coordinate`, which are built and run the calls of the contract and the coordinate functions against a scripted contract, and the new subcommands `contract gen`, `api inventory`, `api propose`, `api gen`, `api client`, `api ops`, `api sdl`, `api coverage`, `api slice`, `api smoke` and `api lib` | No | AGPL-3.0-only |
+| `golem-devtool` | The subcommands `contract call` and `api coordinate`, which are built and run the calls of the contract and the coordinate functions against a scripted contract, `api inventory` and `api numbers`, which are built and write and count the inventory of the reference, and the new subcommands `contract gen`, `api propose`, `api gen`, `api client`, `api ops`, `api sdl`, `api coverage`, `api slice`, `api smoke` and `api lib` | No | AGPL-3.0-only |
 
 The crates depend on each other in this order and no crate names one above it: `golem-jvm`,
 `golem-bridge`, `golem-game`, `golem-model`, `golem-events`, `golem-api`, `golem-client`,
@@ -344,10 +345,10 @@ answer when the server thread wakes the API thread, see
 
 ### 4.6 The size of the schema
 
-`inventory.json` holds 171 interfaces in `org.bukkit.entity` and its subpackages, 168 in the tree of
-`Entity` with `Entity` itself and 117 of them leaves, counted by the prototype `counts.py` on
-2026-11-06, which enters the tree under `tools/api/` with the shared base. Flattened onto the
-leaves, the entity types print about 13,000 object fields by the same count. Nobody has run the
+The inventory holds 171 interfaces in `org.bukkit.entity` and its subpackages, 168 in the tree of
+`Entity` with `Entity` itself and 117 of them leaves, as `golem-devtool api numbers` counts them and
+`22_api_coverage` holds them. Flattened onto the leaves, the entity types print about 13,000 object
+fields, by a count over the inventory on 2026-11-06. Nobody has run the
 builder and the boot of Aosabi on a schema of that size, so the first measurements of [section
 20](#20-the-parts-of-the-work) do that before the shared base starts. If the builder fails at that
 size, the fallback of A1 with `Service::builder(sdl)` and a generated resolver map keeps the engine
@@ -877,8 +878,8 @@ read. Closed sets of Bukkit, such as `GameMode`, `BlockFace`, `EventPriority`, `
 ### 8.3 Type names
 
 A GraphQL type keeps the simple name of its Bukkit type, and these rules make the names unique.
-`inventory.json` holds 47 simple names that more than one package uses, counted by the prototype
-`counts.py` on 2026-11-06.
+The inventory holds 47 simple names that more than one package uses, as `golem-devtool api numbers`
+counts them.
 
 1. The legacy package `org.bukkit.material` gets no types. Its members map with `via`, see
    [section 14](#14-coverage), which removes 26 of the clashes.
@@ -933,7 +934,7 @@ document that sets two things sets them in its order, and no mutation hangs belo
 object, whose fields GraphQL would not order. The rules are what the generator writes into the
 skeleton of the mapping. The mapping holds the exact coordinate of every member, so a rule is a
 convenience and never the truth, and a person decides the 192 methods and 2 fields that the rules
-leave open, by the count of the prototype `coverage_rules.py` over `inventory.json` on 2026-11-06.
+leave open, by the count of the prototype `coverage_rules.py` over the inventory on 2026-11-06.
 Coordinates of Golem's own follow the same rule: reads of a world, such as `safeLocation`, are
 fields of `World`, and the tick stream is `Subscription.serverTick`, named like the `Server*`
 events.
@@ -1328,8 +1329,9 @@ arguments and for the logger.
 
 ### 10.1 The shape in the schema
 
-`inventory.json` holds 268 event classes: 250 concrete, 180 of them cancellable, and 18 abstract,
-counted by the prototype `counts.py` on 2026-11-06. Each is a GraphQL type: an interface where
+The inventory holds 268 event classes: 250 concrete, 180 of them cancellable, and 18 abstract,
+as `golem-devtool api numbers` counts them and `22_api_coverage` holds them. Each is a GraphQL type:
+an interface where
 Bukkit has subclasses, such as `Event`, `PlayerEvent`, `EntityEvent`, `BlockEvent`,
 `InventoryEvent`, `Cancellable` and `EntityDamageEvent`, with the `Object` type for the direct
 instances of a concrete class with subclasses, and an object type otherwise. The fields of an event
@@ -1904,7 +1906,7 @@ name.
 
 ### 14.5 The notebook and CI
 
-The notebook `22_api_coverage` fetches the pinned jar and checks its SHA-256, writes the inventory
+The notebook `22_api_coverage` holds the jar in the cache to its SHA-256, writes the inventory
 again and fails when it differs from the committed one, prints the SDL with the builder of Aosabi
 and fails when it differs from `api/schema.graphql`, runs the checks of 14.4 and compares the
 numbers with `api/coverage.lock`. CI runs it on every push and every pull request. A number below
@@ -2389,7 +2391,7 @@ release that Golem pins carries the item.
 | Remote clients | `golem-remote`: GraphTP on the Unix socket and on the socket pair, with the stream adapter of 4.5 on macOS, HTTP on loopback, tokens with `golem token create`, groups, the nodes of the coordinates, the limits and buckets, the cost estimate, the answer size, the refusal of chunk loads and the deadline per operation of 13.4, `SERVER_BUSY`, the audit log, the preconditions, the remote streams that close with `EVENTS_LOST` and the count, the carrier policies, the API slot and the serve point, the settings of `config/golem.toml` under `remote`, and last the browser login of 13.2 | `25_api_remote` | The shared base. On macOS the stream adapter stands in for A6 and a token for A8 until they land |
 | The event core | The whole dispatcher: chains per handler list with class filters, priorities, `ignoreCancelled`, `MONITOR` read only, nesting to 16, the chains of `golem-chat` and `golem-net`, the wanted mask, filters, interest tables, subject sets, rate classes, `call<Event>`, the events of ports, the copies for remote subscribers | `23_api_events` | The shared base |
 | The plugin runtime | The lifecycle with the native `serverAboutToStart` and the steps of 11.2, `plugin.toml`, the order, the ledger, a disable that never waits on the server thread, `Game` and `AsyncGame`, the hops with `on_level` and `on_global`, the snapshots per level, `PluginLock` with its lint and the lock of a plugin of 7.10, budgets per coordinate, the deadline, the watchdog, the degrade mode, the quarantine, the scheduler, services, the configuration library, metadata, conversations, the logger, `/golem status`, `/golem plugin enable` and `disable`, `config/golem.toml` with the settings of 11.4, the shim of the first game interface | `04_plugins` extended and `27_plugin_lifecycle` | The shared base |
-| Entities | The 171 interfaces with their 1,147 methods, `World.entitiesOf`, spawning, attributes, potion effects, the types of modded entities, the records | `30_api_entities` and the corpus | The shared base and the event core |
+| Entities | The 171 interfaces and 40 classes of `org.bukkit.entity` and its subpackages with their 1,147 methods, `World.entitiesOf`, spawning, attributes, potion effects, the types of modded entities, the records | `30_api_entities` and the corpus | The shared base and the event core |
 | Worlds and blocks | Worlds, chunks, blocks, block data, block states, ray traces, explosions, sounds, particles, the world border, game rules, the world names and `uid.dat` of 8.1 | `31_api_worlds` and the corpus, the names on a copy of the live world | The shared base, the event core, and the usage audit, a prerequisite, for the names |
 | Items and data | Materials and the registries, `golem-nbt`, item meta, enchantments, persistent data with the Mixins of [9.11](#911-persistent-data-containers) | `32_api_items` and the corpus, with the keys on a copy of the live world | The shared base |
 | Inventories | Inventories, views, custom inventories and menus, merchants, the preconditions of writes | `33_api_inventories` and the corpus | Items and data |
@@ -2442,8 +2444,8 @@ for another part.
    with `lib_items.rs`.
 5. The proof: `api coverage` with every check of [14.4](#144-the-checks-of-the-tool) and
    `api/coverage.lock` at the starting numbers, `api smoke`, the runner of the corpus and its first
-   documents, the prototypes of the counts under `tools/api/`, and the CI jobs of
-   `22_api_coverage` and `26_api_corpus`, the second in the notebooks job of CI.
+   documents, `api numbers` with the counts of the inventory, and the CI jobs of `22_api_coverage`
+   and `26_api_corpus`, the second in the notebooks job of CI.
 6. Events: the `[event]` tables, the generator of frames, and a dispatcher that runs one chain by
    priority with `ignoreCancelled` and a read only `MONITOR`.
 7. A first runtime: `Plugin::enable` with `subscribe` and `command`, and the shim of the first game
@@ -2480,7 +2482,7 @@ on [Decisions](decisions.md).
    This page does not do that without such a ruling.
 2. The chat chain runs on a thread of Golem composed onto the chat future of Forge, after every
    listener of `ServerChatEvent`, so that no worker of world generation waits for a plugin.
-3. `inventory.json` enters the repository under the license of spigot-api with a `.license` file and
+3. The inventory enters the repository under the license of spigot-api with a `.license` file and
    a line in NOTICE.
 4. A permission attachment of a plugin ranks above a player's stored node, as a transient node of
    LuckPerms does.

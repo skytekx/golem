@@ -4,9 +4,10 @@
 
 Golem is licensed under the GNU Affero General Public License 3.0 only, SPDX `AGPL-3.0-only`,
 whose text is in [LICENSE](../LICENSE). The ports of Bukkit plugins that [ports.toml](../ports.toml)
-lists keep the licenses of the plugins they port, see section 6. This page explains why, who holds
-the copyright, how every file of the repository states its license, where the license texts live,
-and which files carry work of other projects.
+lists keep the licenses of the plugins they port, see section 6, and the inventory of the reference
+of the plugin API takes the license of the Bukkit project, see section 4. This page explains why,
+who holds the copyright, how every file of the repository states its license, where the license
+texts live, and which files carry work of other projects.
 
 Golem states licenses in [SPDX](https://spdx.dev/) identifiers first of all, and its tree is
 compliant with [REUSE](https://reuse.software/), the specification of the FSFE that builds on
@@ -113,7 +114,8 @@ names, one file per license named by its SPDX identifier, as REUSE specifies.
 
 | Text | Why it is here |
 | --- | --- |
-| `LICENSES/AGPL-3.0-only.txt` | The license of Golem. A new file outside a port takes it |
+| `LICENSES/AGPL-3.0-only.txt` | The license of Golem. A new file outside a port takes it, but for a file that this page gives another license |
+| `LICENSES/GPL-3.0-only.txt` | The Bukkit project, whose API the inventory `api/spigot-api-1.20.1-R0.1-20230921.163938-66.json` lists by its signatures and takes it alone |
 | `LICENSES/GPL-3.0-or-later.txt` | EssentialsX, whose ports `golem-essentials` and `golem-essentials-spawn` and their spec under `okf/plugins/essentials` take it alone |
 | `LICENSES/MIT.txt` | Aosabi, whose code the license lint takes beside the AGPL, and LuckPerms, whose port `golem-permissions` takes it alone |
 
@@ -124,6 +126,19 @@ copyright line keeps the placeholder `<year> <copyright holders>`. It serves fil
 holders, the code that the license lint takes from Aosabi and the port of LuckPerms, so it names
 none of them. Their copyright lines stand in NOTICE and in the `SPDX-FileCopyrightText` lines of
 each file.
+
+`LICENSES/GPL-3.0-only.txt` is the text of the GPL 3 as `reuse download GPL-3.0-only` writes it. It
+serves one file, the inventory of the reference of the plugin API, which `golem-devtool api
+inventory` writes from the jar of spigot-api: the names of its classes, the lines of their public
+members and the names of the parameters. The jar is the API of the Bukkit project with the patches
+of SpigotMC. Neither the jar, its pom nor its sources name a license or a holder. The repositories
+[Bukkit/Bukkit](https://github.com/Bukkit/Bukkit) and
+[SpigotMC/Spigot-API](https://github.com/SpigotMC/Spigot-API) on GitHub each carry the text of the
+GPL 3 as their `LICENCE.txt`, the same file byte for byte, read on 2026-11-16, and neither names a
+holder or the words "or any later version" outside that text. So the inventory takes the GPL 3
+only, through the `.license` file beside it, and names the contributors of Bukkit and of Spigot as
+its holders. Golem carries neither the jar nor its sources jar: `tests/fetch.py` downloads both
+into the cache of the harness, which git ignores.
 
 No text declares `AGPL-3.0-or-later`, so both lints refuse a file that names it. A license enters
 `LICENSES/` in the same commit as the first file that names it, and NOTICE names the project in

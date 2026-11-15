@@ -38,8 +38,8 @@ Three of the columns work as follows.
   no page beyond this one. A Held feature waits for a decision of the owner, and the default of the
   decision stands meanwhile. A None row has nothing to build and says why. An Out feature lands in
   another repository, the server repository or Aosabi.
-- The column Notebook names the notebook that holds the row once it lands. The notebooks 01 to 11
-  and 20 exist, and 12 to 19 are new for the switch: `12_essentials_teleport`,
+- The column Notebook names the notebook that holds the row once it lands. The notebooks 01 to 11,
+  20 and 22 exist, and 12 to 19 are new for the switch: `12_essentials_teleport`,
   `13_essentials_social`, `14_essentials_economy`, `15_essentials_admin`, `16_migration`,
   `17_macos_host`, `18_world_settings` and `19_switch_rehearsal`. The numbers 20 to 38 hold the API,
   from `20_api_contract` to `38_api_layer`, as [Plugin API](api.md) section 20 names them. The
@@ -420,7 +420,7 @@ own, which stays on a test server until it keeps the pace of the protected level
 | The remote clients: GraphTP on the Unix socket and the socket pair, HTTP on loopback, tokens, groups, the OpenID Connect login, nodes, limits, buckets, cost, answer size, no chunk load, the deadline, `SERVER_BUSY`, the audit log, streams and the serve point | API 13 and 20 | Designed | 25_api_remote |
 | The event core: chains, priorities, `ignoreCancelled`, `MONITOR`, nesting to 16, `golem-chat` and `golem-net`, masks, filters, interest tables, rates, `call<Event>`, the events of ports and remote copies | API 10 and 20 | Designed | 23_api_events |
 | The plugin runtime: the lifecycle, `plugin.toml`, the order, the ledger, `Game` and `AsyncGame`, hops, `PluginLock`, budgets, the deadline, the watchdog, the degrade mode, the quarantine, the scheduler, services, the configuration and the shim over the client | API 11 and 20 | Designed | 04, 27_plugin_lifecycle |
-| Entities: 171 interfaces with 1,147 methods, `entitiesOf`, spawning, attributes, effects, modded types and records | API 9 and 20 | Designed | 30_api_entities |
+| Entities: the 171 interfaces and 40 classes of the entity packages with 1,147 methods, `entitiesOf`, spawning, attributes, effects, modded types and records | API 9 and 20 | Designed | 30_api_entities |
 | Worlds and blocks, with the world names of Arclight and `uid.dat` | API 8.1 and 20 | Designed | 31_api_worlds |
 | Items and data: materials, registries, `golem-nbt`, meta, enchantments and persistent data | API 9.11 and 20 | Designed | 32_api_items |
 | Inventories, views, menus, merchants and the preconditions of writes | API 20 | Designed | 33_api_inventories |

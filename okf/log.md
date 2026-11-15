@@ -374,3 +374,15 @@ Oldest first. Times are UTC.
   through it. `07_forge_boot` boots its copy without the mod with a roll every five seconds and
   holds the log that the harness read to every line of the console. See
   [Testing](../Documentation/testing.md).
+- The inventory of the reference of the [Plugin API](api.md) stands in the tree, the first file of
+  the mapping of [API coverage](api-coverage.md). `tests/fetch.py` pins the jar of spigot-api
+  1.20.1-R0.1-20230921.163938-66 and its sources jar by their SHA-256 and keeps both in its cache.
+  `golem-devtool api inventory` reads every class of the jar but the `package-info` of its 65
+  packages with `javap -public`, takes the names of the parameters from the sources jar and writes
+  `api/spigot-api-1.20.1-R0.1-20230921.163938-66.json`: 1,247 types, 7,942 methods and 5,900 fields
+  and constants. The file takes the license of the Bukkit project, the GPL 3 only, through the
+  `.license` file beside it, and NOTICE names the project. `golem-devtool api numbers` counts an
+  inventory. The new notebook `22_api_coverage` checks both jars, writes the inventory again,
+  compares it with the committed file byte for byte and holds the counts of the pages to it. The
+  pages give the 1,147 methods of the entity packages to all 211 types of them now, where they gave
+  them to the 171 interfaces, which declare 1,037.

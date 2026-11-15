@@ -15,6 +15,7 @@ mod api;
 mod bridge;
 mod game;
 mod jvm;
+mod mapping;
 mod permissions;
 mod store;
 

@@ -17,7 +17,7 @@ and the executed copy shows every output on the way to the failure.
 | `tests/matrix.yaml` | The entries the runner sweeps, in order, with their parameters |
 | `tests/run.py` | The runner, papermill over the kernel `golem` |
 | `tests/harness/` | What the notebooks share: where the repository is, how a process runs, the log of a server across the rolls of `latest.log`, and a player of Minecraft 1.20.1 in `minecraft.py` |
-| `tests/fetch.py` | The downloads of the notebooks that boot Forge: Temurin 17, the Forge server and Gradle, each checked by its SHA-256. With `--only modpack` it builds the SkyTekx 3 modpack of the live server from a pinned commit of its repository instead: every jar of the index checked by its size and the SHA-512 of the index, the Arclight jar by its SHA-256, and the 31 libraries of the `installer.json` of that jar by their SHA-256 |
+| `tests/fetch.py` | The downloads of the notebooks: Temurin 17, the Forge server and Gradle for those that boot Forge, and the jar of spigot-api with its sources jar for `22_api_coverage`, each checked by its SHA-256. With `--only modpack` it builds the SkyTekx 3 modpack of the live server from a pinned commit of its repository instead: every jar of the index checked by its size and the SHA-512 of the index, the Arclight jar by its SHA-256, and the 31 libraries of the `installer.json` of that jar by their SHA-256 |
 | `tests/pyproject.toml` | The exact pins of the eight Python packages the harness names, but not of the packages they pull in |
 | `tests/notebooks/out/` | The executed notebooks and `report.json` of a run, never committed |
 
@@ -38,11 +38,13 @@ tests/.venv/bin/python tests/run.py --list
 
 The notebooks that build or boot Golem need more than Python. `cargo` of the toolchain in
 `rust-toolchain.toml` builds `golem` for 03, 07 and 08 and `golem-devtool` for 03, 04, 06, 07, 08,
-09 and 20. Both programs take `golem-store`, whose bundled SQLite the build compiles with the C
+09, 20 and 22. Both programs take `golem-store`, whose bundled SQLite the build compiles with the C
 compiler of the host, so every notebook that builds one needs a C compiler as `cc`, and so does 05
 for its stand in natives. `tests/fetch.py` downloads Temurin 17.0.21, installs the Forge server
 1.20.1-47.4.18 and unpacks Gradle 8.14.3 under `tests/.cache/`, which git ignores, for 03, 05, 07
-and 08. The first build of the bridge downloads and remaps Minecraft into the Gradle cache of the
+and 08. It downloads the jar of spigot-api 1.20.1-R0.1-20230921.163938-66 and its sources jar
+there as well, 2,580,520 bytes together, for 22, which reads them with the `javap` of that
+Temurin. The first build of the bridge downloads and remaps Minecraft into the Gradle cache of the
 user, which takes minutes, and later builds take seconds:
 
 ```
@@ -132,3 +134,4 @@ A fix or a feature adds or extends the notebook cell that proves it.
 | `10_docs_lint` | Does the docs lint pass the prose of the wiki, `Documentation/`, CONTRIBUTING.md and the README, the page map of the wiki and the table of notebooks of this page, and refuse every break of its seven rules with its path and line? Do the pages state what the tree holds: the README and the plan the licenses of the ports, the README, the plan and CONTRIBUTING.md the places of the SPDX tags, the decisions what the commit lint checks of a sign off, and the pages of the plugins who checks a permission? Does every mail address of the tree stand where section 9 of CONTRIBUTING.md allows it? |
 | `11_toolchain` | Does every job of CI that runs cargo install the toolchain of `rust-toolchain.toml` with its components and its profile before any step that runs cargo, so that a rustup home of its own holds rustfmt and clippy after the step and two cargo at once add nothing? |
 | `20_api_contract` | Does one coordinate of the API, `Player.allowFlight`, answer through every layer below the schema as `okf/api.md` says: is its call of the contract the one that the page names, do the call and the coordinate function answer the value, the miss, the fault and a thread without a server token against a scripted contract, without a JVM, is a call answered in the frame of its token alone and refused once that frame is closed, and does `Server.bukkitVersion`, a coordinate of the thread class `any`, answer the value of the page on every thread without a token? |
+| `22_api_coverage` | Is the jar of spigot-api that `tests/fetch.py` pins the reference of `okf/api-coverage.md`, is the committed inventory under `api/` byte for byte what `golem-devtool api inventory` writes from that jar with the `javap` of the pinned JDK, does the inventory give every number that the pages name for the reference, do its methods carry the names of their parameters as the sources jar declares them, and does the tool refuse a jar, a sources jar, a `javap` and an inventory that it cannot read whole? |

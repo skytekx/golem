@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # SPDX-FileCopyrightText: 2026 Florian Kleber <opensource@skytekx.com>
-"""Golem harness: download the JDK, the Forge server and Gradle that the notebooks run against.
+"""Golem harness: download the JDK, the Forge server, Gradle and the reference of the API that the
+notebooks run against.
 
     python3 -I tests/fetch.py
     python3 -I tests/fetch.py --only jdk
+    python3 -I tests/fetch.py --only spigot-api
     python3 -I tests/fetch.py --cache path/to/cache
     python3 -I tests/fetch.py --only modpack
     python3 -I tests/fetch.py --only modpack --server-repo path/to/skytekx3-1201-server
@@ -40,6 +42,11 @@ it is used, and lands under tests/.cache/, which git ignores. The pins are these
    jar with its SHA-256 and its libraries. The pack holds what the pin names alone, so a file of
    an earlier pin is removed. A download that broke off goes on where it stopped, and a jar whose
    hash already matches stays.
+5. The jar of spigot-api 1.20.1-R0.1-20230921.163938-66 and its sources jar, from the snapshots
+   repository of SpigotMC, into tests/.cache/spigot-api. The jar is the reference that the plugin
+   API of Golem is held to, and golem-devtool api inventory reads the signatures of its public
+   types from it with javap. The sources jar gives the names of the parameters, which javap does
+   not print. Neither is unpacked, and no class of the jar is ever loaded or run.
 
 The script accepts the EULA of Minecraft in that test server, with eula=true in its eula.txt,
 on behalf of the owner of SkyTekx, who runs the live server under it. The test server binds
@@ -48,13 +55,14 @@ localhost only and runs in offline mode, so no account of Mojang is involved.
 A pin that is already in place is kept, so a second run downloads nothing. The JDK, the Forge
 server and Gradle are installed into a folder beside their place, which takes the name of the pin
 once the install is complete, so a run that failed or broke off leaves nothing that a later run
-takes for a pin in place. A download of the JDK, the installer of Forge or Gradle that its host
-answers with 429 or an error of 500 and above, or whose connection fails or breaks off, is tried
-again after a pause that doubles, five tries in all. The exit status is 1 when a download or an
-install fails or a hash differs.
+takes for a pin in place. A download of the JDK, the installer of Forge, Gradle or a jar of
+spigot-api that its host answers with 429 or an error of 500 and above, or whose connection fails
+or breaks off, is tried again after a pause that doubles, five tries in all. The exit status is 1
+when a download or an install fails or a hash differs.
 
 The jars of the pack are the work of their authors under their own licenses, the files of the
-server repository are the work of SkyTekx. The script only puts them where the notebooks find
+server repository are the work of SkyTekx, and the two jars of spigot-api are the work of the
+Bukkit project and of SpigotMC under the GPL 3. The script only puts them where the notebooks find
 them, in the ignored cache, and Golem ships none of them.
 """
 
@@ -109,9 +117,22 @@ GRADLE_URL = "https://services.gradle.org/distributions/gradle-8.14.3-bin.zip"
 GRADLE_SHA256 = "bd71102213493060956ec229d946beee57158dbd89d0e62b91bca0fa2c5f3531"
 GRADLE_DIRECTORY = "gradle-8.14.3"
 
-#: The tries of a download of the JDK, the installer of Forge or Gradle before the script gives
-#: up, and the pause in seconds before the second try, which doubles before each later one, since
-#: GitHub and the host of Gradle answer 503 and 504 at times.
+#: The reference of the plugin API: the build of spigot-api that the mapping under api/ is held
+#: to, in the snapshots repository of SpigotMC, with the SHA-256 of its jar and of its sources jar.
+SPIGOT_API_VERSION = "1.20.1-R0.1-20230921.163938-66"
+SPIGOT_API_BASE = ("https://hub.spigotmc.org/nexus/content/repositories/snapshots/org/spigotmc/spigot-api/"
+                   "1.20.1-R0.1-SNAPSHOT/")
+SPIGOT_API_JARS = {
+    "spigot-api-1.20.1-R0.1-20230921.163938-66.jar":
+        "d8aa356781e32896e7d78490813975cac7ca8d99126adc41c2836c56c68b9c3e",
+    "spigot-api-1.20.1-R0.1-20230921.163938-66-sources.jar":
+        "292793da18cba4214c2254748c88ee7463ecf9aa7450a8ba64e39c9d4a6610bf",
+}
+SPIGOT_API_DIRECTORY = "spigot-api"
+
+#: The tries of a download of the JDK, the installer of Forge, Gradle or a jar of spigot-api before
+#: the script gives up, and the pause in seconds before the second try, which doubles before each
+#: later one, since GitHub and the host of Gradle answer 503 and 504 at times.
 DOWNLOAD_TRIES = 5
 DOWNLOAD_PAUSE = 5
 
@@ -356,6 +377,15 @@ def fetch_gradle(cache: Path) -> Path:
     inner.rename(home)
     shutil.rmtree(unpacked, ignore_errors=True)
     return home
+
+
+def fetch_spigot_api(cache: Path) -> Path:
+    """The jar of spigot-api and its sources jar under `cache`, answering their directory."""
+    folder = cache / SPIGOT_API_DIRECTORY
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, expected in SPIGOT_API_JARS.items():
+        download(SPIGOT_API_BASE + name, folder / name, expected)
+    return folder
 
 
 def digest(path: Path, algorithm: str) -> str:
@@ -715,9 +745,10 @@ def shown(path: Path) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="Download the JDK and the Forge server of the notebooks.")
-    parser.add_argument("--only", choices=["jdk", "forge", "gradle", "modpack"],
-                        help="Fetch one of the three alone, or the modpack, which only this fetches.")
+    parser = argparse.ArgumentParser(
+        description="Download the JDK, the Forge server, Gradle and the reference of the API of the notebooks.")
+    parser.add_argument("--only", choices=["jdk", "forge", "gradle", "spigot-api", "modpack"],
+                        help="Fetch one of the four alone, or the modpack, which only this fetches.")
     parser.add_argument("--cache", type=Path, default=CACHE, help="The directory, by default tests/.cache.")
     parser.add_argument("--server-repo", type=Path,
                         help="A checkout of the server repository that holds the pinned commit, read and not cloned.")
@@ -736,6 +767,9 @@ def main(argv=None) -> int:
         if args.only in (None, "gradle"):
             gradle = fetch_gradle(cache)
             print("fetch: Gradle %s at %s" % (GRADLE_VERSION, shown(gradle)))
+        if args.only in (None, "spigot-api"):
+            reference = fetch_spigot_api(cache)
+            print("fetch: spigot-api %s at %s" % (SPIGOT_API_VERSION, shown(reference)))
         if args.only == "modpack":
             pack = fetch_modpack(cache, args.server_repo)
             print("fetch: the modpack of %s at %s" % (SERVER_COMMIT[:12], shown(pack)))

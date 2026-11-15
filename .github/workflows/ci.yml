@@ -251,7 +251,8 @@ jobs:
           fetch = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(fetch)
           print(fetch.JDK_PACKAGES, fetch.JDK_DIRECTORY, fetch.FORGE_INSTALLER, fetch.FORGE_SHA256,
-                fetch.FORGE_DIRECTORY, fetch.GRADLE_URL, fetch.GRADLE_SHA256, fetch.GRADLE_DIRECTORY)
+                fetch.FORGE_DIRECTORY, fetch.GRADLE_URL, fetch.GRADLE_SHA256, fetch.GRADLE_DIRECTORY,
+                fetch.SPIGOT_API_BASE, fetch.SPIGOT_API_JARS, fetch.SPIGOT_API_DIRECTORY)
           EOF
           )
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -266,6 +267,7 @@ jobs:
             tests/.cache/jdk-17.0.21+9
             tests/.cache/forge-server
             tests/.cache/gradle-8.14.3
+            tests/.cache/spigot-api
           key: fetch-${{ runner.os }}-${{ steps.pins.outputs.digest }}
 
       # The pack of notebook 08 and the repository of the server it comes from, whose size on disk
@@ -321,9 +323,10 @@ jobs:
           tests/.venv/bin/python -m ipykernel install --sys-prefix --name golem \
             --display-name golem
 
-      # Temurin 17, the Forge server and Gradle. The script accepts the EULA of Minecraft for the
-      # test server alone, on behalf of the owner, as its text says.
-      - name: Download the JDK, the Forge server and Gradle
+      # Temurin 17, the Forge server, Gradle and the two jars of spigot-api that notebook 22 reads.
+      # The script accepts the EULA of Minecraft for the test server alone, on behalf of the
+      # owner, as its text says.
+      - name: Download the JDK, the Forge server, Gradle and the reference of the API
         run: python3 -I tests/fetch.py
 
       - name: Save the downloads of tests/fetch.py
@@ -334,6 +337,7 @@ jobs:
             tests/.cache/jdk-17.0.21+9
             tests/.cache/forge-server
             tests/.cache/gradle-8.14.3
+            tests/.cache/spigot-api
           key: fetch-${{ runner.os }}-${{ steps.pins.outputs.digest }}
 
       # The jars of the pack come from Modrinth and GitHub, each checked by the SHA-512 of the
