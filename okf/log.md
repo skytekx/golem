@@ -498,3 +498,14 @@ Oldest first. Times are UTC.
   the JSON of described texts, `04_plugins` holds the JSON, what a text of a player loses and the
   limits, and `05_bridge_build` the colour, the click and the hover that reach a player. See
   [Bridge](bridge.md#styled-text).
+- The sender of a command is the player who made it run. The mod reads who made a command run from
+  the stack of the command, where the game keeps it through every `execute as`, so a command that a
+  player types reaches the plugins as `Sender::Player` with that player, also when it runs as
+  another entity, and a plugin judges it by the nodes of that player. The console, a command block
+  and a function reach the plugins as before, also when they run a command as a player. The native
+  `command` keeps its arguments. `05_bridge_build` holds what the natives get when an operator runs
+  a command as an armor stand, and `07_forge_boot` holds `/golem whoami` and the commands of the
+  port of LuckPerms for an operator of level 2 who runs them as an armor stand, without their node
+  and with it, and `/golem whoami` for the console and a command block that run it as that operator.
+  See [Bridge](bridge.md#the-host-class) and
+  [Permissions](plugins/permissions.md#the-check-of-a-sender).

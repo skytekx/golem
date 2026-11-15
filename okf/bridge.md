@@ -108,26 +108,27 @@ command is one of three, and `level` is its permission level from 0 to 4, which 
 
 | Source | `senderUuid` | `senderName` | `level` |
 | --- | --- | --- | --- |
-| A player who runs the command themself | The UUID of the player | The name of the profile | The level of the source |
+| A player who made the command run: the one who typed it, also when it runs as another entity through `execute as` | The UUID of the player | The name of the profile | The level of the source |
 | The console and RCON: no entity at level 4 | Null | Null | 4 |
-| Every other source: a command block, a function, a command that another source runs as an entity through `execute as`, a player included | Null | The name of the source, such as `@` for a command block, or of the entity it runs as | The level of the source |
+| Every other source: a command block, a function, a command that a source which is no player runs as an entity through `execute as`, a player included | Null | The name of the source, such as `@` for a command block, or of the entity it runs as | The level of the source |
 
 The natives answer a player as `Sender::Player` with the level of the source, the console and RCON
 as `Sender::Console` and every other source as `Sender::Other` with its name and level. The mod
-tells a player who runs a command themself apart from a source that runs it as them through the
-field `source` of `CommandSourceStack`, which Forge makes public: `execute as` changes the entity
-of the stack and keeps that field and the level of the source that made the command run. So a
-command that a command block, a function, the console or another player runs as a player reaches
-the plugins as that source, named after the player, at its own level, and a source at level 2
-never borrows the rights of a player of level 4. Vanilla judges such a command by the level of the
-source as well, and on the live server Arclight handed a Bukkit plugin `getBukkitSender` of the
-stack, which reads the same field, so a plugin there saw the console or the command block and never
-the player. A plugin judges a `Sender::Player` by the lower of the level of the source and the
-rights of the player, since the game may run a command of a player at another level, such as a
-function of an advancement at level 2. A function that runs at level 4 has no entity and the rights
-of the console, so it reads as the console. The natives refuse the command of
-a source that the mod passes wrong with an empty answer instead of guessing who runs it: a UUID
-without a name, neither of them below level 4, or a level outside 0 to 4.
+reads who made a command run from the field `source` of `CommandSourceStack`, which Forge makes
+public: the player who typed the command, the server, or whatever else made the stack, such as a
+command block. `execute as` changes the entity of the stack and keeps that field and the level of
+the source. So a command that a player typed reaches the plugins as that player, whatever entity it
+runs as, and a command that a command block, a function or the console runs as a player reaches them
+as that source, named after the player, at its own level, so a source at level 2 never borrows the
+rights of a player of level 4. Vanilla judges a command by the level of the source as well, and on
+the live server Arclight handed a Bukkit plugin `getBukkitSender` of the stack, which reads the same
+field, so a plugin there saw the console or the command block and never the player that the command
+ran as. A plugin judges a `Sender::Player` by the lower of the level of the source and the rights of
+the player, since the game may run a command of a player at another level, such as a function of an
+advancement at level 2. A function that runs at level 4 has no entity and the rights of the console,
+so it reads as the console. The natives refuse the command of a source that the mod passes wrong
+with an empty answer instead of guessing who runs it: a UUID without a name, neither of them below
+level 4, or a level outside 0 to 4.
 
 ## Commands
 
@@ -139,10 +140,11 @@ hides the feedback of `sendSuccess`. That keeps the offer of the source that `/g
 to every player. A silent source still sees no line, since `sendSystemMessage` of Minecraft 1.20.1
 drops every message to a source whose output is suppressed, such as a function. The answer goes to
 the player of the source when it has one, so a command that runs as a player through `execute as`
-answers that player, and else to the source itself, such as the console or a command block. A
-command of a plugin needs no permission level in Brigadier: the plugin judges the sender itself,
-a player by the nodes that `golem-permissions` grants them and every other source by its level,
-see [Permissions](plugins/permissions.md#the-check-of-a-sender).
+answers that player, and else to the source itself, such as the console, a command block or the
+player who typed a command that runs as another entity. A command of a plugin needs no permission
+level in Brigadier: the plugin judges the sender itself, a player by the nodes that
+`golem-permissions` grants them and every other source by its level, see
+[Permissions](plugins/permissions.md#the-check-of-a-sender).
 
 The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
 of the chat, so a player would type the link to the source that `/golem source` offers by hand.

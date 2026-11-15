@@ -8,9 +8,10 @@
  * permission level: the plugin checks the sender through golem-permissions. A name that the game
  * or a mod holds already goes to the plugin, and CommandTree moves the command it replaces to
  * minecraft:<name>, but for the commands of the game that Spigot keeps. The natives learn who
- * runs a command and at which permission level, so a command block or a function never passes for
- * the console, and a source that runs a command as a player through execute as never passes for
- * that player, as okf/bridge.md specifies.
+ * made a command run and at which permission level: the player who typed it, whatever entity it
+ * runs as, the console, or another source. So a command block or a function never passes for the
+ * console, and a source that is no player and runs a command as a player through execute as never
+ * passes for that player, as okf/bridge.md specifies.
  */
 package com.skytekx.golem.bridge;
 
@@ -134,11 +135,13 @@ public final class PluginCommands {
 	}
 
 	/**
-	 * Asks the plugin with the source of the command and its permission level: a player who runs
-	 * it themself with their UUID and name, the console and RCON with neither, and every other
-	 * source with its name alone. A command that another source runs as a player through execute
-	 * as keeps that source in the field source of the stack, which Forge makes public, so it
-	 * reaches the plugin as that source, named after the player, and never borrows the rights
+	 * Asks the plugin with the source of the command and its permission level: the player who
+	 * made the command run with their UUID and name, the console and RCON with neither, and every
+	 * other source with its name alone. The game keeps what made a command run in the field
+	 * source of the stack, which Forge makes public, and execute as changes the entity of the
+	 * stack and keeps that field. So a command that a player typed reaches the plugin as that
+	 * player, whatever entity it runs as, and a command that the console or a command block runs
+	 * as a player reaches it as that source, named after the player, and never borrows the rights
 	 * of the player.
 	 */
 	private static String[] ask(CommandSourceStack source, String name, String arguments) {
@@ -146,7 +149,7 @@ public final class PluginCommands {
 		Entity entity = source.getEntity();
 		String uuid = null;
 		String sender = null;
-		if (entity instanceof ServerPlayer player && source.source == player) {
+		if (source.source instanceof ServerPlayer player) {
 			uuid = player.getStringUUID();
 			sender = player.getGameProfile().getName();
 		} else if (entity != null || level < Commands.LEVEL_OWNERS) {

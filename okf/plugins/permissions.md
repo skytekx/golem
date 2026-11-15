@@ -192,15 +192,17 @@ call of `value`. The senders are those of [Plugins](index.md#commands).
 | Another source below the level 2 | No node | `The source Server runs at the level 1, and a source that is no player holds no node below the level 2` |
 | A player | What the rules of resolution grant them, a node that no rule names not | The reason of the decision, such as `Group admin grants golem.*` |
 
-- A player is judged by their nodes and groups alone. Their operator level and the level of the
-  source play no part, so an operator of the game holds no node that the permissions do not grant
-  them, and the group `admin` of the seed stands for the operators, as above. A plugin may add a
-  rule of its own where no rule names a node, as the core plugin leaves its tools of operators
-  with the operators of the game, see [Core plugin](core.md#the-command-golem).
-- A source that runs a command as a player through `execute as` is another source at its own
-  level, so it never holds a node of that player, and a source at the level 2 holds every node
-  whoever it runs as. The level 2 is the level of the game masters of Minecraft, at which command
-  blocks and functions run.
+- A player is judged by their nodes and groups alone. The player is the one who made the command
+  run, so a command that a player types is judged by the nodes of that player, also when it runs as
+  another entity through `execute as`. Their operator level and the level of the source play no
+  part, so an operator of the game holds no node that the permissions do not grant them, and the
+  group `admin` of the seed stands for the operators, as above. A plugin may add a rule of its own
+  where no rule names a node, as the core plugin leaves its tools of operators with the operators of
+  the game, see [Core plugin](core.md#the-command-golem).
+- A source that is no player and runs a command as a player through `execute as`, such as the
+  console or a command block, is another source at its own level, so it never holds a node of that
+  player, and a source at the level 2 holds every node whoever it runs as. The level 2 is the level
+  of the game masters of Minecraft, at which command blocks and functions run.
 - A node that no rule names is not held, and `set` is false then, as `isPermissionSet` of Bukkit
   answers. A port whose upstream declares a node with the default true, such as
   `essentials.back.onteleport` of EssentialsX, grants it when no rule decided.

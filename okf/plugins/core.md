@@ -49,12 +49,14 @@ grants the node runs the tool whatever their operator level and the level of the
 player whom a rule denies it is refused, also as an operator. Where no rule names the node, a player
 is judged by the lower of their operator level as the game answers it and the level of the source,
 so an operator of level 2 and more keeps every tool without a node, and a player whom the game does
-not answer reads that the game gives no answer. A command that another source runs as a player
-through `execute as` is judged by the level of that source alone, as [Plugins](index.md#commands)
-says, so no source borrows the nodes or the level of a player. The seed grants `golem.*` to the
-group `admin`, which the console fills with `lp user <name> parent add admin`. The level is the rule
-for a source that is no player, since such a source has no nodes, and the level 2 is the level of
-the game masters of Minecraft, at which a command block and a function run.
+not answer reads that the game gives no answer. A command that a player types is judged as that
+player, also when it runs as another entity through `execute as`, and a command that a source which
+is no player runs as a player is judged by the level of that source alone, as
+[Plugins](index.md#commands) says, so no source borrows the nodes or the level of a player. The seed
+grants `golem.*` to the group `admin`, which the console fills with `lp user <name> parent add
+admin`. The level is the rule for a source that is no player, since such a source has no nodes, and
+the level 2 is the level of the game masters of Minecraft, at which a command block and a function
+run.
 
 ## Source
 
@@ -109,9 +111,9 @@ answers.
 | Sender | Answer |
 | --- | --- |
 | The console and RCON | `You run /golem as the console.` |
-| A player | `You run /golem as the player Tester at the operator level 0.`, and `, from a source at the level 2` before the full stop when the game runs their command at another level than their operator level |
+| A player, also when their command runs as another entity through `execute as` | `You run /golem as the player Tester at the operator level 0.`, and `, from a source at the level 2` before the full stop when the game runs their command at another level than their operator level |
 | A player whose operator level the game does not answer | `You run /golem as the player Tester from a source at the level 0.`, which names the level of the source alone |
-| Another source | `You run /golem as @ at the level 2.` for a command block, or the name of the entity it runs as through `execute as`, a player included |
+| Another source | `You run /golem as @ at the level 2.` for a command block, or the name of the entity that the console, a command block or a function runs the command as through `execute as`, a player included |
 
 A command block keeps the line as its last output, which `data get block <x> <y> <z> LastOutput`
 shows, and a function sees no line, since the game hides the answers to a silent source.
