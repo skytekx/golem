@@ -518,3 +518,14 @@ Oldest first. Times are UTC.
   source still sees no line. `05_bridge_build` holds the answer of a command that the console runs
   as a player, and `07_forge_boot` holds the answers of the commands that an operator, the console
   and a command block run as a player. See [Bridge](bridge.md#commands).
+- The sender of the command that a sign runs is the player who clicked the sign. The game gives
+  such a command a source that takes no line and runs it as the player who clicked, so the mod keeps
+  who clicked with the command, from the start of the command on and only when the block entity of a
+  sign hands it to the game. The command reaches the plugins as `Sender::Player` with that player at
+  the level of the sign, also when it runs as another entity through `execute as`, a plugin judges
+  it by the nodes of that player, and the lines of its answer go to that player. Every other source
+  that takes no line reaches the plugins as before. `07_forge_boot` holds the click of a player
+  without a node of the port of LuckPerms and of one with it, on a sign that runs its commands
+  plainly and on one that runs them as the other player, and the console and a command block that
+  run a command as the player who clicked. The player of the harness learns to use a block. See
+  [Bridge](bridge.md#the-host-class).

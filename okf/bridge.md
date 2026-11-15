@@ -108,7 +108,7 @@ command is one of three, and `level` is its permission level from 0 to 4, which 
 
 | Source | `senderUuid` | `senderName` | `level` |
 | --- | --- | --- | --- |
-| A player who made the command run: the one who typed it, also when it runs as another entity through `execute as` | The UUID of the player | The name of the profile | The level of the source |
+| A player who made the command run: the one who typed it or clicked the sign that runs it, also when it runs as another entity through `execute as` | The UUID of the player | The name of the profile | The level of the source |
 | The console and RCON: no entity at level 4 | Null | Null | 4 |
 | Every other source: a command block, a function, a command that a source which is no player runs as an entity through `execute as`, a player included | Null | The name of the source, such as `@` for a command block, or of the entity it runs as | The level of the source |
 
@@ -130,22 +130,37 @@ so it reads as the console. The natives refuse the command of a source that the 
 with an empty answer instead of guessing who runs it: a UUID without a name, neither of them below
 level 4, or a level outside 0 to 4.
 
+The command that the click of a sign runs has no player in that field: the game gives it a source
+that takes no line and runs it as the player who clicked, at level 2, and `execute as` then changes
+that entity. So the mod keeps who clicked with the command. It listens to `CommandEvent` of Forge,
+which holds the stack that a command starts with, and when that stack has this shape and the block
+entity of a sign hands the command to the game, it puts a source of its own in the place of the one
+of the game, which takes no line either and holds the player who clicked. So the plain command of a
+sign reaches the plugins as the player who clicked, at the level of the sign, as on the live server,
+where Arclight names the player who clicked a sign as the sender of a plugin command that the sign
+runs. `execute as` keeps that source as it keeps every source, so the command of a sign reaches the
+plugins as the player who clicked whatever entity it runs as. The mod knows the sign by the code
+that hands the command to the game, the first class below `Commands` on the stack of the thread.
+Every other stack whose source takes no line stays another source at its level, as does a command
+that another command starts while the click runs.
+
 ## Commands
 
 The mod registers every name of `commandNames()` with Brigadier as a literal that runs on its own
 and as the same literal with one argument `arguments` of the type greedy string. Both run
 `command`, and the mod sends every line of the answer to what made the command run, as the game
-sends the feedback of its own commands: to the player who typed the command, to the console, to the
-client of RCON, or into the last output of a command block, whatever entity the command runs as. So
-a command that the console, a command block or another player runs as a player through `execute as`
-writes no line into the chat of that player. The mod takes `sendSuccess` of the game for it, on a
-copy of the stack whose source accepts every line and hands it on, so the game rule
-`sendCommandFeedback` does not hide an answer, as it hides the feedback of a command of the game.
-That keeps the offer of the source that `/golem source` makes to every player. A silent source still
-sees no line, since Minecraft 1.20.1 drops the feedback of a source whose output is suppressed, such
-as a function. A command of a plugin needs no permission level in Brigadier: the plugin judges the
-sender itself, a player by the nodes that `golem-permissions` grants them and every other source by
-its level, see [Permissions](plugins/permissions.md#the-check-of-a-sender).
+sends the feedback of its own commands: to the player who typed the command or clicked the sign that
+runs it, to the console, to the client of RCON, or into the last output of a command block, whatever
+entity the command runs as. So a command that the console, a command block or another player runs as
+a player through `execute as` writes no line into the chat of that player. The mod takes
+`sendSuccess` of the game for it, on a copy of the stack whose source accepts every line and hands
+it on, so the game rule `sendCommandFeedback` does not hide an answer, as it hides the feedback of a
+command of the game. That keeps the offer of the source that `/golem source` makes to every player.
+A silent source still sees no line, since Minecraft 1.20.1 drops the feedback of a source whose
+output is suppressed, such as a function. A command of a plugin needs no permission level in
+Brigadier: the plugin judges the sender itself, a player by the nodes that `golem-permissions`
+grants them and every other source by its level, see
+[Permissions](plugins/permissions.md#the-check-of-a-sender).
 
 The client of Minecraft 1.20.1 makes no link of an address in a system message and copies no text
 of the chat, so a player would type the link to the source that `/golem source` offers by hand.

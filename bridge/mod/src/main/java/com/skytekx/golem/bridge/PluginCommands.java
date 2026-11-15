@@ -8,14 +8,15 @@
  * permission level: the plugin checks the sender through golem-permissions. A name that the game
  * or a mod holds already goes to the plugin, and CommandTree moves the command it replaces to
  * minecraft:<name>, but for the commands of the game that Spigot keeps. The natives learn who
- * made a command run and at which permission level: the player who typed it, whatever entity it
- * runs as, the console, or another source. So a command block or a function never passes for the
- * console, and a source that is no player and runs a command as a player through execute as never
- * passes for that player, as okf/bridge.md specifies.
+ * made a command run and at which permission level: the player who typed it or clicked the sign
+ * that runs it, whatever entity it runs as, the console, or another source. So a command block or
+ * a function never passes for the console, and a source that is no player and runs a command as a
+ * player through execute as never passes for that player, as okf/bridge.md specifies.
  */
 package com.skytekx.golem.bridge;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
@@ -29,6 +30,8 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -47,6 +50,10 @@ public final class PluginCommands {
 	 */
 	private static final Set<String> KEPT = Set.of("setblock", "summon", "testforblock",
 			"tellraw");
+
+	/** Reads the classes on the stack of the thread, for {@link #startedBySign()}. */
+	private static final StackWalker STACK =
+			StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
 
 	private final Guard guard;
 
@@ -94,6 +101,45 @@ public final class PluginCommands {
 		}
 	}
 
+	/**
+	 * Keeps who clicked a sign with the command that the click runs, before the game runs it.
+	 *
+	 * <p>The game gives the command of a sign a stack whose source takes no line and which runs
+	 * as the player who clicked, and execute as changes that entity, so nothing in the stack
+	 * says who clicked from then on. The bridge therefore puts a source of its own in the place of
+	 * the one of the game, which takes no line either and holds that player, and execute as keeps
+	 * it as it keeps every source. Only the stack that a command starts with is marked, and only
+	 * when it has this shape and the block entity of a sign hands the command to the game, so no
+	 * other source that takes no line passes for a player.
+	 *
+	 * @param event the event of Forge, which holds the stack that the command starts with
+	 */
+	@SubscribeEvent(priority = EventPriority.LOWEST)
+	public void started(CommandEvent event) {
+		ParseResults<CommandSourceStack> parse = event.getParseResults();
+		CommandSourceStack source = parse.getContext().getSource();
+		if (source.source == CommandSource.NULL
+				&& source.getEntity() instanceof ServerPlayer player && startedBySign()) {
+			Clicked clicked = new Clicked(player);
+			event.setParseResults(Commands.mapSource(parse, stack -> stack.withSource(clicked)));
+		}
+	}
+
+	/**
+	 * Answers whether the block entity of a sign hands the command in progress to the game: the
+	 * first class below the frames of Commands on the stack of the thread is that of a sign, as
+	 * when a click runs the commands of its lines. A command that another command starts while
+	 * the click runs has that other command below the frames of Commands, and no sign.
+	 */
+	private static boolean startedBySign() {
+		return STACK.walk(frames -> frames.map(StackWalker.StackFrame::getDeclaringClass)
+				.dropWhile(type -> type != Commands.class)
+				.dropWhile(type -> type == Commands.class)
+				.findFirst()
+				.filter(SignBlockEntity.class::isAssignableFrom)
+				.isPresent());
+	}
+
 	/** Answers whether a player can type the name as the first word of a command. */
 	private static boolean parses(String name) {
 		if (name == null || name.isEmpty()) {
@@ -116,12 +162,13 @@ public final class PluginCommands {
 	/**
 	 * Runs the command in the plugin and sends every line of its answer to what made the command
 	 * run, as the game sends the feedback of its own commands with sendSuccess: to the player who
-	 * typed it, the console, the client of RCON or the output of a command block, whatever
-	 * entity the command runs as. The lines go through a copy of the stack whose source accepts
-	 * every line, so the game rule sendCommandFeedback does not suppress them. A silent source,
-	 * such as a function, still sees no line, since the game drops the feedback of such a stack.
-	 * A link in a line, such as the one to the source that /golem source offers, opens on a
-	 * click.
+	 * typed it or clicked the sign that runs it, the console, the client of RCON or the output of
+	 * a command block, whatever entity the command runs as. The lines go through a copy of the
+	 * stack whose source accepts every line, so the game rule sendCommandFeedback does not
+	 * suppress them. A silent source, such as a function, still sees no line, since the game
+	 * drops the feedback of such a stack. A link in a line, such as the one to the source that
+	 * /golem source offers, opens on a click. The line of a call that failed stays with the
+	 * rule of the game, which shows no failure of the command of a sign.
 	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
@@ -131,7 +178,9 @@ public final class PluginCommands {
 					+ " failed, and the log of the server says why"));
 			return 0;
 		}
-		CommandSourceStack answer = source.withSource(new Answer(source.source));
+		ServerPlayer clicked = clicked(source);
+		CommandSourceStack answer =
+				source.withSource(new Answer(clicked == null ? source.source : clicked));
 		for (String line : lines) {
 			if (line != null) {
 				answer.sendSuccess(() -> Links.text(line), false);
@@ -174,6 +223,43 @@ public final class PluginCommands {
 	}
 
 	/**
+	 * Stands in the place of the source of a command that the click of a sign runs. It takes no
+	 * line and no feedback, as the source that the game gives such a command, and holds the
+	 * player who clicked.
+	 */
+	private static final class Clicked implements CommandSource {
+		private final ServerPlayer player;
+
+		Clicked(ServerPlayer player) {
+			this.player = player;
+		}
+
+		@Override
+		public void sendSystemMessage(Component line) {
+		}
+
+		@Override
+		public boolean acceptsSuccess() {
+			return false;
+		}
+
+		@Override
+		public boolean acceptsFailure() {
+			return false;
+		}
+
+		@Override
+		public boolean shouldInformAdmins() {
+			return false;
+		}
+	}
+
+	/** Answers the player who clicked the sign that runs the command, or null for no such one. */
+	private static ServerPlayer clicked(CommandSourceStack source) {
+		return source.source instanceof Clicked clicked ? clicked.player : null;
+	}
+
+	/**
 	 * Asks the plugin with the source of the command and its permission level: the player who
 	 * made the command run with their UUID and name, the console and RCON with neither, and every
 	 * other source with its name alone. The game keeps what made a command run in the field
@@ -181,16 +267,21 @@ public final class PluginCommands {
 	 * stack and keeps that field. So a command that a player typed reaches the plugin as that
 	 * player, whatever entity it runs as, and a command that the console or a command block runs
 	 * as a player reaches it as that source, named after the player, and never borrows the rights
-	 * of the player.
+	 * of the player. The command of a sign reaches it as the player who clicked, whom
+	 * {@link #started(CommandEvent)} keeps in that field.
 	 */
 	private static String[] ask(CommandSourceStack source, String name, String arguments) {
 		int level = level(source);
 		Entity entity = source.getEntity();
+		ServerPlayer made = clicked(source);
+		if (made == null && source.source instanceof ServerPlayer typed) {
+			made = typed;
+		}
 		String uuid = null;
 		String sender = null;
-		if (source.source instanceof ServerPlayer player) {
-			uuid = player.getStringUUID();
-			sender = player.getGameProfile().getName();
+		if (made != null) {
+			uuid = made.getStringUUID();
+			sender = made.getGameProfile().getName();
 		} else if (entity != null || level < Commands.LEVEL_OWNERS) {
 			sender = source.getTextName();
 		}

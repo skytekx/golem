@@ -102,13 +102,14 @@ pub const MAX_LEVEL: u8 = 4;
 pub enum Sender {
     /// The server console or RCON: a source without an entity at the level [`MAX_LEVEL`].
     Console,
-    /// The player who made the command run: the one who typed it, also when it runs as another
-    /// entity through `execute as`, since the game keeps who made a command run and `execute as`
-    /// changes the entity alone.
+    /// The player who made the command run: the one who typed it or clicked the sign that runs
+    /// it, also when it runs as another entity through `execute as`, since the game keeps who
+    /// made a command run, `execute as` changes the entity alone, and the mod keeps who clicked a
+    /// sign with its command.
     ///
     /// A plugin judges them by the lower of `level` and the rights of the player, since the
     /// game may run a command of a player at another level, such as a function of an
-    /// advancement at the level 2.
+    /// advancement or the command of a sign at the level 2.
     Player {
         /// The player.
         player: Player,

@@ -12,14 +12,14 @@
 
 The client speaks protocol 763 in offline mode: the handshake, the login with the plugin
 requests of Forge answered as a vanilla client would, the keep alive, chat and commands without
-signatures, the respawn and the close. A thread reads its packets as they come and records every
-system chat message as raw text in `messages` and as its component, read from JSON, in
-`components`, which `plain` turns into the text a player reads and `parts` into its texts with
-their styles, the text of every chat message of a player in `chats`, every place the server puts
-the player in `positions`, the dimension of every respawn or change of dimension in `dimensions`
-and the name of every player in the player list in `list_names`. It confirms every teleport, as a
-vanilla client does. It is no game client: it sends no movement and loads no chunk, which a server
-in offline mode on localhost accepts.
+signatures, the use of a block, the respawn and the close. A thread reads its packets as they come
+and records every system chat message as raw text in `messages` and as its component, read from
+JSON, in `components`, which `plain` turns into the text a player reads and `parts` into its texts
+with their styles, the text of every chat message of a player in `chats`, every place the server
+puts the player in `positions`, the dimension of every respawn or change of dimension in
+`dimensions` and the name of every player in the player list in `list_names`. It confirms every
+teleport, as a vanilla client does. It is no game client: it sends no movement and loads no chunk,
+which a server in offline mode on localhost accepts.
 """
 
 from __future__ import annotations
@@ -155,7 +155,7 @@ class Client:
         self.lock, self.messages, self.play = threading.Lock(), [], threading.Event()
         self.components = []
         self.chats, self.positions, self.dimensions, self.list_names = [], [], [], {}
-        self.closed = threading.Event()
+        self.closed, self.uses = threading.Event(), 0
 
     def send(self, packet: int, payload: bytes = b"") -> None:
         body = varint(packet) + payload
@@ -248,6 +248,17 @@ class Client:
         """Runs a command, without its slash."""
         stamp = struct.pack(">qq", int(time.time() * 1000), 0)
         self.send(0x04, string(text) + stamp + varint(0) + varint(0) + bytes(3))
+
+    def use(self, x: int, y: int, z: int) -> None:
+        """Uses the block at a place with an empty main hand, as a click on its top does.
+
+        The server takes the click only from a player within reach whose last teleport the client
+        confirmed.
+        """
+        place = (x & 0x3FFFFFF) << 38 | (z & 0x3FFFFFF) << 12 | y & 0xFFF
+        self.uses += 1
+        cursor = struct.pack(">fff", 0.5, 0.5, 0.5)
+        self.send(0x31, varint(0) + struct.pack(">Q", place) + varint(1) + cursor + b"\x00" + varint(self.uses))
 
     def respawn(self) -> None:
         self.send(0x07, varint(0))
