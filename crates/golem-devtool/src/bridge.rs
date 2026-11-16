@@ -1243,8 +1243,11 @@ impl Plugin for Mover {
 /// `set <key> <value>`, which sets a setting, `get <key>`, which answers it, `stats`, which
 /// answers the counts of the writer, `pause <ms>`, which holds the writer still through the hook
 /// of the feature testing of golem-store, `stopped <ms> <key>`, after which the plugin holds the
-/// writer still for that long and sets the setting once it sees `ServerStopped`, and `outside`,
-/// which answers whether a context that no runtime made holds a store.
+/// writer still for that long and sets the setting once it sees `ServerStopped`, `outside`,
+/// which answers whether a context that no runtime made holds a store, `room <n>`, which
+/// answers whether the store takes that many changes now, and `fill <n>`, which sets the
+/// setting `fill` that many times and answers how many of them the store took and why it took
+/// no more.
 struct Keeper {
     name: String,
     commands: Vec<String>,
@@ -1315,6 +1318,14 @@ impl Plugin for Keeper {
                 let (queued, written, pending) = (stats.queued, stats.written, stats.pending);
                 format!("queued {queued}, written {written}, pending {pending}")
             }
+            "room" => match key.parse::<usize>() {
+                Ok(changes) => format!("room for {changes}: {}", store.room(changes)),
+                Err(_) => format!("{key} is no number of changes"),
+            },
+            "fill" => match key.parse::<u64>() {
+                Ok(changes) => fill(store, changes),
+                Err(_) => format!("{key} is no number of changes"),
+            },
             "pause" => match key.parse::<u64>() {
                 Ok(ms) => match store.testing_pause_writer(Duration::from_millis(ms)) {
                     Ok(()) => format!("paused {ms} ms"),
@@ -1325,6 +1336,25 @@ impl Plugin for Keeper {
             other => format!("{} knows no {other}", self.name),
         };
         vec![answer]
+    }
+}
+
+/// Sets the setting `fill` of a store `changes` times, as a command that changes the store in a
+/// loop would, and answers how many changes the store took and the first refusal.
+fn fill(store: &Store, changes: u64) -> String {
+    let mut took = 0_u64;
+    let mut refusal = None;
+    for change in 0..changes {
+        match store.set_setting("fill", &change.to_string()) {
+            Ok(()) => took += 1,
+            Err(error) => {
+                refusal.get_or_insert(error);
+            }
+        }
+    }
+    match refusal {
+        Some(error) => format!("took {took} of {changes}: {error}"),
+        None => format!("took {took} of {changes}"),
     }
 }
 

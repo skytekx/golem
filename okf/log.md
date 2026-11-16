@@ -408,3 +408,14 @@ Oldest first. Times are UTC.
   mails of the file. `09_store` holds each call and each refusal, the two bulk calls as one change
   of the store each, a mail to everyone that expires, that count behind each call that moves it, and
   the file behind a reopen. See [Store](store.md#mail-and-ignore-lists).
+- A change of the server thread never waits for the writer of the store. `Store::never_waiting`
+  answers a handle whose changes are refused with `StoreError::Behind` where 16384 changes wait for
+  the writer, before they touch the cache, and the runtime hands its plugins that handle and no
+  other, so a command hears the refusal and tells its sender. A join and a quit pass the bound by a
+  reserve of 1024 changes, so no player is left without a row, `room` answers a command whether the
+  changes it is about to make all pass, and `stats` counts the refused changes and those of the
+  reserve. The handle of `Store::open` waits as before, which is the brake of an import.
+  `StoreError` and `Stats` are open to growth from here on, so a later variant or count breaks no
+  caller. `09_store` holds the bound, the reserve, `room`, the file behind them and a burst through
+  that handle in which no call waits, and `04_plugins` holds that a plugin hears the refusal. See
+  [Store](store.md#the-threads).

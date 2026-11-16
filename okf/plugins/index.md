@@ -5,7 +5,7 @@ type: Spec
 title: Plugins
 description: The plugin runtime of Golem, the handler of the bridge that calls the Rust plugins on the server thread in their order, times every call against a budget, catches their panics and routes their commands.
 tags: [plugins, runtime, budget, commands, bridge]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Plugins
@@ -190,7 +190,7 @@ answers through the trait `golem_bridge::Game` of [Bridge](../bridge.md#the-game
 | `actions()` | The queue itself, for what the helpers do not cover |
 | `game()` | The game, which answers on the server thread and answers none on any other thread |
 | `budgets()` | The budgets of the runtime that makes the call, or none outside a runtime |
-| `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk |
+| `store()` | The store of the plugins that the program gave the runtime with `Runtime::set_store`, or none outside a runtime or without one. Its reads answer from its cache and its changes queue for its writer, so a call of the server thread waits for no disk. It is the handle that never waits for the writer either: a change that finds the writer as far behind as the store lets it fall answers `StoreError::Behind` and changes nothing, so a command tells its sender that the server is busy, and one that makes several changes asks `room` first. A plugin changes the store inside its calls alone, on no thread of its own, so that the answer of `room` holds, see [Store](../store.md#the-threads) |
 | `check_permission(sender, node)` | Whether the sender holds the node, as `PermissionAnswer` with `granted`, `set`, which says whether a rule decided, and the `reason`, by the rules of [the check of a sender](permissions.md#the-check-of-a-sender) |
 | `has_permission(sender, node)` | The same answer without the reason, for a player one call of `Permissions::value`, which allocates nothing, for the server thread |
 | `permissions()` | The `Resolver` of the permissions that the program gave the runtime with `Runtime::set_permissions`, or none |

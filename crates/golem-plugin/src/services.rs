@@ -53,9 +53,11 @@ impl Services {
 
 impl Runtime {
     /// Gives the plugins the store, which every later call reaches through
-    /// [`Context::store`]. A second call replaces the store.
+    /// [`Context::store`]. A second call replaces the store. The runtime keeps the handle of
+    /// the store that never waits, whatever handle it is given, so no call of a plugin waits
+    /// for the writer of the store.
     pub fn set_store(&mut self, store: Store) {
-        self.services.store = Some(store);
+        self.services.store = Some(store.never_waiting());
     }
 
     /// Gives the plugins the resolver of the permissions, which every later call reaches
@@ -71,8 +73,13 @@ impl Context<'_> {
     /// gave none.
     ///
     /// Every read answers from the cache of the store and every change queues one operation for
-    /// its writer, so a call of the server thread waits for no disk, as okf/store.md says. A
-    /// flush, a close, a check and a read through the writer wait for the disk and belong on
+    /// its writer, so a call of the server thread waits for no disk, as okf/store.md says. The
+    /// handle never waits for the writer either: a change that finds the writer as far behind
+    /// as the store lets it fall answers `StoreError::Behind` and changes nothing, so a command
+    /// tells its sender that the server is busy, and one that makes several changes asks
+    /// `Store::room` first. A plugin changes the store inside its calls alone and on no thread
+    /// of its own, since the answer of `room` holds only while nothing else changes the store.
+    /// A flush, a close, a check and a read through the writer wait for the disk and belong on
     /// another thread or on `ServerStopped`.
     pub fn store(&self) -> Option<&Store> {
         self.services.and_then(|services| services.store.as_ref())

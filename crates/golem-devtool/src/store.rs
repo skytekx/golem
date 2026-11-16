@@ -12,8 +12,9 @@
 //! `store <script.json>` runs the steps of a script in order and prints one line of JSON per
 //! step as soon as it ran, `{"step", "op", "ok": <answer>}` or `{"step", "op", "error": {"kind",
 //! "message"}}`, so a notebook that kills the process sees every step before the kill. The kind
-//! of an error is the variant of `StoreError`, `refused`, `failed`, `closed`, `open` or
-//! `database`, or `argument` for a step the devtool cannot read.
+//! of an error is the variant of `StoreError`, `refused`, `failed`, `closed`, `behind`, `open`
+//! or `database`, `unknown` for a variant that the devtool does not name, or `argument` for a
+//! step the devtool cannot read.
 //!
 //! ```text
 //! {"steps": [
@@ -28,7 +29,8 @@
 //! `{"dimension", "x", "y", "z", "yaw", "pitch"}`, where a number may also be a string such as
 //! `"NaN"`, a past name `{"name", "changed_at"}`, and a toggle of a player the name of its field in
 //! `toggle` with what it takes in `value`. The devtool adds `close_concurrently`, which closes the
-//! store on two threads at once and answers both closes, `drop`, which drops the store without a
+//! store on two threads at once and answers both closes, `never_waiting`, which puts the handle
+//! that never waits in place of the handle of the script, `drop`, which drops the store without a
 //! close, `open_beside` with `path`, which opens a second store beside the one of the script and
 //! closes it again, `reopen`, which closes the store and opens the same file, `repeat`, which runs
 //! its `steps` `count` times with `{i}` in a string replaced by the round from 1 and prints one
@@ -150,8 +152,11 @@ impl From<StoreError> for StepError {
             StoreError::Refused(_) => "refused",
             StoreError::Failed(_) => "failed",
             StoreError::Closed => "closed",
+            StoreError::Behind(_) => "behind",
             StoreError::Open { .. } => "open",
             StoreError::Database(_) => "database",
+            // The errors of the store are open to growth.
+            _ => "unknown",
         };
         Self {
             kind,
@@ -412,6 +417,8 @@ fn stats_json(stats: &Stats) -> Value {
         "busy_nanos": stats.busy_nanos,
         "waits": stats.waits,
         "largest_pending": stats.largest_pending,
+        "behind": stats.behind,
+        "reserved": stats.reserved,
         "failure": stats.failure,
         "closed": stats.closed,
     })
@@ -571,6 +578,14 @@ impl Session {
         Ok(Value::Null)
     }
 
+    /// Puts the handle of the store that never waits in place of the handle of the script, so
+    /// every later step changes the store as a plugin on the server thread does.
+    fn never_waiting(&mut self) -> Answer {
+        let handle = self.store()?.clone().never_waiting();
+        self.store = Some(handle);
+        Ok(Value::Null)
+    }
+
     /// Closes at the end of a script the store that no step closed, so its last changes reach
     /// the file, and answers whether they did. A store a step closed answered its close already.
     fn finish(&mut self) -> Result<(), StoreError> {
@@ -627,6 +642,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
         "close" => session.close(),
         "close_concurrently" => session.close_concurrently(),
         "drop" => session.drop_store(),
+        "never_waiting" => session.never_waiting(),
         "open_beside" => {
             let path = PathBuf::from(arguments.text("path")?);
             let beside = Store::open(&path)?;
@@ -665,8 +681,8 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
     }
 }
 
-/// Runs the steps of a repeat `count` times and answers the count, the refusals and the time of
-/// a call.
+/// Runs the steps of a repeat `count` times and answers the count, the refusals, the calls that
+/// a handle that never waits refused behind the writer, and the time of a call.
 fn repeat(session: &mut Session, arguments: &Arguments<'_>) -> Answer {
     let count = arguments.count("count")?;
     let steps = arguments
@@ -675,6 +691,7 @@ fn repeat(session: &mut Session, arguments: &Arguments<'_>) -> Answer {
         .ok_or_else(|| argument("\"steps\" is not a list".to_owned()))?
         .clone();
     let mut refused = 0_u64;
+    let mut behind = 0_u64;
     let mut calls = 0_u64;
     let started = Instant::now();
     for round in 1..=count {
@@ -683,6 +700,7 @@ fn repeat(session: &mut Session, arguments: &Arguments<'_>) -> Answer {
             match run_step(session, &with_round(step, round)) {
                 Ok(_) => {}
                 Err(error) if error.kind == "refused" => refused += 1,
+                Err(error) if error.kind == "behind" => behind += 1,
                 Err(error) => {
                     return Err(StepError {
                         kind: error.kind,
@@ -693,13 +711,26 @@ fn repeat(session: &mut Session, arguments: &Arguments<'_>) -> Answer {
         }
     }
     let nanos = started.elapsed().as_nanos() / u128::from(calls.max(1));
-    Ok(json!({"rounds": count, "calls": calls, "refused": refused, "nanos_per_call": nanos}))
+    Ok(json!({
+        "rounds": count,
+        "calls": calls,
+        "refused": refused,
+        "behind": behind,
+        "nanos_per_call": nanos,
+    }))
 }
 
 fn lifecycle(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> {
     let answer = match op {
         "flush" => store.flush().map(|()| Value::Null),
         "stats" => Ok(stats_json(&store.stats())),
+        "room" => {
+            return Some(
+                arguments
+                    .count("changes")
+                    .map(|changes| json!(store.room(changes))),
+            );
+        }
         "check" => store.check().map(|check| check_json(&check)),
         "durability" => store
             .durability()
@@ -1711,7 +1742,8 @@ const BURST: usize = 3 * MAX_PENDING as usize;
 /// can, each timed on its own, and waits for the writer behind them, so the writer meets the mix
 /// of changes a plugin makes. It answers the summary of the calls, whose longest is a change that
 /// waited for room, the changes they queued, since a call such as a second `mark_mail_read`
-/// changes nothing, the changes that waited, the most changes that were pending at once since the
+/// changes nothing, the changes that waited, the changes that a handle that never waits refused
+/// and the joins it took inside the reserve, the most changes that were pending at once since the
 /// open, the transactions of the writer for the burst, the most changes in one transaction since
 /// the open, and the time the writer spent on the burst.
 fn time_burst(store: &Store, players: usize) -> Result<Value, StoreError> {
@@ -1743,6 +1775,8 @@ fn time_burst(store: &Store, players: usize) -> Result<Value, StoreError> {
         "calls": summary(nanos),
         "changes": after.queued - before.queued,
         "waits": after.waits - before.waits,
+        "behind": after.behind - before.behind,
+        "reserved": after.reserved - before.reserved,
         "largest_pending": after.largest_pending,
         "batches": after.batches - before.batches,
         "largest_batch": after.largest_batch,
@@ -1847,6 +1881,7 @@ fn bench(arguments: &[String]) -> i32 {
         let reload = time_reloads(&store, (options.repeat / 20).max(1))?;
         let check = check_stall(&store, 5)?;
         let burst = time_burst(&store, options.players)?;
+        let refusing = time_burst(&store.clone().never_waiting(), options.players)?;
         store.close()?;
         let file_bytes = fs::metadata(&options.path).map_or(0, |metadata| metadata.len());
         let millis = |duration: Duration| duration.as_secs_f64() * 1000.0;
@@ -1867,6 +1902,7 @@ fn bench(arguments: &[String]) -> i32 {
             },
             "check": check,
             "burst": burst,
+            "burst_never_waiting": refusing,
             "file_bytes": file_bytes,
             "resident_kib_after_open": resident,
         }))

@@ -67,28 +67,53 @@ players.
 | Call | Thread | Waits for the disk |
 | --- | --- | --- |
 | Every read, such as `player`, `home`, `balance` or `permissions` | Any, the server thread first | No |
-| Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No, but it waits for the writer behind `MAX_PENDING` changes |
+| Every change, such as `join`, `set_home`, `transfer` or `set_setting` | Any, the server thread first | No. Behind `MAX_PENDING` changes it waits for the writer, or is refused through the handle that never waits |
 | `flush`, `close`, `check`, `ledger`, `durability` | Not the server thread | Yes |
 | The reload of a resolver of the permissions, see [The cost](#the-cost-on-the-server-thread) | Not the server thread | No |
 | `open` | The start of the program, before the server thread runs | Yes |
 
-`Store` is a handle that clones, so every plugin holds one, and it is `Send` and `Sync`. The lock
-of the cache is held for the length of one call and never while the writer works, so a call of
-the server thread never waits for the writer, with one exception.
+`Store` is a handle that clones, so every plugin holds one, and it is `Send` and `Sync`. The lock of
+the cache is held for the length of one call and never while the writer works, so no call waits for
+the writer, with one exception, which the handle of `Store::open` has and the handle of the plugins
+has not.
 
-At most `MAX_PENDING`, 16384 changes or four batches, wait for the writer. A change that finds that
-many pending waits until the writer took its next batch, before it takes the lock of the cache, so
-every read and every other thread goes on meanwhile. So a thread that changes the store faster than
-the writer commits, such as a plugin in a loop or an import, goes at the pace of the writer, and the
-memory of the queue and the lag of the file stay bounded. The first such wait of a store logs
-`[golem] store: the writer of <path> is 16384 changes behind, so a change waits until it takes the
-next batch`, and `stats()` counts the waits and the most changes that were pending at once, which
-stays at `MAX_PENDING` or below while one thread at a time changes the store. A wait lasts until the
-writer committed the batch it works on, up to 4096 changes in one transaction, and only a burst of
-more than 16384 changes meets it. Such a wait costs several ticks of 50 ms: in the burst of
-`golem-devtool store-bench` the longest change took up to 274 ms in the debug build and 151 ms in
-the release build, see [The cost on the server thread](#the-cost-on-the-server-thread). So a port
-that makes such a burst, such as an import, makes it on a thread of its own.
+At most `MAX_PENDING`, 16384 changes or four batches, wait for the writer. A change through the
+handle of `Store::open` that finds that many pending waits until the writer took its next batch,
+before it takes the lock of the cache, so every read and every other thread goes on meanwhile. So a
+program that changes the store through that handle faster than the writer commits, such as an
+import, goes at the pace of the writer, and the memory of the queue and the lag of the file stay
+bounded. The first such wait of a store logs `[golem] store: the writer of <path> is 16384 changes
+behind, so a change waits until it takes the next batch`, and `stats()` counts the waits and the
+most changes that were pending at once, which stays at `MAX_PENDING` or below while one thread at a
+time changes the store and no join or quit took room of the reserve that the next paragraph names. A
+wait lasts until the writer committed the batch it works on, up to 4096 changes in one transaction,
+and only a burst of more than 16384 changes meets it. Such a wait costs several ticks of 50 ms: in
+the burst of `golem-devtool store-bench` the longest change took up to 274 ms in the debug build and
+151 ms in the release build, see [The cost on the server thread](#the-cost-on-the-server-thread). So
+such a burst is the work of a tool that holds the handle of `Store::open`, such as an import, while
+no server runs on the store. No plugin holds that handle.
+
+The server thread never waits that long. `never_waiting()` answers a handle on the same store whose
+changes are refused at the bound instead: a change through it that finds `MAX_PENDING` changes
+pending answers `StoreError::Behind` with their number, `the store takes no change now, since 16384
+changes wait for its writer`, before it touches the cache. So the cache and the file stay one truth,
+and the caller hears it, such as a command that tells its sender that the server is busy. The
+runtime of the plugins hands every plugin that handle and no other. A join and a quit pass the bound
+by up to `JOIN_RESERVE`, 1024 changes, two for each of 512 players, since a join that the store
+refused would leave its player without a row, and every later change for them would be refused as
+one for an unknown player. A loop of joins stops at the reserve. The reserve covers a join and a
+quit and nothing else: every other change of a first join, such as the account that a port opens, is
+refused at the bound as any change, and the port makes it again when the player first needs it and
+it is missing. A command that makes several changes asks `room(n)` first, which answers whether the
+store takes that many changes now, and so makes all of them or none. The answer holds until the call
+of the plugin returns, since the bridge runs one call of a plugin at a time and the writer only
+takes changes out, as long as nothing changes the store beside the calls of the plugins while the
+server runs. `golem run` itself changes it before the JVM exists and behind its end alone, see [The
+place in the program golem](#the-place-in-the-program-golem), and a plugin changes it inside its
+calls alone: a change that a port made on a thread of its own would take a place that `room`
+promised to a command. The store counts the changes it refused so and those that took room of the
+reserve in `stats()`, and logs `[golem] store: the writer of <path> is 16384 changes behind, so the
+store refuses a change that must not wait for it` at most once a minute.
 
 `check` copies the cache under that lock, so that it compares the file with the cache as the call
 found it, and every other call waits for that copy. Every table of the cache sits behind an `Arc`,
@@ -487,10 +512,12 @@ of the server, which holds for every player whose groups have none, as in Essent
 `send_mail_all` and `clear_mail_all` are one operation each, so the file holds such a change whole
 or not at all, and the writer applies it in one transaction. Both look at every player in the cache,
 so the time of the call grows with the players of the store, while the file takes the change on the
-thread of the writer, which is the part that EssentialsX keeps off the server thread.
-`send_mail_all` numbers its mails in the order of the UUIDs of the players. `put_mail` reads every
-field of its record but the number, and refuses a legacy mail with a sender name as it refuses any
-other mail without one.
+thread of the writer, which is the part that EssentialsX keeps off the server thread. A port makes
+both inside a call of the plugin, as every other change, where each is one change for `room`, and on
+no thread of its own. The bench times neither of the two yet, so no figure holds them to the budget
+of a call, see [Open items](open-items.md#open-in-what-is-built). `send_mail_all` numbers its mails
+in the order of the UUIDs of the players. `put_mail` reads every field of its record but the number,
+and refuses a legacy mail with a sender name as it refuses any other mail without one.
 
 ### Accounts
 
@@ -546,22 +573,29 @@ until the next change.
 | --- | --- |
 | `set_setting(key, value)`, `remove_setting(key)`, `setting(key)`, `settings()` | A table of text by key |
 | `Store::open(path)` | Opens or creates the file, migrates it, loads the cache, starts the writer |
+| `never_waiting()` | A handle on the same store whose changes are refused with `StoreError::Behind` where those of the open handle wait, the handle of the server thread |
+| `room(changes)` | Whether the store takes that many more changes now with no wait and no refusal |
 | `flush()` | Waits until every change before it is in the file and synced |
 | `close()` | Writes, checkpoints and closes the file and ends the writer, and every later close answers as the first |
-| `stats()` | The changes queued, written, lost and pending, the batches, the time of the writer, the changes that waited for room and the most changes that were pending at once. A change is pending once the store took it and until the writer wrote or dropped it |
+| `stats()` | The changes queued, written, lost and pending, the batches, the time of the writer, the changes that waited for room, the most changes that were pending at once, the changes that the handle that never waits refused and the joins and quits it took inside the reserve. A change is pending once the store took it and until the writer wrote or dropped it |
 | `MAX_BATCH` | 4096, the most changes in one transaction of the writer |
-| `MAX_PENDING` | 16384, the most changes that wait for the writer before a change waits for room |
+| `MAX_PENDING` | 16384, the most changes that wait for the writer before a change waits for room or is refused |
+| `JOIN_RESERVE` | 1024, the changes beyond `MAX_PENDING` that the handle that never waits still takes for a join and a quit |
 | `durability()` | The settings of the table of [Durability](#durability) as the connection of the writer reports them, read through the writer |
 | `check()` | The integrity of the file, its foreign keys, every balance against the log and the file against the cache as the call found it, which a change of another thread during the check does not disturb |
 | `describe(path)` | The schema of a file that no process holds, as SQLite reports it. As every reader of SQLite it may leave the files `-wal` and `-shm` beside the store |
 
 ## Refusals
 
-A refused change answers `StoreError::Refused` with a `Refusal` and changes nothing. A change of
-an account checks its note first, then its amount, then whether source and target are the same
-account, then whether both exist, the source first, then whether the source holds the amount and
-the target can take it. Money is an `i64` of cents, so an amount with a fraction cannot be asked
-for at all.
+A refused change answers `StoreError::Refused` with a `Refusal` and changes nothing. A change that
+the handle that never waits could not take answers `StoreError::Behind` and changes nothing either,
+see [The threads](#the-threads). `StoreError` and the `Stats` of `stats()` are marked
+`#[non_exhaustive]`, so a later variant or count breaks no caller: a match of the errors outside the
+crate keeps an arm for the variants that it does not name, and no code outside the crate builds the
+counts. A change of an account checks its note first, then its amount, then whether source and
+target are the same account, then whether both exist, the source first, then whether the source
+holds the amount and the target can take it. Money is an `i64` of cents, so an amount with a
+fraction cannot be asked for at all.
 
 | Refusal | Message |
 | --- | --- |
@@ -661,7 +695,8 @@ sender name, the sent time 0 and its text and its read flag as they stand.
    no config/permissions.toml`. A store that holds a group keeps its permissions, so a change of the
    file seeds nothing on a store that was seeded once.
 3. It gives the runtime a clone of the `Store` with `Runtime::set_store`, and every plugin reaches
-   it through `Context::store` of its call, see [Plugins](plugins/index.md#the-context-of-a-call).
+   it through `Context::store` of its call, as the handle that never waits, see
+   [Plugins](plugins/index.md#the-context-of-a-call).
 4. Once every plugin saw `ServerStopped`, the last event of the server thread, where a wait costs
    no tick, the runtime calls `flush`, so every change of the plugins is in the file before the JVM
    ends, also when no close follows, such as when a thread of a mod keeps the JVM from ending until
@@ -772,19 +807,25 @@ release build, so a wait lasts about one transaction of the writer, which is sev
 the 99th percentile of the changes of the burst stayed at 16 microseconds or below. `09_store` holds
 the longest change of the burst in the debug build below 2000 ms.
 
+The bench then makes the same burst through the handle that never waits, the handle of the plugins.
+No call of it waits: the changes that find the writer `MAX_PENDING` changes behind are refused, the
+joins among them pass into the reserve, and `09_store` holds that no call waited, that changes were
+refused and that the 99th percentile of the calls stays inside the budget of 1 ms.
+
 ## Tests
 
 The notebook `tests/notebooks/09_store.ipynb` drives the store through the subcommands
 `golem-devtool store`, which runs a JSON script of calls and prints the answer of every step as a
 line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`. It
 checks the schema against the tables of this page, every call and every refusal, a check while
-another thread changes the store, a file that differs from the cache, a reopen after a close, a
-store dropped without a close, a reopen after a kill between changes, a reader of the answers that
-goes away, a writer that fails at a limit of the file size, a batch that fails part way at a limit
-of the pages of the file, a row that the file refuses behind the cache, a writer thread that panics,
-a store of version 1 that the open migrates with every row as it was, one that the open refuses, one
-whose migration fails, one whose migration a kill cuts, the files the open refuses and the cost
-above. The steps `pause_writer`, `limit_pages`, `execute_behind` and `panic_writer` of
+another thread changes the store, a file that differs from the cache, a thread that changes faster
+than the writer, the handle that never waits at its bound and in its reserve, a reopen after a
+close, a store dropped without a close, a reopen after a kill between changes, a reader of the
+answers that goes away, a writer that fails at a limit of the file size, a batch that fails part way
+at a limit of the pages of the file, a row that the file refuses behind the cache, a writer thread
+that panics, a store of version 1 that the open migrates with every row as it was, one that the open
+refuses, one whose migration fails, one whose migration a kill cuts, the files the open refuses and
+the cost above. The steps `pause_writer`, `limit_pages`, `execute_behind` and `panic_writer` of
 `golem-devtool store` reach the writer through the hooks of the feature `testing` of `golem-store`,
 which only `golem-devtool` turns on and which the program `golem` never calls.
 

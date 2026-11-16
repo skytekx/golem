@@ -296,7 +296,11 @@ pub struct PlayerPermissions {
 }
 
 /// A failure of an open, a read or a write.
+///
+/// The enum is open to growth: a later version of the store may add a variant, so a match of
+/// the errors outside the crate keeps an arm for the variants that it does not name.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum StoreError {
     /// The call breaks a rule of the store, and nothing changed.
     Refused(Refusal),
@@ -313,6 +317,10 @@ pub enum StoreError {
     Failed(String),
     /// The store is closed.
     Closed,
+    /// The writer is as far behind as the store lets it fall, so a handle that never waits took
+    /// no change, and nothing changed. The same call passes once the writer has caught up. The
+    /// error carries the changes that waited for the writer when the call came.
+    Behind(u64),
     /// The file is no store this Golem can open, or another process holds it.
     Open {
         /// The file.
@@ -333,6 +341,10 @@ impl fmt::Display for StoreError {
                 "the store takes no more changes, since the writer failed: {reason}"
             ),
             Self::Closed => formatter.write_str("the store is closed"),
+            Self::Behind(pending) => write!(
+                formatter,
+                "the store takes no change now, since {pending} changes wait for its writer"
+            ),
             Self::Open { path, reason } => {
                 write!(
                     formatter,

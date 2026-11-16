@@ -51,7 +51,7 @@
 //! | Call | Where | Waits for the disk |
 //! | --- | --- | --- |
 //! | Every read, such as [`Store::player`] and [`Store::balance`] | Any thread, the server thread first | No |
-//! | Every change, such as [`Store::set_home`] and [`Store::transfer`] | Any thread, the server thread first | No, but it waits for the writer behind [`MAX_PENDING`] changes |
+//! | Every change, such as [`Store::set_home`] and [`Store::transfer`] | Any thread, the server thread first | No. Behind [`MAX_PENDING`] changes it waits for the writer, or is refused through a handle of [`Store::never_waiting`] |
 //! | [`Store::flush`], [`Store::close`], [`Store::check`], [`Store::ledger`], [`Store::durability`] | Not the server thread | Yes |
 //! | [`Store::open`] | The start of the program, before the server thread runs | Yes |
 //!
@@ -107,6 +107,7 @@ pub use crate::{
         Store, //
     },
     writer::{
+        JOIN_RESERVE,
         MAX_BATCH,
         MAX_PENDING, //
     },

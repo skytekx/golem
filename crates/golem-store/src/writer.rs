@@ -60,9 +60,15 @@ use crate::{
 pub const MAX_BATCH: usize = 4096;
 
 /// The most changes that wait for the writer, four batches. A change that finds this many waits
-/// until the writer took its next batch, so the memory of the queue and the lag of the file stay
-/// bounded however fast a thread changes the store.
+/// until the writer took its next batch, or is refused through a handle that never waits, so the
+/// memory of the queue and the lag of the file stay bounded however fast a thread changes the
+/// store.
 pub const MAX_PENDING: u64 = 4 * MAX_BATCH as u64;
+
+/// The changes beyond [`MAX_PENDING`] that a handle that never waits still takes for a join and a
+/// quit, two for each of 512 players. A join that the store refused would leave its player
+/// without a row, and every later change for them would be refused as well.
+pub const JOIN_RESERVE: u64 = 1024;
 
 /// One change of the store, which the writer applies as one unit.
 #[derive(Debug)]
@@ -180,6 +186,11 @@ pub struct Shared {
     pub waits: AtomicU64,
     /// The most changes that were pending at once.
     pub largest_pending: AtomicU64,
+    /// The changes that a handle that never waits refused, since the writer was behind.
+    pub behind: AtomicU64,
+    /// The joins and quits that such a handle took beyond [`MAX_PENDING`], inside
+    /// [`JOIN_RESERVE`].
+    pub reserved: AtomicU64,
     /// Set once the thread of the writer left its loop, also on a panic.
     pub ended: AtomicBool,
     /// The lock of [`Shared::room`], which a change that waits for room holds while it looks.

@@ -80,6 +80,10 @@ Golem API.
 - The repository of the server does not ignore `golem-store.db`, `golem-store.db-wal` and
   `golem-store.db-shm` yet, which `golem run` writes beside `world/` and which hold player data, see
   [Store](store.md#the-place-in-the-program-golem). Its `.gitignore` names them before the switch.
+- The bench of the store times neither `send_mail_all` nor `clear_mail_all`, which a port makes
+  inside a call of the plugin and whose time grows with the players of the store, so no figure holds
+  the two to the budget of a call, see [Store](store.md#mail-and-ignore-lists). The bench gains the
+  two calls, and the cost table of the store their rows, when that table is next taken.
 - No command changes the permissions of the store on a running server yet, and nothing wakes the
   reload of the resolver there, so `golem run` checks with the set of its start, see
   [Permissions](plugins/permissions.md#the-check-of-a-sender). The port of the commands of LuckPerms

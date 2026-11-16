@@ -32,6 +32,10 @@ use std::{
         },
     },
     thread::JoinHandle,
+    time::{
+        Duration,
+        Instant, //
+    },
 };
 
 use rusqlite::Connection;
@@ -73,6 +77,7 @@ use crate::{
     },
     writer::{
         self,
+        JOIN_RESERVE,
         MAX_PENDING,
         Message,
         Op,
@@ -90,7 +95,11 @@ pub struct Joined {
 }
 
 /// The counts of the writer, for the status of the server and the notebooks.
+///
+/// The record is open to growth: a later version of the store may add a count, so code outside
+/// the crate reads the counts and builds no record of them.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Stats {
     /// The changes the store sent to the writer.
     pub queued: u64,
@@ -110,8 +119,13 @@ pub struct Stats {
     /// The changes that waited because [`MAX_PENDING`] changes were pending.
     pub waits: u64,
     /// The most changes that were pending at once, which stays at [`MAX_PENDING`] or below while
-    /// one thread at a time changes the store.
+    /// one thread at a time changes the store and no join or quit took room of the reserve.
     pub largest_pending: u64,
+    /// The changes that a handle that never waits refused, since the writer was behind.
+    pub behind: u64,
+    /// The joins and quits that such a handle took beyond [`MAX_PENDING`], inside
+    /// [`JOIN_RESERVE`].
+    pub reserved: u64,
     /// Why the writer failed, if it did.
     pub failure: Option<String>,
     /// Whether the store is closed.
@@ -160,11 +174,18 @@ const _: fn() = || {
     shared::<Store>();
 };
 
+/// The least time between two lines on the log about a change that a handle that never waits
+/// refused.
+const BEHIND_LOG_INTERVAL: Duration = Duration::from_mins(1);
+
 /// The handle of an open store. A clone is another handle on the same store, so every plugin
 /// holds one.
 #[derive(Clone)]
 pub struct Store {
     inner: Arc<Inner>,
+    /// Whether a change through this handle waits for the writer at [`MAX_PENDING`], or is
+    /// refused there.
+    waits: bool,
 }
 
 /// The files of the stores that are open in this process, by their canonical path. `SQLite`
@@ -183,6 +204,8 @@ struct Inner {
     outcome: Mutex<Option<Result<(), StoreError>>>,
     /// Whether the store logged that a change waited for the writer, which it logs once.
     warned: AtomicBool,
+    /// When the store last logged that it refused a change of a handle that never waits.
+    behind_logged: Mutex<Option<Instant>>,
     /// Wakes the closes that wait for the one that stops the writer.
     ended: Condvar,
 }
@@ -317,9 +340,34 @@ impl Store {
                 writer: Mutex::new(Some(handle)),
                 outcome: Mutex::new(None),
                 warned: AtomicBool::new(false),
+                behind_logged: Mutex::new(None),
                 ended: Condvar::new(),
             }),
+            waits: true,
         })
+    }
+
+    /// Turns this handle into one that never waits for the writer, which is the handle of the
+    /// server thread. A change through it that finds [`MAX_PENDING`] changes pending answers
+    /// [`StoreError::Behind`] and changes nothing, where a handle of [`Store::open`] waits. A
+    /// join and a quit pass that bound by up to [`JOIN_RESERVE`] changes. Every other call is
+    /// that of any handle, and a clone that was taken before keeps waiting.
+    #[must_use]
+    pub fn never_waiting(self) -> Self {
+        Self {
+            inner: self.inner,
+            waits: false,
+        }
+    }
+
+    /// Whether the store takes `changes` more changes now with no wait and no refusal, which a
+    /// call that makes several changes asks before the first, so it makes all or none. The
+    /// answer holds until the caller returns as long as no other thread changes the store
+    /// meanwhile, since the writer only takes changes out. A join and a quit pass a no by the
+    /// reserve of [`Store::never_waiting`].
+    pub fn room(&self, changes: usize) -> bool {
+        let pending = self.inner.shared.pending();
+        u64::try_from(changes).is_ok_and(|changes| pending.saturating_add(changes) <= MAX_PENDING)
     }
 
     /// The file of the store.
@@ -340,13 +388,24 @@ impl Store {
     /// as it is, and its operation goes to the writer under the same lock.
     ///
     /// A change that finds [`MAX_PENDING`] changes pending first waits until the writer took its
-    /// next batch, before it takes the lock of the cache, so every read goes on meanwhile.
+    /// next batch, before it takes the lock of the cache, so every read goes on meanwhile. A
+    /// handle that never waits refuses the change there instead.
     fn change<T>(
         &self,
         change: impl FnOnce(&mut Cache) -> Result<(T, Option<Op>), Refusal>,
     ) -> Result<T, StoreError> {
+        self.change_within(0, change)
+    }
+
+    /// Runs a change as [`Store::change`] does. A handle that never waits takes it while fewer
+    /// than [`MAX_PENDING`] and `reserve` changes are pending.
+    fn change_within<T>(
+        &self,
+        reserve: u64,
+        change: impl FnOnce(&mut Cache) -> Result<(T, Option<Op>), Refusal>,
+    ) -> Result<T, StoreError> {
         let shared = &self.inner.shared;
-        if shared.wait_for_room() {
+        if self.waits && shared.wait_for_room() {
             shared.waits.fetch_add(1, Ordering::Relaxed);
             if !self.inner.warned.swap(true, Ordering::Relaxed) {
                 crate::log(format_args!(
@@ -370,6 +429,14 @@ impl Store {
         if shared.ended.load(Ordering::Acquire) {
             return Err(StoreError::Failed(shared.end_reason()));
         }
+        // A handle that never waits looks at the queue under the lock of the cache, where no
+        // other change joins the queue, so its bound holds for any number of threads.
+        let pending = shared.pending();
+        if !self.waits && pending >= MAX_PENDING + reserve {
+            drop(state);
+            self.refused_behind(pending);
+            return Err(StoreError::Behind(pending));
+        }
         let (value, op) = change(&mut state.cache)?;
         if let Some(op) = op {
             let sent = state
@@ -383,8 +450,31 @@ impl Store {
             shared
                 .largest_pending
                 .fetch_max(shared.pending(), Ordering::Relaxed);
+            if !self.waits && pending >= MAX_PENDING {
+                shared.reserved.fetch_add(1, Ordering::Relaxed);
+            }
         }
         Ok(value)
+    }
+
+    /// Counts a change that a handle that never waits refused, and logs it at most once in
+    /// [`BEHIND_LOG_INTERVAL`].
+    fn refused_behind(&self, pending: u64) {
+        self.inner.shared.behind.fetch_add(1, Ordering::Relaxed);
+        let mut logged = self
+            .inner
+            .behind_logged
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        if logged.is_none_or(|at| at.elapsed() >= BEHIND_LOG_INTERVAL) {
+            *logged = Some(Instant::now());
+            drop(logged);
+            crate::log(format_args!(
+                "the writer of {} is {pending} changes behind, so the store refuses a change that \
+                 must not wait for it",
+                self.inner.path.display()
+            ));
+        }
     }
 
     fn read<T>(&self, read: impl FnOnce(&Cache) -> T) -> T {
@@ -453,6 +543,8 @@ impl Store {
             busy_nanos: shared.busy_nanos.load(Ordering::Relaxed),
             waits: shared.waits.load(Ordering::Relaxed),
             largest_pending: shared.largest_pending.load(Ordering::Relaxed),
+            behind: shared.behind.load(Ordering::Relaxed),
+            reserved: shared.reserved.load(Ordering::Relaxed),
             failure: shared.failure(),
             closed: self.lock().sender.is_none(),
         }
@@ -494,7 +586,7 @@ impl Store {
     /// their past names, with `at` as the time of the change, in the same change.
     pub fn join(&self, uuid: Uuid, name: &str, at: i64) -> Result<Joined, StoreError> {
         check_name("the name of a player", name)?;
-        self.change(|cache| {
+        self.change_within(JOIN_RESERVE, |cache| {
             let Some(entry) = cache.players.get(&uuid) else {
                 let record = Player::new(uuid, name, at);
                 cache.put_player(record.clone());
@@ -534,7 +626,17 @@ impl Store {
 
     /// Changes the record of a known player.
     fn edit_player(&self, uuid: Uuid, edit: impl FnOnce(&mut Player)) -> Result<(), StoreError> {
-        self.change(|cache| {
+        self.edit_player_within(0, uuid, edit)
+    }
+
+    /// Changes the record of a known player, with the reserve of [`Store::change_within`].
+    fn edit_player_within(
+        &self,
+        reserve: u64,
+        uuid: Uuid,
+        edit: impl FnOnce(&mut Player),
+    ) -> Result<(), StoreError> {
+        self.change_within(reserve, |cache| {
             let entry = cache
                 .players
                 .get(&uuid)
@@ -549,7 +651,7 @@ impl Store {
     /// Records that a player quit at `at`, standing at `logout`.
     pub fn quit(&self, uuid: Uuid, logout: Location, at: i64) -> Result<(), StoreError> {
         let logout = take_location("the logout location", logout)?;
-        self.edit_player(uuid, |record| {
+        self.edit_player_within(JOIN_RESERVE, uuid, |record| {
             record.logout = Some(logout);
             record.last_seen = at;
         })
