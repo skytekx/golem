@@ -153,9 +153,9 @@ says. A null `arguments` reads as the empty string.
 
 | Sender | Source |
 | --- | --- |
-| `Sender::Player { player, level }` | The player who made the command run, at the level of the source: the one who typed it or clicked the sign that runs it, also when it runs as another entity through `execute as` |
+| `Sender::Player { player, level }` | The player who made the command run and is online, at the level of the source: the one who typed it or clicked the sign that runs it, also when it runs as another entity through `execute as` |
 | `Sender::Console` | The console and RCON, with no entity at the level `MAX_LEVEL`, 4 |
-| `Sender::Other { name, level }` | Every other source, such as a command block at level 2, or a command that the console or a command block runs as an armor stand or as a player through `execute as`, named after that entity |
+| `Sender::Other { name, level }` | Every other source, such as a command block at level 2, or a command that the console or a command block runs as an armor stand or as a player through `execute as`, named after that entity, or a player who made the command run and is not online, at the level 0 |
 
 A plugin judges a sender with `Context::check_permission` and `Context::has_permission`, see [the
 check of a sender](permissions.md#the-check-of-a-sender): a player by their nodes in

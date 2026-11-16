@@ -56,7 +56,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Area | Built | Handover | Part | Specified | Designed | Surveyed | Open | Held | None | Out | All |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
-| [The bridge](#the-bridge) | 10 | 0 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 28 |
+| [The bridge](#the-bridge) | 11 | 0 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 29 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 6 | 0 | 2 | 0 | 0 | 0 | 4 | 5 | 0 | 0 | 17 |
 | [The store](#the-store) | 4 | 0 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 8 |
@@ -75,7 +75,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 26 | 0 | 12 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 382 |
+| All | 27 | 0 | 12 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 383 |
 
 ## The JVM host and macOS
 
@@ -111,6 +111,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | The answer of a command goes to what made the command run, as the game sends the feedback of its own commands, whatever entity the command runs as | Bridge (commands) | Built | 05, 07 |
 | The sender of the command that a sign runs is the player who clicked the sign, also when it runs as another entity through `execute as`, and that player reads its answer | Bridge (the host class, commands), Plugins (commands), Permissions (the check of a sender) | Built | 07 |
 | The sign of a mod that runs its command from a class of its own counts as a sign, by the tag `minecraft:all_signs` of the block in whose exact middle the command starts | Bridge (the host class) | Built | 05 |
+| Only a player who is online is the sender of a command: the very player that the list of the server holds under their UUID, and any other is another source at the level 0 | Bridge (the host class) | Built | 05 |
 | The tools of operators move onto the teleport ids, so `/golem teleport` reports the end of the teleport in place of whether it is queued | HANDOVER.md section 3, crates/golem-plugin/src/operator.rs on port/bridge | Open | 07 |
 | The sea level that the bridge answers per dimension checked against the sources of Minecraft 1.20.1 | Commit ca30d08 on port/bridge (GameQueries.java 181 to 182), Social (depth) | Open | 05, 07 |
 | Chat to a subset of players: a chat verdict with a filter of recipients, so ignore works and the signature of the message stays | Bridge needs (need 6), issue #72, Social Q31 | Specified | 05, 07 |

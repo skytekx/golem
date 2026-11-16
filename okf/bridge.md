@@ -108,9 +108,9 @@ command is one of three, and `level` is its permission level from 0 to 4, which 
 
 | Source | `senderUuid` | `senderName` | `level` |
 | --- | --- | --- | --- |
-| A player who made the command run: the one who typed it or clicked the sign that runs it, also when it runs as another entity through `execute as` | The UUID of the player | The name of the profile | The level of the source |
+| A player who made the command run and is online: the one who typed it or clicked the sign that runs it, also when it runs as another entity through `execute as` | The UUID of the player | The name of the profile | The level of the source |
 | The console and RCON: no entity at level 4 | Null | Null | 4 |
-| Every other source: a command block, a function, a command that a source which is no player runs as an entity through `execute as`, a player included | Null | The name of the source, such as `@` for a command block, or of the entity it runs as | The level of the source |
+| Every other source: a command block, a function, a command that a source which is no player runs as an entity through `execute as`, a player included, and a player who made the command run and is not online | Null | The name of the source, such as `@` for a command block, or of the entity it runs as | The level of the source, and 0 for a player who is not online |
 
 The natives answer a player as `Sender::Player` with the level of the source, the console and RCON
 as `Sender::Console` and every other source as `Sender::Other` with its name and level. The mod
@@ -150,6 +150,12 @@ that exact place alone. A command that the mod takes for the click of a sign is 
 player: by their nodes, and where no rule names a node by the lower of their operator level and the
 level of the stack. So it holds no more than that player holds, also when the mod took it for a
 click in error. Every other stack whose source takes no line stays another source at its level.
+
+Only a player who is online is the sender of a command. A player who typed a command or clicked the
+sign that runs it is online when they are the very player that the list of the server holds under
+their UUID. A command of any other player reaches the plugins as another source, under the name that
+the stack carries and at the level 0, whatever the level of the stack, so it holds no node and no
+tool, and the lines of its answer go to no one.
 
 ## Commands
 

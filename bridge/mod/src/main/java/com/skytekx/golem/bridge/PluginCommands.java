@@ -32,7 +32,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.BlockTags;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -207,19 +206,26 @@ public final class PluginCommands {
 	 * suppress them. A silent source, such as a function, still sees no line, since the game
 	 * drops the feedback of such a stack. A link in a line, such as the one to the source that
 	 * /golem source offers, opens on a click. The line of a call that failed stays with the
-	 * rule of the game, which shows no failure of the command of a sign.
+	 * rule of the game, which shows no failure of the command of a sign. Only a player who is
+	 * online is the sender of a command, so the lines of a command that any other player typed
+	 * or started with a click go to no one.
 	 */
 	private int run(CommandContext<CommandSourceStack> context, String name, String rest) {
 		CommandSourceStack source = context.getSource();
-		String[] lines = guard.ask("Host.command", () -> ask(source, name, rest), null);
+		ServerPlayer made = made(source);
+		boolean online = made == null || online(made);
+		String[] lines = guard.ask("Host.command", () -> ask(source, made, online, name, rest),
+				null);
+		if (!online) {
+			return lines == null ? 0 : Command.SINGLE_SUCCESS;
+		}
 		if (lines == null) {
 			source.sendFailure(Component.literal("The command " + name
 					+ " failed, and the log of the server says why"));
 			return 0;
 		}
-		ServerPlayer clicked = clicked(source);
 		CommandSourceStack answer =
-				source.withSource(new Answer(clicked == null ? source.source : clicked));
+				source.withSource(new Answer(made == null ? source.source : made));
 		for (String line : lines) {
 			if (line != null) {
 				answer.sendSuccess(() -> Links.text(line), false);
@@ -293,9 +299,23 @@ public final class PluginCommands {
 		}
 	}
 
-	/** Answers the player who clicked the sign that runs the command, or null for no such one. */
-	private static ServerPlayer clicked(CommandSourceStack source) {
-		return source.source instanceof Clicked clicked ? clicked.player : null;
+	/**
+	 * Answers the player who made the command run, by typing it or by the click of a sign, or
+	 * null for a command that no player made run.
+	 */
+	private static ServerPlayer made(CommandSourceStack source) {
+		if (source.source instanceof Clicked clicked) {
+			return clicked.player;
+		}
+		return source.source instanceof ServerPlayer typed ? typed : null;
+	}
+
+	/**
+	 * Answers whether a player is online: the very player that the list of the server holds
+	 * under their UUID, and no other player that carries the same profile.
+	 */
+	private static boolean online(ServerPlayer player) {
+		return player.server.getPlayerList().getPlayer(player.getUUID()) == player;
 	}
 
 	/**
@@ -307,21 +327,22 @@ public final class PluginCommands {
 	 * player, whatever entity it runs as, and a command that the console or a command block runs
 	 * as a player reaches it as that source, named after the player, and never borrows the rights
 	 * of the player. The command of a sign reaches it as the player who clicked, whom
-	 * {@link #started(CommandEvent)} keeps in that field.
+	 * {@link #started(CommandEvent)} keeps in that field. Only a player who is online is the
+	 * sender of a command: any other player who made a command run reaches the plugin as another
+	 * source, under the name of the stack and at the level 0, whatever the level of the stack.
 	 */
-	private static String[] ask(CommandSourceStack source, String name, String arguments) {
+	private static String[] ask(CommandSourceStack source, ServerPlayer made, boolean online,
+			String name, String arguments) {
 		int level = level(source);
-		Entity entity = source.getEntity();
-		ServerPlayer made = clicked(source);
-		if (made == null && source.source instanceof ServerPlayer typed) {
-			made = typed;
-		}
 		String uuid = null;
 		String sender = null;
-		if (made != null) {
+		if (made != null && online) {
 			uuid = made.getStringUUID();
 			sender = made.getGameProfile().getName();
-		} else if (entity != null || level < Commands.LEVEL_OWNERS) {
+		} else if (made != null) {
+			sender = source.getTextName();
+			level = Commands.LEVEL_ALL;
+		} else if (source.getEntity() != null || level < Commands.LEVEL_OWNERS) {
 			sender = source.getTextName();
 		}
 		String[] lines = Host.command(name, uuid, sender, level, arguments);

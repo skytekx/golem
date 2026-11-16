@@ -578,3 +578,10 @@ Oldest first. Times are UTC.
   player who uses a block: from the middle of a sign the natives get the player, and from beside the
   middle and at a block of stone a source named after the player. See
   [Bridge](bridge.md#the-host-class).
+- Only a player who is online is the sender of a command. The mod names a player as the sender,
+  typed or clicked, when that player is the very one that the list of the server holds under their
+  UUID. A command of any other player reaches the plugins as another source at the level 0, under
+  the name that the stack carries, so it holds no node and no tool, and the lines of its answer go
+  to no one. `05_bridge_build` holds it with its second mod, which builds a player that the list
+  does not hold, lets it use the sign and has it run a command. See
+  [Bridge](bridge.md#the-host-class).

@@ -200,6 +200,9 @@ call of `value`. The senders are those of [Plugins](index.md#commands).
   above. A plugin may add a rule of its own where no rule names a node, as the core plugin leaves
   its tools of operators with the operators of the game, see
   [Core plugin](core.md#the-command-golem).
+- Only a player who is online is a player for the check: the very player that the list of the server
+  holds under their UUID. A command of any other player reaches the plugins as another source at the
+  level 0, which holds no node, see [Bridge](../bridge.md#the-host-class).
 - A source that is no player and runs a command as a player through `execute as`, such as the
   console or a command block, is another source at its own level, so it never holds a node of that
   player, and a source at the level 2 holds every node whoever it runs as. The level 2 is the level

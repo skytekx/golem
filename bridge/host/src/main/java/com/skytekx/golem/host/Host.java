@@ -194,10 +194,12 @@ public final class Host {
 	 *
 	 * @param name the name of the command, one of {@link #commandNames()}
 	 * @param senderUuid the UUID of the player who made it run, who typed it or clicked the sign
-	 *     that runs it, also when it runs as another entity, or null for every other source
+	 *     that runs it, also when it runs as another entity, or null for every other source, a
+	 *     player who is not online among them
 	 * @param senderName the name of that player, null for the console and RCON, or the name of
 	 *     any other source, such as @ for a command block
-	 * @param level the permission level of the source, from 0 to 4
+	 * @param level the permission level of the source, from 0 to 4, and 0 for a player who is
+	 *     not online
 	 * @param arguments everything after the name and one space, or the empty string
 	 * @return the lines the sender sees
 	 */

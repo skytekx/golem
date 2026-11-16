@@ -107,10 +107,11 @@ pub const MAX_LEVEL: u8 = 4;
 pub enum Sender {
     /// The server console or RCON: a source without an entity at the level [`MAX_LEVEL`].
     Console,
-    /// The player who made the command run: the one who typed it or clicked the sign that runs
-    /// it, also when it runs as another entity through `execute as`, since the game keeps who
-    /// made a command run, `execute as` changes the entity alone, and the mod keeps who clicked a
-    /// sign with its command.
+    /// The player who made the command run: the one who typed it or clicked the sign that runs it,
+    /// also when it runs as another entity through `execute as`, since the game keeps who made a
+    /// command run, `execute as` changes the entity alone, and the mod keeps who clicked a sign
+    /// with its command. Only a player who is online is one: the very player that the list of the
+    /// server holds under their UUID.
     ///
     /// A plugin judges them by the lower of `level` and the rights of the player, since the
     /// game may run a command of a player at another level, such as a function of an
@@ -123,8 +124,10 @@ pub enum Sender {
         level: u8,
     },
     /// Every other source: a command block, a function, or a command that a source which is no
-    /// player runs as an entity through `execute as`, a player included, named after that entity
-    /// at the level of the source, so it never borrows the rights of a player.
+    /// player runs as an entity through `execute as`, a player included, named after that entity at
+    /// the level of the source, so it never borrows the rights of a player. A source whose player
+    /// is not the one that the list of the server holds under their UUID is such a source as well,
+    /// under the name that it carries and at the level 0.
     Other {
         /// The name of the source as the game gives it, such as `@` for a command block, or of
         /// the entity it runs as.
