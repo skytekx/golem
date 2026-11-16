@@ -237,6 +237,20 @@ impl Arguments<'_> {
         }
     }
 
+    fn integers(&self, key: &str) -> Result<Vec<i64>, StepError> {
+        let items = self
+            .value(key)?
+            .as_array()
+            .ok_or_else(|| argument(format!("{key:?} is not a list")))?;
+        items
+            .iter()
+            .map(|item| {
+                item.as_i64()
+                    .ok_or_else(|| argument(format!("{key:?} holds a value that is no integer")))
+            })
+            .collect()
+    }
+
     fn strings(&self, key: &str) -> Result<Vec<String>, StepError> {
         match self.0.get(key) {
             None => Ok(Vec::new()),
@@ -1027,6 +1041,24 @@ fn messages(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer
                 arguments.integer("at")?,
                 arguments.optional_integer("expires_at")?,
             )?),
+            "send_mail_all" => json!(store.send_mail_all(
+                arguments.optional_uuid("sender")?,
+                arguments.text("sender_name")?,
+                arguments.text("text")?,
+                arguments.integer("at")?,
+                arguments.optional_integer("expires_at")?,
+            )?),
+            "put_mail" => json!(store.put_mail(Mail {
+                id: 0,
+                sender: arguments.optional_uuid("sender")?,
+                sender_name: arguments.text("sender_name")?.to_owned(),
+                receiver: arguments.uuid("receiver")?,
+                text: arguments.text("text")?.to_owned(),
+                sent_at: arguments.integer("sent_at")?,
+                read: arguments.flag("read")?,
+                expires_at: arguments.optional_integer("expires_at")?,
+                legacy: arguments.flag("legacy")?,
+            })?),
             "mail" => Value::Array(
                 store
                     .mail(arguments.uuid("receiver")?)
@@ -1038,10 +1070,19 @@ fn messages(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer
                 json!(store.unread_mail(arguments.uuid("receiver")?, arguments.integer("at")?))
             }
             "mark_mail_read" => json!(store.mark_mail_read(arguments.uuid("receiver")?)?),
+            "mark_mails_read" => {
+                let (receiver, ids) = (arguments.uuid("receiver")?, arguments.integers("ids")?);
+                json!(store.mark_mails_read(receiver, &ids)?)
+            }
+            "drop_expired_mail" => {
+                let (receiver, at) = (arguments.uuid("receiver")?, arguments.integer("at")?);
+                json!(store.drop_expired_mail(receiver, at)?)
+            }
             "remove_mail" => {
                 json!(store.remove_mail(arguments.uuid("receiver")?, arguments.integer("id")?)?)
             }
             "clear_mail" => json!(store.clear_mail(arguments.uuid("receiver")?)?),
+            "clear_mail_all" => json!(store.clear_mail_all()?),
             "ignore" => json!(store.ignore(arguments.uuid("player")?, arguments.uuid("other")?)?),
             "unignore" => {
                 json!(store.unignore(arguments.uuid("player")?, arguments.uuid("other")?)?)

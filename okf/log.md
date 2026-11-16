@@ -398,3 +398,13 @@ Oldest first. Times are UTC.
   store of version 1 that the open migrates, one that it refuses, a migration that fails and one
   that a kill cuts, each new call and a file that differs from the cache. See
   [Store](store.md#versions-and-migrations).
+- The store has the calls of the mail that the port of `mail` needs. `mark_mails_read` marks the
+  mails that a page showed and no other, `drop_expired_mail` removes the mails of a player that have
+  expired by the time of the caller, before a list is numbered, `send_mail_all` sends one mail to
+  every player and `clear_mail_all` removes the mail of every player, each as one operation and so
+  one transaction of the writer, and `put_mail` adds a mail as the migration tool carries it over, a
+  legacy mail among them. The two bulk calls look at every player, so their time grows with the
+  players of the store. `check` compares the count of the unread mails that the cache keeps with the
+  mails of the file. `09_store` holds each call and each refusal, the two bulk calls as one change
+  of the store each, a mail to everyone that expires, that count behind each call that moves it, and
+  the file behind a reopen. See [Store](store.md#mail-and-ignore-lists).

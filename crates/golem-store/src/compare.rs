@@ -114,7 +114,13 @@ fn differences(file: &Snapshot, cache: &Snapshot) -> Vec<String> {
         ("players", same(file, cache, |entry| &entry.record)),
         ("homes", same(file, cache, |entry| &entry.homes)),
         ("ignore lists", same(file, cache, |entry| &entry.ignores)),
-        ("mail", same(file, cache, |entry| entry.mail.as_slice())),
+        // The cache keeps the count of the unread mails of a player beside their mails, and the
+        // load of a file counts it from the rows, so a count that went astray is a difference.
+        (
+            "mail",
+            same(file, cache, |entry| entry.mail.as_slice())
+                && same(file, cache, |entry| &entry.unread),
+        ),
         (
             "past names",
             same(file, cache, |entry| entry.past_names.as_slice()),

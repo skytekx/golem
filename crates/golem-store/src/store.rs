@@ -927,14 +927,7 @@ impl Store {
     ) -> Result<i64, StoreError> {
         check_name("the name of the sender", sender_name)?;
         check_expiry(expires_at)?;
-        check_text("the text of a mail", text)?;
-        if text.is_empty() {
-            return Err(Refusal::Invalid {
-                what: "the text of a mail",
-                why: "is empty".to_owned(),
-            }
-            .into());
-        }
+        check_mail_text(text)?;
         self.change(|cache| {
             if let Some(sender) = sender
                 && !cache.players.contains_key(&sender)
@@ -960,6 +953,96 @@ impl Store {
             entry.unread += 1;
             cache.next_mail += 1;
             Ok((id, Some(Op::PutMail(Box::new(mail)))))
+        })
+    }
+
+    /// Sends one mail to every player of the store, the sender among them, as one change, and
+    /// answers how many it sent. Each mail takes a number of its own, in the order of the UUIDs
+    /// of the players. The call looks at every player, so its time grows with the players of the
+    /// store.
+    pub fn send_mail_all(
+        &self,
+        sender: Option<Uuid>,
+        sender_name: &str,
+        text: &str,
+        at: i64,
+        expires_at: Option<i64>,
+    ) -> Result<usize, StoreError> {
+        check_name("the name of the sender", sender_name)?;
+        check_expiry(expires_at)?;
+        check_mail_text(text)?;
+        self.change(|cache| {
+            if let Some(sender) = sender
+                && !cache.players.contains_key(&sender)
+            {
+                return Err(Refusal::UnknownPlayer(sender));
+            }
+            let mut receivers: Vec<Uuid> = cache.players.iter().map(|(uuid, _)| *uuid).collect();
+            if receivers.is_empty() {
+                return Ok((0, None));
+            }
+            receivers.sort_unstable();
+            let mut mails = Vec::with_capacity(receivers.len());
+            for receiver in receivers {
+                let mail = Mail {
+                    id: cache.next_mail,
+                    sender,
+                    sender_name: sender_name.to_owned(),
+                    receiver,
+                    text: text.to_owned(),
+                    sent_at: at,
+                    read: false,
+                    expires_at,
+                    legacy: false,
+                };
+                cache.next_mail += 1;
+                if let Some(entry) = cache.player_mut(&receiver) {
+                    entry.mail.push(mail.clone());
+                    entry.unread += 1;
+                }
+                mails.push(mail);
+            }
+            Ok((mails.len(), Some(Op::PutMails(mails))))
+        })
+    }
+
+    /// Adds a whole mail as the record gives it, with its sender, its times, its read flag and
+    /// its legacy flag, under the next number of the store, which it answers. The `id` of the
+    /// record is not read. A legacy mail has no sender name, and every other mail has one. This
+    /// is the call of the migration tool, and the one call that adds a legacy mail.
+    pub fn put_mail(&self, mut mail: Mail) -> Result<i64, StoreError> {
+        if mail.legacy {
+            if !mail.sender_name.is_empty() {
+                return Err(Refusal::Invalid {
+                    what: "a legacy mail",
+                    why: format!(
+                        "has the sender name {:?}, and a legacy mail has none",
+                        mail.sender_name
+                    ),
+                }
+                .into());
+            }
+        } else {
+            check_name("the name of the sender", &mail.sender_name)?;
+        }
+        check_expiry(mail.expires_at)?;
+        check_mail_text(&mail.text)?;
+        self.change(|cache| {
+            if let Some(sender) = mail.sender
+                && !cache.players.contains_key(&sender)
+            {
+                return Err(Refusal::UnknownPlayer(sender));
+            }
+            mail.id = cache.next_mail;
+            let entry = cache
+                .player_mut(&mail.receiver)
+                .ok_or(Refusal::UnknownPlayer(mail.receiver))?;
+            entry.mail.push(mail.clone());
+            if !mail.read {
+                entry.unread += 1;
+            }
+            cache.next_mail += 1;
+            Ok((mail.id, Some(Op::PutMail(Box::new(mail)))))
         })
     }
 
@@ -1010,6 +1093,50 @@ impl Store {
         })
     }
 
+    /// Marks the mails of a player that `ids` names as read, and answers how many of them were
+    /// unread. A number that names no mail of the player marks nothing.
+    pub fn mark_mails_read(&self, receiver: Uuid, ids: &[i64]) -> Result<usize, StoreError> {
+        self.change(|cache| {
+            let entry = cache
+                .player_mut(&receiver)
+                .ok_or(Refusal::UnknownPlayer(receiver))?;
+            let mut marked = Vec::new();
+            for mail in &mut entry.mail {
+                if !mail.read && ids.contains(&mail.id) {
+                    mail.read = true;
+                    marked.push(mail.id);
+                }
+            }
+            if marked.is_empty() {
+                return Ok((0, None));
+            }
+            entry.unread -= marked.len();
+            Ok((marked.len(), Some(Op::MarkMailsRead(marked))))
+        })
+    }
+
+    /// Removes every mail of a player that has expired at `at`, the time of the caller, and
+    /// answers how many there were.
+    pub fn drop_expired_mail(&self, receiver: Uuid, at: i64) -> Result<usize, StoreError> {
+        self.change(|cache| {
+            let entry = cache
+                .player_mut(&receiver)
+                .ok_or(Refusal::UnknownPlayer(receiver))?;
+            let expired: Vec<i64> = entry
+                .mail
+                .iter()
+                .filter(|mail| mail.expired(at))
+                .map(|mail| mail.id)
+                .collect();
+            if expired.is_empty() {
+                return Ok((0, None));
+            }
+            entry.mail.retain(|mail| !mail.expired(at));
+            entry.unread = entry.mail.iter().filter(|mail| !mail.read).count();
+            Ok((expired.len(), Some(Op::RemoveMails(expired))))
+        })
+    }
+
     /// Removes the mail `id` of a player, and answers whether they had it.
     pub fn remove_mail(&self, receiver: Uuid, id: i64) -> Result<bool, StoreError> {
         self.change(|cache| {
@@ -1040,6 +1167,31 @@ impl Store {
             entry.mail.clear();
             entry.unread = 0;
             Ok((count, Some(Op::ClearMail(receiver))))
+        })
+    }
+
+    /// Removes every mail of every player, as one change, and answers how many there were. The
+    /// call looks at every player, so its time grows with the players of the store.
+    pub fn clear_mail_all(&self) -> Result<usize, StoreError> {
+        self.change(|cache| {
+            let holders: Vec<Uuid> = cache
+                .players
+                .iter()
+                .filter(|(_, entry)| !entry.mail.is_empty())
+                .map(|(uuid, _)| *uuid)
+                .collect();
+            let mut count = 0;
+            for uuid in holders {
+                if let Some(entry) = cache.player_mut(&uuid) {
+                    count += entry.mail.len();
+                    entry.mail.clear();
+                    entry.unread = 0;
+                }
+            }
+            if count == 0 {
+                return Ok((0, None));
+            }
+            Ok((count, Some(Op::ClearAllMail)))
         })
     }
 
@@ -1531,6 +1683,18 @@ impl Store {
                 .map_err(|error| StoreError::Database(schema::describe_error(&error)))
         })
     }
+}
+
+/// Checks the text of a mail, which is a text of the store and not empty.
+fn check_mail_text(text: &str) -> Result<(), Refusal> {
+    check_text("the text of a mail", text)?;
+    if text.is_empty() {
+        return Err(Refusal::Invalid {
+            what: "the text of a mail",
+            why: "is empty".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 /// The generation and the permissions of the cache as pointers, which the lock of the cache

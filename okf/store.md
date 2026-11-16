@@ -474,10 +474,23 @@ of the server, which holds for every player whose groups have none, as in Essent
 | --- | --- |
 | `send_mail(sender, sender_name, receiver, text, at, expires_at)` | Sends a mail, from the console when `sender` is none, that expires at `expires_at` or never when that is none, and answers its number |
 | `mail(receiver)`, `unread_mail(receiver, at)` | The mail oldest first, expired mail among it, and the number of mails that are not read and have not expired at `at` |
+| `send_mail_all(sender, sender_name, text, at, expires_at)` | Sends one mail to every player of the store, the sender among them, as one operation, and answers how many it sent |
 | `mark_mail_read(receiver)` | Marks every mail read and answers how many were not |
+| `mark_mails_read(receiver, ids)` | Marks the mails of the player that `ids` names read and answers how many of them were not, so a port marks the mails of the page it showed and no other |
+| `drop_expired_mail(receiver, at)` | Removes every mail of the player that has expired at `at` and answers how many, which a port does before it numbers a list |
 | `remove_mail(receiver, id)`, `clear_mail(receiver)` | Remove one mail or all |
+| `clear_mail_all()` | Removes every mail of every player, as one operation, and answers how many there were |
+| `put_mail(mail)` | Adds a whole mail as the record gives it, under the next number of the store, for the migration tool, and it alone adds a legacy mail |
 | `ignore(player, other)`, `unignore(player, other)` | Change the list and answer whether it changed |
 | `ignores(player, other)`, `ignore_list(player)` | The answer and the list |
+
+`send_mail_all` and `clear_mail_all` are one operation each, so the file holds such a change whole
+or not at all, and the writer applies it in one transaction. Both look at every player in the cache,
+so the time of the call grows with the players of the store, while the file takes the change on the
+thread of the writer, which is the part that EssentialsX keeps off the server thread.
+`send_mail_all` numbers its mails in the order of the UUIDs of the players. `put_mail` reads every
+field of its record but the number, and refuses a legacy mail with a sender name as it refuses any
+other mail without one.
 
 ### Accounts
 
@@ -615,6 +628,16 @@ turns the direction of text out of the name of a home, as in EssentialsX, since 
 only control characters.
 
 Issue: [#107](https://github.com/skytekx/golem/issues/107).
+
+### Legacy mail and expiry
+
+EssentialsX keeps every mail with its text and its read flag. A mail that it marks `legacy`, or that
+carries no such mark, has nothing more: no sender, no time and no expiry. Every other mail has a
+`sender-name`, a `sender-uuid`, which is the text `null` for the console, a `timestamp` and an
+`expire`, which is 0 for a mail that never expires. The store keeps no time for a mail that never
+expires and refuses a zero, and it takes a mail without a sender name as a legacy mail alone. So the
+tool carries an `expire` of 0 over as none, and a legacy mail over through `put_mail` with an empty
+sender name, the sent time 0 and its text and its read flag as they stand.
 
 ## The place in the program golem
 

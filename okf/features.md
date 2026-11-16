@@ -58,7 +58,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The bridge](#the-bridge) | 2 | 4 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 24 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
 | [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 2 | 2 | 2 | 0 | 0 | 0 | 6 | 4 | 0 | 0 | 16 |
-| [The store](#the-store) | 2 | 0 | 2 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 8 |
+| [The store](#the-store) | 3 | 0 | 2 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
 | [Social, info and status](#social-info-and-status) | 0 | 0 | 0 | 19 | 0 | 0 | 0 | 7 | 2 | 0 | 28 |
@@ -74,7 +74,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 12 | 6 | 12 | 74 | 23 | 25 | 137 | 30 | 6 | 52 | 377 |
+| All | 13 | 6 | 12 | 74 | 23 | 25 | 136 | 30 | 6 | 52 | 377 |
 
 ## The JVM host and macOS
 
@@ -171,8 +171,8 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | --- | --- | --- | --- |
 | Notebook 09 compares a decision of the permissions of the store by its node, its value and its reason, and leaves the field `hasPermission` to notebook 06 | Permissions (the API), Store (permissions) | Built | 06, 09 |
 | Schema 2 with its migration from version 1: the toggles, the last teleport time, mail expiry and the legacy flag, the last owner of a warp, past names and settings per player | Store (versions), Bridge needs (storage), Social (storage) | Built | 09 |
-| Mail in the store: the shown mails marked read, a stable id per mail, and expired mails dropped before the numbering | Issues #73, #74 | Open | 09 |
-| A change never holds the server thread: at `MAX_PENDING` it is deferred or dropped with a warning, where a burst waits up to 274 ms in debug and 151 ms in release today | Store lines 712 to 722, API 19 | Open | 09 |
+| Mail in the store: the shown mails marked read, a stable id per mail, and expired mails dropped before the numbering | Issues #73, #74 | Built | 09 |
+| A change never holds the server thread: at `MAX_PENDING` it is deferred or dropped with a warning, where a burst waits up to 274 ms in debug and 151 ms in release today | Store lines 735 to 745, API 19 | Open | 09 |
 | Balances in whole cents and never below zero, one transaction per transfer and per bulk change | Issues #79, #80, #81, #106, commit 041569a | Part | 09 |
 | Names: one rule per kind, a warp name that reads as a page refused when it is set, and the store keeps the bytes | Issues #35, #46, #53, #60, #107 | Part | 09 |
 | An online snapshot of the store that opens, taken by Golem when `backup.sh` asks for it after its check of free space, since the store holds an exclusive lock while Golem runs | Store lines 108 and 126 to 128, SRV macos/backup.sh 53 to 66 and 76 | Open | 09 |
@@ -265,7 +265,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | Feature | Source | State | Notebook |
 | --- | --- | --- | --- |
 | The whole economy, ported only if the usage audit shows a player using `pay`, `balance` or `eco`, else dropped with the balances migrated for the record | Open items (whether the economy is in use) | Held | 14 |
-| The core of the money in whole cents: the most money, no balance below zero and no loan, so loans end with the port | Social (economy), Store lines 587 to 590 | Specified | 14 |
+| The core of the money in whole cents: the most money, no balance below zero and no loan, so loans end with the port | Social (economy), Store lines 600 to 603 | Specified | 14 |
 | Amounts as plain decimals with at most the scale of the currency, without grouping and without a suffix such as `k` | Issue #78 | Specified | 14 |
 | No payment below one cent | Issue #79 | Specified | 14 |
 | The command `balance`, which names the missing node for the balance of another player | Issue #85 | Specified | 14 |

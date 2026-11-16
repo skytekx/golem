@@ -105,9 +105,16 @@ pub enum Op {
     },
     RemoveSpawn(String),
     PutMail(Box<Mail>),
+    /// One mail for each of many players, all or none.
+    PutMails(Vec<Mail>),
     MarkMailRead(Uuid),
+    /// The numbers of the mails to mark read.
+    MarkMailsRead(Vec<i64>),
     RemoveMail(i64),
+    /// The numbers of the mails to remove.
+    RemoveMails(Vec<i64>),
     ClearMail(Uuid),
+    ClearAllMail,
     PutIgnore {
         player: Uuid,
         ignored: Uuid,
@@ -498,7 +505,11 @@ fn write(transaction: &Transaction<'_>, op: &Op) -> rusqlite::Result<()> {
             "DELETE FROM spawns WHERE group_name = ?1",
             [group],
         ),
-        Op::PutMail(mail) => put_mail(transaction, mail),
+        Op::PutMail(mail) => put_mails(transaction, std::slice::from_ref(mail.as_ref())),
+        Op::PutMails(mails) => put_mails(transaction, mails),
+        Op::MarkMailsRead(ids) => mark_mails_read(transaction, ids),
+        Op::RemoveMails(ids) => remove_mails(transaction, ids),
+        Op::ClearAllMail => run_sql(transaction, "DELETE FROM mail", []),
         Op::MarkMailRead(receiver) => run_sql(
             transaction,
             "UPDATE mail SET read = 1 WHERE receiver = ?1 AND read = 0",
@@ -657,12 +668,14 @@ fn put_spawn(
     )
 }
 
-fn put_mail(transaction: &Transaction<'_>, mail: &Mail) -> rusqlite::Result<()> {
-    run_sql(
-        transaction,
+/// Writes the mails of one operation with one statement.
+fn put_mails(transaction: &Transaction<'_>, mails: &[Mail]) -> rusqlite::Result<()> {
+    let mut statement = transaction.prepare(
         "INSERT INTO mail (id, sender, sender_name, receiver, text, sent_at, read, expires_at, \
          legacy) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        params![
+    )?;
+    for mail in mails {
+        statement.execute(params![
             mail.id,
             mail.sender.map(|sender| sender.to_string()),
             mail.sender_name,
@@ -672,8 +685,28 @@ fn put_mail(transaction: &Transaction<'_>, mail: &Mail) -> rusqlite::Result<()> 
             mail.read,
             mail.expires_at,
             mail.legacy
-        ],
-    )
+        ])?;
+    }
+    Ok(())
+}
+
+/// Runs one statement of the mail for each of the numbers of an operation.
+fn each_mail(transaction: &Transaction<'_>, sql: &str, ids: &[i64]) -> rusqlite::Result<()> {
+    let mut statement = transaction.prepare(sql)?;
+    for id in ids {
+        statement.execute([id])?;
+    }
+    Ok(())
+}
+
+/// Marks the mails of the numbers of an operation as read.
+fn mark_mails_read(transaction: &Transaction<'_>, ids: &[i64]) -> rusqlite::Result<()> {
+    each_mail(transaction, "UPDATE mail SET read = 1 WHERE id = ?1", ids)
+}
+
+/// Removes the mails of the numbers of an operation.
+fn remove_mails(transaction: &Transaction<'_>, ids: &[i64]) -> rusqlite::Result<()> {
+    each_mail(transaction, "DELETE FROM mail WHERE id = ?1", ids)
 }
 
 /// Puts a whole set in place of the permissions.
