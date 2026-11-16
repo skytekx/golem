@@ -27,10 +27,16 @@ import java.util.Set;
 import net.minecraft.commands.CommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.EventPriority;
@@ -109,17 +115,28 @@ public final class PluginCommands {
 	 * says who clicked from then on. The bridge therefore puts a source of its own in the place of
 	 * the one of the game, which takes no line either and holds that player, and execute as keeps
 	 * it as it keeps every source. Only the stack that a command starts with is marked, and only
-	 * when it has this shape and the block entity of a sign hands the command to the game, so no
-	 * other source that takes no line passes for a player.
+	 * when it has this shape and belongs to a sign: the block entity of a sign hands the command
+	 * to the game, or the stack stands at the exact middle of a sign, as the sign of a mod does
+	 * that runs its command from a class of its own. A command that the bridge takes for the
+	 * click of a sign is judged as that player: by their nodes, and where no rule names a node
+	 * by the lower of their operator level and the level of the stack. So it holds no more than
+	 * that player holds, also when the bridge took it for a click in error. The listener runs
+	 * behind the guard of the mod, so a fault in it is logged and the command starts as the game
+	 * built it.
 	 *
 	 * @param event the event of Forge, which holds the stack that the command starts with
 	 */
 	@SubscribeEvent(priority = EventPriority.LOWEST)
 	public void started(CommandEvent event) {
+		guard.run("The start of a command", () -> mark(event));
+	}
+
+	/** Puts the source of the bridge into the stack of the event when a sign starts the command. */
+	private static void mark(CommandEvent event) {
 		ParseResults<CommandSourceStack> parse = event.getParseResults();
 		CommandSourceStack source = parse.getContext().getSource();
-		if (source.source == CommandSource.NULL
-				&& source.getEntity() instanceof ServerPlayer player && startedBySign()) {
+		if (source.source == CommandSource.NULL && source.getEntity() instanceof ServerPlayer player
+				&& (atSign(source) || startedBySign())) {
 			Clicked clicked = new Clicked(player);
 			event.setParseResults(Commands.mapSource(parse, stack -> stack.withSource(clicked)));
 		}
@@ -138,6 +155,28 @@ public final class PluginCommands {
 				.findFirst()
 				.filter(SignBlockEntity.class::isAssignableFrom)
 				.isPresent());
+	}
+
+	/**
+	 * Answers whether the stack stands at a sign: at the exact middle of a block that is one by
+	 * the tag of the game for signs, which the signs of mods join. The game gives the command of
+	 * a sign the middle of the block of the sign as its place, and so does the sign of a mod, so
+	 * a stack at any other place of the block is none of a sign. The answer reads a loaded chunk
+	 * alone, and a stack that a mod built without a level stands at no sign.
+	 */
+	private static boolean atSign(CommandSourceStack source) {
+		ServerLevel level = source.getLevel();
+		if (level == null) {
+			return false;
+		}
+		Vec3 where = source.getPosition();
+		BlockPos place = BlockPos.containing(where);
+		if (!where.equals(Vec3.atCenterOf(place))) {
+			return false;
+		}
+		ChunkPos column = new ChunkPos(place);
+		LevelChunk chunk = level.getChunkSource().getChunkNow(column.x, column.z);
+		return chunk != null && chunk.getBlockState(place).is(BlockTags.ALL_SIGNS);
 	}
 
 	/** Answers whether a player can type the name as the first word of a command. */

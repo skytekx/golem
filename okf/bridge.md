@@ -139,10 +139,17 @@ of the game, which takes no line either and holds the player who clicked. So the
 sign reaches the plugins as the player who clicked, at the level of the sign, as on the live server,
 where Arclight names the player who clicked a sign as the sender of a plugin command that the sign
 runs. `execute as` keeps that source as it keeps every source, so the command of a sign reaches the
-plugins as the player who clicked whatever entity it runs as. The mod knows the sign by the code
-that hands the command to the game, the first class below `Commands` on the stack of the thread.
-Every other stack whose source takes no line stays another source at its level, as does a command
-that another command starts while the click runs.
+plugins as the player who clicked whatever entity it runs as. The mod knows a sign in two ways. The
+code that hands the command to the game, the first class below `Commands` on the stack of the
+thread, is the block entity of a sign of the game. Or the stack stands at the exact middle of a
+block that is a sign by the tag `minecraft:all_signs` of the game, which the signs of mods join, so
+the sign of a mod that runs its command from a class of its own counts as well. The game gives the
+command of a sign the middle of the block of the sign as its place, and so does the sign of a mod,
+so a command that a mod runs for a player with the same shape counts as the click of a sign from
+that exact place alone. A command that the mod takes for the click of a sign is judged as that
+player: by their nodes, and where no rule names a node by the lower of their operator level and the
+level of the stack. So it holds no more than that player holds, also when the mod took it for a
+click in error. Every other stack whose source takes no line stays another source at its level.
 
 ## Commands
 

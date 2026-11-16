@@ -567,3 +567,14 @@ Oldest first. Times are UTC.
   behind it and `stopped` for two that waited in the mod, each once, and no `serverStopping`. Seven
   of the eight reasons have a cell now, and `unloaded` stays in [Open items](open-items.md). See
   [Bridge](bridge.md#the-end-of-a-teleport).
+- The sign of a mod counts as a sign. The mod knew the click of a sign by the block entity of the
+  game that hands the command over, so a sign that a mod builds from a class of its own stayed a
+  source that is no player. The mod now also takes the tag of the game for signs,
+  `minecraft:all_signs`, which the signs of mods join, of the block in whose exact middle the
+  command starts, where the game and the sign of a mod place the command of a sign. A command that
+  it takes for a click is judged as that player: by their nodes, and where no rule names a node by
+  the lower of their operator level and the level of the stack. So it holds no more than that player
+  holds. `05_bridge_build` holds it with its second mod, which runs commands of that shape for the
+  player who uses a block: from the middle of a sign the natives get the player, and from beside the
+  middle and at a block of stone a source named after the player. See
+  [Bridge](bridge.md#the-host-class).
