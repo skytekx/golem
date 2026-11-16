@@ -555,3 +555,15 @@ Oldest first. Times are UTC.
   place among them, and the place where a player logged out needs no field of its own.
   `05_bridge_build` holds it: the stand in native `playerLeft` asks the game where the player who
   leaves is. See [Bridge](bridge.md#the-game).
+- `05_bridge_build` holds two more reasons that end a teleport, `cancelled` and `error`. Both need a
+  mod beside the bridge, so the notebook builds one with `javac` against the jars of the server, a
+  class that cancels the event of Forge for one teleport of a command and throws in its listener for
+  another, and boots a copy of the server of its own with it and the stand in natives. The natives
+  hear each reason once, and the mod logs a warning for the first and an error for the second. The
+  same mod makes a player leave inside the move of a teleport, and the natives hear the end of that
+  teleport and of the one that waited behind it once each, with `offline`. In a boot of its own the
+  mod ends the server by an error that the guard of the bridge lets pass, inside the move of a
+  teleport: the natives hear `error` for that teleport, `stopped` for the one of the same drain
+  behind it and `stopped` for two that waited in the mod, each once, and no `serverStopping`. Seven
+  of the eight reasons have a cell now, and `unloaded` stays in [Open items](open-items.md). See
+  [Bridge](bridge.md#the-end-of-a-teleport).

@@ -136,13 +136,9 @@ Golem API.
 - A mod that registers a command at the lowest priority after the bridge still merges it into the
   node of a plugin command of that name. When the bridge moves a command aside, it points the
   aliases of the root that redirect to it at the moved command, and no redirect deeper in the tree.
-- Notebook 05 holds five of the eight reasons of a teleport that fails. A teleport that a mod
-  cancels and one that throws, `cancelled` and `error`, need a mod beside the bridge that cancels
-  `EntityTeleportEvent.TeleportCommand` or throws in its listener, which the notebook does not
-  build. So does a server whose loop ends by a fault, where the mod ends the teleports that wait,
-  and behind an error that its guard lets pass the one that ran and those of the same drain. And no
-  stock Forge server keeps the chunks of a search from loading for 600 ticks, so no boot shows
-  `unloaded`. See [Bridge](bridge.md#the-end-of-a-teleport).
+- Notebook 05 holds seven of the eight reasons of a teleport that fails. No stock Forge server
+  keeps the chunks of a search from loading for 600 ticks, so no boot shows `unloaded`. See
+  [Bridge](bridge.md#the-end-of-a-teleport).
 - `Actions::push` of `golem-bridge`, the queue that a plugin reaches through `Context::actions`,
   still takes a teleport as it is, with any id and also while the server stops. A teleport enters
   the queue through `Actions::teleport` alone, which `Context::queue_teleport` calls and which gives
