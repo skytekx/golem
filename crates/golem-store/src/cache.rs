@@ -12,10 +12,10 @@
  * A copy of the cache, which the check of the store takes under the lock of the cache, must not
  * stall the calls of the server thread that wait for that lock. The players and the accounts are
  * maps in 64 parts behind an Arc each, the other tables are maps behind an Arc, and a player with
- * their homes, mail and ignore list, a group and the permissions of a player sit behind an Arc as
- * well, so a copy takes pointers instead of rows and costs the same for any number of rows. A
- * change copies a part, a table or an entry first when a copy still shares it, so the copy keeps
- * it as it was.
+ * their homes, mail, ignore list, past names and settings, a group and the permissions of a player
+ * sit behind an Arc as well, so a copy takes pointers instead of rows and costs the same for any
+ * number of rows. A change copies a part, a table or an entry first when a copy still shares it,
+ * so the copy keeps it as it was.
  */
 
 use std::{
@@ -36,6 +36,7 @@ use rusqlite::{
 use crate::model::{
     Location,
     Mail,
+    PastName,
     PermissionGroup,
     Player,
     PlayerPermissions,
@@ -121,6 +122,10 @@ pub struct Entry {
     /// The mail of the player, oldest first.
     pub mail: Vec<Mail>,
     pub unread: usize,
+    /// The names the player had before, oldest first, each at its place in the list.
+    pub past_names: Vec<PastName>,
+    /// The settings that the plugins keep for the player.
+    pub settings: BTreeMap<String, String>,
 }
 
 impl Entry {
@@ -131,6 +136,8 @@ impl Entry {
             ignores: BTreeSet::new(),
             mail: Vec::new(),
             unread: 0,
+            past_names: Vec::new(),
+            settings: BTreeMap::new(),
         }
     }
 }
@@ -225,27 +232,7 @@ impl Cache {
     /// Loads every row but the log from the file.
     pub fn load(connection: &Connection) -> rusqlite::Result<Self> {
         let mut cache = Self::default();
-        let mut statement = connection.prepare(
-            "SELECT uuid, name, first_join, last_join, last_seen, \
-             logout_dimension, logout_x, logout_y, logout_z, logout_yaw, logout_pitch, \
-             back_dimension, back_x, back_y, back_z, back_yaw, back_pitch, afk, nickname \
-             FROM players",
-        )?;
-        let mut rows = statement.query([])?;
-        while let Some(row) = rows.next()? {
-            let record = Player {
-                uuid: uuid(row, 0)?,
-                name: row.get(1)?,
-                first_join: row.get(2)?,
-                last_join: row.get(3)?,
-                last_seen: row.get(4)?,
-                logout: optional_location(row, 5)?,
-                back: optional_location(row, 11)?,
-                afk: row.get(17)?,
-                nickname: row.get(18)?,
-            };
-            cache.put_player(record);
-        }
+        load_players(connection, &mut cache)?;
 
         let mut statement = connection.prepare(
             "SELECT player, name, dimension, x, y, z, yaw, pitch FROM homes ORDER BY player, name",
@@ -269,7 +256,8 @@ impl Cache {
         }
 
         let mut statement = connection.prepare(
-            "SELECT id, sender, sender_name, receiver, text, sent_at, read FROM mail ORDER BY id",
+            "SELECT id, sender, sender_name, receiver, text, sent_at, read, expires_at, legacy \
+             FROM mail ORDER BY id",
         )?;
         let mut rows = statement.query([])?;
         while let Some(row) = rows.next()? {
@@ -281,6 +269,8 @@ impl Cache {
                 text: row.get(4)?,
                 sent_at: row.get(5)?,
                 read: row.get(6)?,
+                expires_at: row.get(7)?,
+                legacy: row.get(8)?,
             };
             if let Some(entry) = cache.player_mut(&mail.receiver) {
                 if !mail.read {
@@ -293,7 +283,8 @@ impl Cache {
         cache.next_transfer = next_id(connection, "transfers")?;
 
         let mut statement = connection.prepare(
-            "SELECT name, dimension, x, y, z, yaw, pitch, permission FROM warps ORDER BY name",
+            "SELECT name, dimension, x, y, z, yaw, pitch, permission, last_owner FROM warps \
+             ORDER BY name",
         )?;
         let mut rows = statement.query([])?;
         while let Some(row) = rows.next()? {
@@ -302,6 +293,7 @@ impl Cache {
                 name: name.clone(),
                 location: location(row, 1)?,
                 permission: row.get(7)?,
+                last_owner: optional_uuid(row, 8)?,
             };
             Arc::make_mut(&mut cache.warps).insert(name, warp);
         }
@@ -328,6 +320,65 @@ impl Cache {
         }
         Ok(cache)
     }
+}
+
+/// Loads the players with their past names and their settings, which no player has without a
+/// row of their own.
+fn load_players(connection: &Connection, cache: &mut Cache) -> rusqlite::Result<()> {
+    let mut statement = connection.prepare(
+        "SELECT uuid, name, first_join, last_join, last_seen, \
+         logout_dimension, logout_x, logout_y, logout_z, logout_yaw, logout_pitch, \
+         back_dimension, back_x, back_y, back_z, back_yaw, back_pitch, afk, nickname, \
+         teleport_enabled, teleport_auto, last_teleport, accepting_pay, confirm_pay, \
+         reply_to_last_recipient, baltop_exempt, social_spy \
+         FROM players",
+    )?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let record = Player {
+            uuid: uuid(row, 0)?,
+            name: row.get(1)?,
+            first_join: row.get(2)?,
+            last_join: row.get(3)?,
+            last_seen: row.get(4)?,
+            logout: optional_location(row, 5)?,
+            back: optional_location(row, 11)?,
+            afk: row.get(17)?,
+            nickname: row.get(18)?,
+            teleport_enabled: row.get(19)?,
+            teleport_auto: row.get(20)?,
+            last_teleport: row.get(21)?,
+            accepting_pay: row.get(22)?,
+            confirm_pay: row.get(23)?,
+            reply_to_last_recipient: row.get(24)?,
+            baltop_exempt: row.get(25)?,
+            social_spy: row.get(26)?,
+        };
+        cache.put_player(record);
+    }
+
+    let mut statement = connection
+        .prepare("SELECT player, name, changed_at FROM player_names ORDER BY player, position")?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let player = uuid(row, 0)?;
+        if let Some(entry) = cache.player_mut(&player) {
+            entry.past_names.push(PastName {
+                name: row.get(1)?,
+                changed_at: row.get(2)?,
+            });
+        }
+    }
+
+    let mut statement = connection.prepare("SELECT player, key, value FROM player_settings")?;
+    let mut rows = statement.query([])?;
+    while let Some(row) = rows.next()? {
+        let player = uuid(row, 0)?;
+        if let Some(entry) = cache.player_mut(&player) {
+            entry.settings.insert(row.get(1)?, row.get(2)?);
+        }
+    }
+    Ok(())
 }
 
 fn load_permissions(connection: &Connection, cache: &mut Cache) -> rusqlite::Result<()> {

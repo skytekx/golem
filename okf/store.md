@@ -5,7 +5,7 @@ type: Spec
 title: Store
 description: The store of Golem in the crate golem-store, one SQLite file beside the world with the players, homes, warps, spawns, mail, ignore lists, accounts, permissions and settings of the plugins, its schema, its threads, its durability, its API and its cost on the server thread.
 tags: [store, sqlite, plugins, essentials, permissions, economy, durability]
-timestamp: 2026-11-15
+timestamp: 2026-11-16
 ---
 
 # Store
@@ -150,7 +150,7 @@ What this gives:
 
 ## The schema
 
-The file has the application id `0x476f6c6d`, the bytes `Golm`, and the schema version 1 in its user
+The file has the application id `0x476f6c6d`, the bytes `Golm`, and the schema version 2 in its user
 version. Every table is `STRICT`, so a value of the wrong type is an error instead of being stored
 as it comes. A UUID is the text Minecraft writes, in lower case with its four dashes. A time is
 milliseconds since 1970-01-01 UTC, as the caller gives it, so the migration tool carries the times
@@ -186,6 +186,46 @@ the store.
 | `back_pitch` | REAL | yes | | | |
 | `afk` | INTEGER | no | | | 1 while the player is away from the keyboard, else 0 |
 | `nickname` | TEXT | yes | | | The nickname |
+| `teleport_enabled` | INTEGER | no | | | 1 while others may send the player teleport requests, else 0 |
+| `teleport_auto` | INTEGER | no | | | 1 while the player accepts teleport requests at once, else 0 |
+| `last_teleport` | INTEGER | no | | | The last teleport, 0 for none, never below zero |
+| `accepting_pay` | INTEGER | no | | | 1 while the player takes payments, else 0 |
+| `confirm_pay` | INTEGER | yes | | | 1 while a payment of the player asks twice, 0 while it does not, none for the default of the plugin |
+| `reply_to_last_recipient` | INTEGER | yes | | | 1 while a reply of the player goes to whom they wrote last, 0 while it does not, none for the default of the plugin |
+| `baltop_exempt` | INTEGER | no | | | 1 while the list of the largest balances leaves the player out, else 0 |
+| `social_spy` | INTEGER | no | | | 1 while the player reads the private messages of others, else 0 |
+
+The schema version 2 adds the columns from `teleport_enabled` on. A player who joins the first time
+takes teleport requests and payments, and every other toggle is off or left to the plugin, which are
+the defaults of EssentialsX 2.22.0. The migration gives every player of a store of version 1 the
+same values.
+
+### player_names
+
+| Column | Type | Null | Key | References | What it is |
+| --- | --- | --- | --- | --- | --- |
+| `player` | TEXT | no | 1 | `players.uuid` | The player |
+| `position` | INTEGER | no | 2 | | The place of the name among the past names of the player, the oldest lowest, never below zero |
+| `name` | TEXT | no | | | A name the player had before the one they have now |
+| `changed_at` | INTEGER | yes | | | When the player joined under another name, none for a name that the migration tool carried over |
+
+The schema version 2 adds the table. A join under another name puts the name before behind the last
+past name of the player, in the operation that sets the new name, and drops no name that stands
+there already, so a player who returns to an old name has it twice, as in EssentialsX.
+
+### player_settings
+
+| Column | Type | Null | Key | References | What it is |
+| --- | --- | --- | --- | --- | --- |
+| `player` | TEXT | no | 1 | `players.uuid` | The player |
+| `key` | TEXT | no | 2 | | The key |
+| `value` | TEXT | no | | | The value |
+
+The schema version 2 adds the table. It is the table [settings](#settings) per player, a text by key
+that a plugin keeps for one player, so a new field of a port needs no new version of the schema. A
+port names its keys with a prefix of its own, such as `essentials.`, so two ports never meet in a
+key. The toggles stay columns of `players`, since the file then refuses a wrong value also when a
+program writes it past the store.
 
 ### homes
 
@@ -212,6 +252,10 @@ the store.
 | `yaw` | REAL | no | | | |
 | `pitch` | REAL | no | | | |
 | `permission` | TEXT | yes | | | The node a player needs for the warp, or none |
+| `last_owner` | TEXT | yes | | | The player who set the warp last, a UUID in lower case, or none |
+
+The schema version 2 adds the column `last_owner`. It is the text of a UUID and no reference, so a
+warp may name an owner who is no player of the store.
 
 ### spawns
 
@@ -231,15 +275,22 @@ the store.
 | --- | --- | --- | --- | --- | --- |
 | `id` | INTEGER | no | 1 | | The number of the mail, from 1, never given twice |
 | `sender` | TEXT | yes | | `players.uuid` | The sender, none for the console |
-| `sender_name` | TEXT | no | | | The name of the sender when they sent it |
+| `sender_name` | TEXT | no | | | The name of the sender when they sent it, empty for a legacy mail alone |
 | `receiver` | TEXT | no | | `players.uuid` | The receiver |
 | `text` | TEXT | no | | | The text |
 | `sent_at` | INTEGER | no | | | When it was sent |
 | `read` | INTEGER | no | | | 1 once the receiver read it, else 0 |
+| `expires_at` | INTEGER | yes | | | When the mail expires, above zero, none for never |
+| `legacy` | INTEGER | no | | | 1 for a legacy mail, one from before EssentialsX kept a sender and a time for a mail, else 0 |
 
 The index `mail_by_receiver` on `receiver` and `id` finds the mail of a player. The table
 counts with `AUTOINCREMENT`, whose counter in `sqlite_sequence` keeps the largest number also after
 its mail is removed, so a number never comes back, also after a restart.
+
+The schema version 2 adds the columns `expires_at` and `legacy`. A mail has expired once the time
+that a call names reached `expires_at`. The store reads no clock and removes no mail on its own, so
+an expired mail stays until a call removes it. A mail is a legacy mail exactly when its
+`sender_name` is empty, and the file holds every row to that.
 
 ### ignores
 
@@ -331,14 +382,32 @@ The migrations are a list in `schema.rs`: the entry at index n takes a store of 
 n + 1, and the open runs every entry from the version of the file to the latest, each in one
 transaction with the new user version, so a crash during a migration leaves the file at the
 version before it. A new version appends its entry and never changes one before it, since stores
-of every older version exist. Today the list holds one entry, from version 0, a new or empty
-file, to version 1.
+of every older version exist. Today the list holds two entries.
+
+| Entry | What it does |
+| --- | --- |
+| From version 0, a new or empty file, to version 1 | Creates the tables of version 1 |
+| From version 1 to version 2 | Adds the columns `teleport_enabled` to `social_spy` of `players`, `expires_at` and `legacy` of `mail` and `last_owner` of `warps`, and creates `player_names` and `player_settings` |
+
+The entry to version 2 only adds, so it writes no row of version 1 again. Each new column that takes
+no NULL holds its default in every row that stands, and SQLite holds the rows that stand to the rule
+of a new column. The one such rule that a row of version 1 can break is that of a legacy mail: a
+mail without a sender name, which only a program that wrote past the store can make. The migration
+marks no mail as a legacy mail, since the file does not say that it is one. So the open looks for
+such mails before it migrates and refuses the file with their number and the lowest of their
+numbers, as the table below has it, so that whoever runs the server reads what to mend. A migration
+that fails for another reason answers the reason of SQLite. Either way the file stays a store of
+version 1 with every row as it was, since the transaction of a migration rolls back, also under a
+kill in its middle.
 
 | The file | The open |
 | --- | --- |
-| Missing, or empty | Creates the schema of version 1 |
-| A store of version 1 | Opens it |
-| A store of a newer version | `the store has the schema version 2, newer than the version 1 this Golem knows` |
+| Missing, or empty | Creates the schema of version 2 |
+| A store of version 1 | Migrates it to version 2 and opens it |
+| A store of version 2 | Opens it |
+| A store of version 1 with a mail without a sender name | `the migration from the schema version 1 to 2 is refused: the mail 3 has no sender name, and the schema version 2 takes a mail without a sender name for a legacy mail alone, so give each such mail a sender name or remove it and open the store again`, or `2 mails have no sender name, the lowest of them the mail 3` for more than one |
+| A store of version 1 whose migration fails | `the migration from the schema version 1 to 2 failed: table player_settings already exists`, with the reason of SQLite |
+| A store of a newer version | `the store has the schema version 3, newer than the version 2 this Golem knows` |
 | A store of a version below 0 | `the store has the schema version -1, which no Golem writes` |
 | A SQLite file of another application | `the file is a SQLite database of another application, with the application id 0x7` |
 | A SQLite file with tables but no application id | `the file is a SQLite database with 1 tables and indexes but no store of Golem` |
@@ -346,13 +415,15 @@ file, to version 1.
 | Held by another process | `another process holds the file, so it is open in a second Golem or a tool` |
 | Open in this process, under any path to it | `the store is open in this process already` |
 
-Each answer stands behind `cannot open the store <path>: `, and a refused file is never changed.
-The open reads what a file is through a connection that only reads, and opens the file for the
-writer only once it accepted it, since a connection that may write checkpoints the log of a
-database in the journal mode WAL into the file when it closes and deletes the log. So a refused
-file and its log `-wal` stay as they were, byte for byte, also the log that a crash of another
-program left behind. The connection that reads may leave the index of the log, a file `-shm`,
-beside them, as every reader of SQLite does.
+Each answer stands behind `cannot open the store <path>: `. The open reads what a file is through a
+connection that only reads, and opens the file for the writer only once it accepted it, since a
+connection that may write checkpoints the log of a database in the journal mode WAL into the file
+when it closes and deletes the log. So a file that the open refuses for what it is, which is every
+row of the table but the two of a migration, is never changed: it and its log `-wal` stay as they
+were, byte for byte, also the log that a crash of another program left behind. The connection that
+reads may leave the index of the log, a file `-shm`, beside them, as every reader of SQLite does. A
+store whose migration is refused or fails was accepted and opened for the writer, so the open may
+fold its log into it, as every close does, while it keeps its version and every row.
 
 ## The API
 
@@ -364,15 +435,19 @@ as `i64`.
 
 | Call | What it does |
 | --- | --- |
-| `join(uuid, name, at)` | Creates the player on the first join, else sets the name, the last join and the last seen time, and answers `Joined` with `first` and the `previous_name` when the name changed |
+| `join(uuid, name, at)` | Creates the player on the first join, else sets the name, the last join and the last seen time, and answers `Joined` with `first` and the `previous_name` when the name changed. A changed name makes the name before the newest past name of the player, in the same operation |
 | `quit(uuid, logout, at)` | Sets the logout location and the last seen time |
 | `set_back(uuid, location)` | Sets or clears the place of `/back` |
 | `set_afk(uuid, afk)`, `set_nickname(uuid, nickname)`, `set_last_seen(uuid, at)` | Set the field |
-| `put_player(player)` | Puts a whole record in place, for the migration tool, keeping homes, mail and account |
+| `set_player_toggle(uuid, toggle)` | Sets one toggle of the player, or the time of their last teleport, by a `PlayerToggle`, whose variant carries what the field takes: true or false, none as well for `ConfirmPay` and `ReplyToLastRecipient`, which then follow the default of the plugin, and a time for `LastTeleport` |
+| `put_player(player)` | Puts a whole record in place, for the migration tool, keeping homes, mail, past names, settings and account. A changed name adds no past name |
 | `player(uuid)` | The record |
 | `player_named(name)` | The player who joined last with the name, in any case |
 | `players_nicknamed(nickname)` | The players with the nickname, in any case, sorted by name |
 | `player_count()` | The number of players |
+| `past_names(uuid)` | The names the player had before the one they have now, the newest first, each with the time of the change or none |
+| `put_past_names(uuid, names)` | Puts a whole list of past names in place, the newest first, for the migration tool |
+| `set_player_setting(uuid, key, value)`, `remove_player_setting(uuid, key)`, `player_setting(uuid, key)`, `player_settings(uuid)` | A table of text by key for each player |
 
 ### Places
 
@@ -381,7 +456,7 @@ as `i64`.
 | `set_home(uuid, name, location)` | Sets a home and answers whether it replaced one |
 | `remove_home(uuid, name)` | Removes a home and answers whether there was one |
 | `home(uuid, name)`, `homes(uuid)`, `home_count(uuid)` | The home, the homes sorted by name, their number |
-| `set_warp(name, location, permission)` | Sets a warp with the node it needs, if any |
+| `set_warp(name, location, permission, owner)` | Sets a warp with the node it needs, if any, and with `owner` as its last owner, where none leaves the warp without one |
 | `remove_warp(name)`, `warp(name)`, `warps()` | As for homes |
 | `set_spawn(group, location)` | Sets the spawn of a group, `DEFAULT_GROUP` for the one spawn |
 | `remove_spawn(group)`, `spawn(group)`, `spawns()` | As for homes |
@@ -397,8 +472,8 @@ of the server, which holds for every player whose groups have none, as in Essent
 
 | Call | What it does |
 | --- | --- |
-| `send_mail(sender, sender_name, receiver, text, at)` | Sends a mail, from the console when `sender` is none, and answers its number |
-| `mail(receiver)`, `unread_mail(receiver)` | The mail oldest first, the number not read |
+| `send_mail(sender, sender_name, receiver, text, at, expires_at)` | Sends a mail, from the console when `sender` is none, that expires at `expires_at` or never when that is none, and answers its number |
+| `mail(receiver)`, `unread_mail(receiver, at)` | The mail oldest first, expired mail among it, and the number of mails that are not read and have not expired at `at` |
 | `mark_mail_read(receiver)` | Marks every mail read and answers how many were not |
 | `remove_mail(receiver, id)`, `clear_mail(receiver)` | Remove one mail or all |
 | `ignore(player, other)`, `unignore(player, other)` | Change the list and answer whether it changed |
@@ -489,16 +564,17 @@ for at all.
 | `UnknownGroup` | `the group "moderator" is not in the permissions` |
 | `GroupInUse` | `the group "default" cannot be removed, since the group admin names it` |
 | `Twice` | `the nodes of the group default name "essentials.home" twice` |
-| `Invalid` | `the name of a home is empty`, `the name of a home has 65 characters, more than 64`, `the location of a home has the x NaN, which is not a finite number` |
+| `Invalid` | `the name of a home is empty`, `the name of a home has 65 characters, more than 64`, `the location of a home has the x NaN, which is not a finite number`, `the last teleport of a player is -1, below zero`, `the expiry of a mail is 0, not above zero` |
 
-The rules of a value: a name of a player, a home, a warp, a setting key, a nickname or the sender of
-a mail has 1 to 64 characters and no control character. A node, a group of the permissions, the
-group of a spawn, the permission of a warp or a dimension has 1 to 256 bytes and no white space or
-control character. A text of a mail, a note or a setting value has at
-most 65536 bytes and no NUL, and a mail is not empty. A location is finite, and the store takes a
+The rules of a value: a name of a player, a home, a warp, a setting key, a nickname, a past name or
+the sender of a mail has 1 to 64 characters and no control character. A node, a group of the
+permissions, the group of a spawn, the permission of a warp or a dimension has 1 to 256 bytes and no
+white space or control character. A text of a mail, a note or a setting value has at most 65536
+bytes and no NUL, and a mail is not empty. The last teleport of a player is never below zero, and
+the time at which a mail expires is above zero. A location is finite, and the store takes a
 coordinate or an angle of -0.0 as 0.0, since SQLite writes a REAL without a fraction as an integer
-and the file gives the zero back without its sign. A read then answers the same before a restart
-and after it.
+and the file gives the zero back without its sign. A read then answers the same before a restart and
+after it.
 
 ## Data from EssentialsX
 
@@ -601,7 +677,9 @@ opens it again and times 2000 calls of each kind one by one, with a flush after 
 gives the mean and the 99th percentile of a call in microseconds, of a debug build and of a release
 build, each in a run of `golem-devtool store-bench --players 5000 --repeat 2000` on 2026-11-07 in
 the cloud container of the session with an Intel Xeon at 2.10 GHz and 4 cores that other agents
-shared. The store ran SQLite 3.53.2 then, and the figures were not taken again on 3.54.0.
+shared. The store ran SQLite 3.53.2 and the schema version 1 then, and the figures were not taken
+again on 3.54.0 or on the schema version 2, in which a player holds eight columns more and
+`unread_mail` reads the mails of a player who has an unread one.
 
 | Call | Kind | Debug mean | Debug p99 | Release mean | Release p99 |
 | --- | --- | --- | --- | --- | --- |
@@ -677,10 +755,12 @@ The notebook `tests/notebooks/09_store.ipynb` drives the store through the subco
 `golem-devtool store`, which runs a JSON script of calls and prints the answer of every step as a
 line as soon as it ran, `store-describe`, which prints the schema of a file, and `store-bench`. It
 checks the schema against the tables of this page, every call and every refusal, a check while
-another thread changes the store, a reopen after a close, a store dropped without a close, a reopen
-after a kill between changes, a reader of the answers that goes away, a writer that fails at a limit
-of the file size, a batch that fails part way at a limit of the pages of the file, a row that the
-file refuses behind the cache, a writer thread that panics, the files the open refuses and the cost
+another thread changes the store, a file that differs from the cache, a reopen after a close, a
+store dropped without a close, a reopen after a kill between changes, a reader of the answers that
+goes away, a writer that fails at a limit of the file size, a batch that fails part way at a limit
+of the pages of the file, a row that the file refuses behind the cache, a writer thread that panics,
+a store of version 1 that the open migrates with every row as it was, one that the open refuses, one
+whose migration fails, one whose migration a kill cuts, the files the open refuses and the cost
 above. The steps `pause_writer`, `limit_pages`, `execute_behind` and `panic_writer` of
 `golem-devtool store` reach the writer through the hooks of the feature `testing` of `golem-store`,
 which only `golem-devtool` turns on and which the program `golem` never calls.

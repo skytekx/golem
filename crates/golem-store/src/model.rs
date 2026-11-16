@@ -15,8 +15,8 @@ use std::{
     path::PathBuf, //
 };
 
-/// The longest name the store takes, in characters: a home, a warp, a setting key, the name or the
-/// nickname of a player, and the name of the sender of a mail.
+/// The longest name the store takes, in characters: a home, a warp, a setting key, the name, a
+/// past name or the nickname of a player, and the name of the sender of a mail.
 pub const MAX_NAME_CHARS: usize = 64;
 
 /// The longest text the store takes, in bytes: a mail, the note of a transfer and the value of a
@@ -91,6 +91,8 @@ pub struct Location {
 ///
 /// Every time is in milliseconds since 1970-01-01 UTC, as the caller gives it, so the migration
 /// tool can carry the times of `EssentialsX` over and a notebook can name its own clock.
+// The record mirrors the row of the player, which holds each toggle as a column of its own.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Player {
     /// The UUID, which never changes.
@@ -111,6 +113,83 @@ pub struct Player {
     pub afk: bool,
     /// The nickname, if the player has one.
     pub nickname: Option<String>,
+    /// Whether others may send the player teleport requests.
+    pub teleport_enabled: bool,
+    /// Whether the player accepts teleport requests at once.
+    pub teleport_auto: bool,
+    /// When the player teleported last, or 0 for never.
+    pub last_teleport: i64,
+    /// Whether the player takes payments.
+    pub accepting_pay: bool,
+    /// Whether a payment of the player asks twice, or `None` for the default of the plugin.
+    pub confirm_pay: Option<bool>,
+    /// Whether a reply of the player goes to whom they wrote last, or `None` for the default of
+    /// the plugin.
+    pub reply_to_last_recipient: Option<bool>,
+    /// Whether the list of the largest balances leaves the player out.
+    pub baltop_exempt: bool,
+    /// Whether the player reads the private messages of others.
+    pub social_spy: bool,
+}
+
+impl Player {
+    /// A player at their first join at `at`, with every toggle at the default of `EssentialsX`:
+    /// teleport requests and payments are taken, and every other toggle is off or left to the
+    /// plugin.
+    pub fn new(uuid: Uuid, name: &str, at: i64) -> Self {
+        Self {
+            uuid,
+            name: name.to_owned(),
+            first_join: at,
+            last_join: at,
+            last_seen: at,
+            logout: None,
+            back: None,
+            afk: false,
+            nickname: None,
+            teleport_enabled: true,
+            teleport_auto: false,
+            last_teleport: 0,
+            accepting_pay: true,
+            confirm_pay: None,
+            reply_to_last_recipient: None,
+            baltop_exempt: false,
+            social_spy: false,
+        }
+    }
+}
+
+/// One of the fields of a player that a port sets alone, with the value it takes: the seven
+/// toggles and the time of the last teleport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlayerToggle {
+    /// Whether others may send the player teleport requests.
+    TeleportEnabled(bool),
+    /// Whether the player accepts teleport requests at once.
+    TeleportAuto(bool),
+    /// When the player teleported last, in milliseconds since 1970-01-01 UTC, never below zero.
+    LastTeleport(i64),
+    /// Whether the player takes payments.
+    AcceptingPay(bool),
+    /// Whether a payment of the player asks twice, or `None` for the default of the plugin.
+    ConfirmPay(Option<bool>),
+    /// Whether a reply of the player goes to whom they wrote last, or `None` for the default of
+    /// the plugin.
+    ReplyToLastRecipient(Option<bool>),
+    /// Whether the list of the largest balances leaves the player out.
+    BaltopExempt(bool),
+    /// Whether the player reads the private messages of others.
+    SocialSpy(bool),
+}
+
+/// A name that a player had before the one they have now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PastName {
+    /// The name.
+    pub name: String,
+    /// When the player joined under another name, in milliseconds since 1970-01-01 UTC, or `None`
+    /// for a name that the migration tool carried over, which has no time.
+    pub changed_at: Option<i64>,
 }
 
 /// A warp: a named place, with the permission node a player needs to use it, if any.
@@ -122,6 +201,9 @@ pub struct Warp {
     pub location: Location,
     /// The node a player needs for the warp, or `None` when every player who may warp may use it.
     pub permission: Option<String>,
+    /// The player who set the warp last, who need not be a player of the store, or `None` when
+    /// nobody is named.
+    pub last_owner: Option<Uuid>,
 }
 
 /// A mail of one player or of the console to a player.
@@ -131,7 +213,8 @@ pub struct Mail {
     pub id: i64,
     /// The player who sent the mail, or `None` for the console.
     pub sender: Option<Uuid>,
-    /// The name the sender had when they sent it, `Console` for the console.
+    /// The name the sender had when they sent it, `Console` for the console, and empty for a
+    /// legacy mail alone.
     pub sender_name: String,
     /// The player the mail is for.
     pub receiver: Uuid,
@@ -141,6 +224,19 @@ pub struct Mail {
     pub sent_at: i64,
     /// Whether the receiver has read it.
     pub read: bool,
+    /// When it expires, in milliseconds since 1970-01-01 UTC and above zero, or `None` for a
+    /// mail that never expires. A mail has expired once the time of the caller reached it.
+    pub expires_at: Option<i64>,
+    /// Whether it is a legacy mail, one from before `EssentialsX` kept a sender and a time for a
+    /// mail. A mail is a legacy mail exactly when the name of its sender is empty.
+    pub legacy: bool,
+}
+
+impl Mail {
+    /// Whether the mail has expired at `at`, the time of the caller.
+    pub fn expired(&self, at: i64) -> bool {
+        self.expires_at.is_some_and(|expires_at| at >= expires_at)
+    }
 }
 
 /// One entry of the log of the accounts: an amount that left one account and reached another.
@@ -384,6 +480,29 @@ pub(crate) fn check_name(what: &'static str, name: &str) -> Result<(), Refusal> 
         return invalid(format!("holds the control character {control:?}"));
     }
     Ok(())
+}
+
+/// Checks a time that the file holds to zero or more, such as the last teleport.
+pub(crate) fn check_time(what: &'static str, at: i64) -> Result<(), Refusal> {
+    if at < 0 {
+        return Err(Refusal::Invalid {
+            what,
+            why: format!("is {at}, below zero"),
+        });
+    }
+    Ok(())
+}
+
+/// Checks the time at which a mail expires, which is above zero. `EssentialsX` writes a zero for
+/// a mail that never expires, and the store keeps none for it.
+pub(crate) fn check_expiry(expires_at: Option<i64>) -> Result<(), Refusal> {
+    match expires_at {
+        Some(at) if at <= 0 => Err(Refusal::Invalid {
+            what: "the expiry of a mail",
+            why: format!("is {at}, not above zero"),
+        }),
+        _ => Ok(()),
+    }
 }
 
 /// Checks a text of the store: at most [`MAX_TEXT_BYTES`] bytes and no NUL, which `SQLite` would

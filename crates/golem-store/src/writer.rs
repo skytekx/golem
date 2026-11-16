@@ -44,12 +44,14 @@ use crate::{
     model::{
         Location,
         Mail,
+        PastName,
         PermissionGroup,
         Player,
         PlayerPermissions,
         StoreError,
         Transfer,
-        Uuid, //
+        Uuid,
+        Warp, //
     },
     schema::describe_error,
 };
@@ -66,6 +68,26 @@ pub const MAX_PENDING: u64 = 4 * MAX_BATCH as u64;
 #[derive(Debug)]
 pub enum Op {
     PutPlayer(Box<Player>),
+    /// The record of a player who joined under a new name, and the name they had before, which
+    /// takes the place behind the last of their past names.
+    RenamePlayer {
+        record: Box<Player>,
+        past: PastName,
+    },
+    /// The whole list of the past names of a player, oldest first, in place of the one before.
+    PutPastNames {
+        player: Uuid,
+        names: Vec<PastName>,
+    },
+    PutPlayerSetting {
+        player: Uuid,
+        key: String,
+        value: String,
+    },
+    RemovePlayerSetting {
+        player: Uuid,
+        key: String,
+    },
     PutHome {
         player: Uuid,
         name: String,
@@ -75,11 +97,7 @@ pub enum Op {
         player: Uuid,
         name: String,
     },
-    PutWarp {
-        name: String,
-        location: Location,
-        permission: Option<String>,
-    },
+    PutWarp(Box<Warp>),
     RemoveWarp(String),
     PutSpawn {
         group: String,
@@ -449,6 +467,19 @@ fn run_sql(
 fn write(transaction: &Transaction<'_>, op: &Op) -> rusqlite::Result<()> {
     match op {
         Op::PutPlayer(player) => put_player(transaction, player),
+        Op::RenamePlayer { record, past } => rename_player(transaction, record, past),
+        Op::PutPastNames { player, names } => put_past_names(transaction, *player, names),
+        Op::PutPlayerSetting { player, key, value } => run_sql(
+            transaction,
+            "INSERT INTO player_settings (player, key, value) VALUES (?1, ?2, ?3) \
+             ON CONFLICT (player, key) DO UPDATE SET value = excluded.value",
+            params![player.to_string(), key, value],
+        ),
+        Op::RemovePlayerSetting { player, key } => run_sql(
+            transaction,
+            "DELETE FROM player_settings WHERE player = ?1 AND key = ?2",
+            params![player.to_string(), key],
+        ),
         Op::PutHome {
             player,
             name,
@@ -459,11 +490,7 @@ fn write(transaction: &Transaction<'_>, op: &Op) -> rusqlite::Result<()> {
             "DELETE FROM homes WHERE player = ?1 AND name = ?2",
             params![player.to_string(), name],
         ),
-        Op::PutWarp {
-            name,
-            location,
-            permission,
-        } => put_warp(transaction, name, location, permission.as_deref()),
+        Op::PutWarp(warp) => put_warp(transaction, warp),
         Op::RemoveWarp(name) => run_sql(transaction, "DELETE FROM warps WHERE name = ?1", [name]),
         Op::PutSpawn { group, location } => put_spawn(transaction, group, location),
         Op::RemoveSpawn(group) => run_sql(
@@ -545,22 +572,72 @@ fn put_home(
     )
 }
 
-fn put_warp(
-    transaction: &Transaction<'_>,
-    name: &str,
-    location: &Location,
-    permission: Option<&str>,
-) -> rusqlite::Result<()> {
-    let (dimension, x, y, z, yaw, pitch) = location_values(location);
+fn put_warp(transaction: &Transaction<'_>, warp: &Warp) -> rusqlite::Result<()> {
+    let (dimension, x, y, z, yaw, pitch) = location_values(&warp.location);
     run_sql(
         transaction,
-        "INSERT INTO warps (name, dimension, x, y, z, yaw, pitch, permission) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+        "INSERT INTO warps (name, dimension, x, y, z, yaw, pitch, permission, last_owner) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) \
          ON CONFLICT (name) DO UPDATE SET dimension = excluded.dimension, \
          x = excluded.x, y = excluded.y, z = excluded.z, yaw = excluded.yaw, \
-         pitch = excluded.pitch, permission = excluded.permission",
-        params![name, dimension, x, y, z, yaw, pitch, permission],
+         pitch = excluded.pitch, permission = excluded.permission, \
+         last_owner = excluded.last_owner",
+        params![
+            warp.name,
+            dimension,
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+            warp.permission,
+            warp.last_owner.map(|owner| owner.to_string())
+        ],
     )
+}
+
+/// Writes the record of a player who joined under a new name, and the name they had before
+/// behind the last of their past names. The place is one above the highest that the file holds
+/// for the player, so it is free whatever places the rows before it took.
+fn rename_player(
+    transaction: &Transaction<'_>,
+    record: &Player,
+    past: &PastName,
+) -> rusqlite::Result<()> {
+    put_player(transaction, record)?;
+    run_sql(
+        transaction,
+        "INSERT INTO player_names (player, position, name, changed_at) \
+         SELECT ?1, coalesce(max(position), -1) + 1, ?2, ?3 FROM player_names WHERE player = ?1",
+        params![record.uuid.to_string(), past.name, past.changed_at],
+    )
+}
+
+/// Writes the past names of a player, oldest first, in place of the ones before.
+fn put_past_names(
+    transaction: &Transaction<'_>,
+    player: Uuid,
+    names: &[PastName],
+) -> rusqlite::Result<()> {
+    run_sql(
+        transaction,
+        "DELETE FROM player_names WHERE player = ?1",
+        [player.to_string()],
+    )?;
+    for (index, past) in names.iter().enumerate() {
+        run_sql(
+            transaction,
+            "INSERT INTO player_names (player, position, name, changed_at) \
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                player.to_string(),
+                position(index),
+                past.name,
+                past.changed_at
+            ],
+        )?;
+    }
+    Ok(())
 }
 
 fn put_spawn(
@@ -583,8 +660,8 @@ fn put_spawn(
 fn put_mail(transaction: &Transaction<'_>, mail: &Mail) -> rusqlite::Result<()> {
     run_sql(
         transaction,
-        "INSERT INTO mail (id, sender, sender_name, receiver, text, sent_at, read) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO mail (id, sender, sender_name, receiver, text, sent_at, read, expires_at, \
+         legacy) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             mail.id,
             mail.sender.map(|sender| sender.to_string()),
@@ -592,7 +669,9 @@ fn put_mail(transaction: &Transaction<'_>, mail: &Mail) -> rusqlite::Result<()> 
             mail.receiver.to_string(),
             mail.text,
             mail.sent_at,
-            mail.read
+            mail.read,
+            mail.expires_at,
+            mail.legacy
         ],
     )
 }
@@ -633,9 +712,11 @@ fn put_player(transaction: &Transaction<'_>, player: &Player) -> rusqlite::Resul
     transaction.execute(
         "INSERT INTO players (uuid, name, first_join, last_join, last_seen, \
          logout_dimension, logout_x, logout_y, logout_z, logout_yaw, logout_pitch, \
-         back_dimension, back_x, back_y, back_z, back_yaw, back_pitch, afk, nickname) \
+         back_dimension, back_x, back_y, back_z, back_yaw, back_pitch, afk, nickname, \
+         teleport_enabled, teleport_auto, last_teleport, accepting_pay, confirm_pay, \
+         reply_to_last_recipient, baltop_exempt, social_spy) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, \
-         ?18, ?19) \
+         ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27) \
          ON CONFLICT (uuid) DO UPDATE SET name = excluded.name, \
          first_join = excluded.first_join, last_join = excluded.last_join, \
          last_seen = excluded.last_seen, logout_dimension = excluded.logout_dimension, \
@@ -644,7 +725,12 @@ fn put_player(transaction: &Transaction<'_>, player: &Player) -> rusqlite::Resul
          logout_pitch = excluded.logout_pitch, back_dimension = excluded.back_dimension, \
          back_x = excluded.back_x, back_y = excluded.back_y, back_z = excluded.back_z, \
          back_yaw = excluded.back_yaw, back_pitch = excluded.back_pitch, \
-         afk = excluded.afk, nickname = excluded.nickname",
+         afk = excluded.afk, nickname = excluded.nickname, \
+         teleport_enabled = excluded.teleport_enabled, teleport_auto = excluded.teleport_auto, \
+         last_teleport = excluded.last_teleport, accepting_pay = excluded.accepting_pay, \
+         confirm_pay = excluded.confirm_pay, \
+         reply_to_last_recipient = excluded.reply_to_last_recipient, \
+         baltop_exempt = excluded.baltop_exempt, social_spy = excluded.social_spy",
         params![
             player.uuid.to_string(),
             player.name,
@@ -664,7 +750,15 @@ fn put_player(transaction: &Transaction<'_>, player: &Player) -> rusqlite::Resul
             back_yaw,
             back_pitch,
             player.afk,
-            player.nickname
+            player.nickname,
+            player.teleport_enabled,
+            player.teleport_auto,
+            player.last_teleport,
+            player.accepting_pay,
+            player.confirm_pay,
+            player.reply_to_last_recipient,
+            player.baltop_exempt,
+            player.social_spy
         ],
     )?;
     Ok(())

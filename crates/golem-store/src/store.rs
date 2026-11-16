@@ -44,17 +44,21 @@ use crate::{
     model::{
         Location,
         Mail,
+        PastName,
         PermissionGroup,
         Player,
         PlayerPermissions,
+        PlayerToggle,
         Receipt,
         Refusal,
         StoreError,
         Transfer,
         Uuid,
         Warp,
+        check_expiry,
         check_name,
         check_text,
+        check_time,
         check_token,
         take_location, //
     },
@@ -484,46 +488,47 @@ impl Store {
 
     // The players.
 
-    /// Records that a player joined with `name` at `at`: a new player is created, a known one
-    /// gets the name, the last join and the last seen time.
+    /// Records that a player joined with `name` at `at`: a new player is created with
+    /// [`Player::new`], a known one gets the name, the last join and the last seen time. A known
+    /// player who joins under another name keeps the name they had before as the newest of
+    /// their past names, with `at` as the time of the change, in the same change.
     pub fn join(&self, uuid: Uuid, name: &str, at: i64) -> Result<Joined, StoreError> {
         check_name("the name of a player", name)?;
         self.change(|cache| {
-            let (record, joined) = if let Some(entry) = cache.players.get(&uuid) {
-                let mut record = entry.record.clone();
-                let previous_name = (record.name != name).then(|| record.name.clone());
-                name.clone_into(&mut record.name);
-                record.last_join = at;
-                record.last_seen = at;
-                (
-                    record,
-                    Joined {
-                        first: false,
-                        previous_name,
-                    },
-                )
-            } else {
-                let record = Player {
-                    uuid,
-                    name: name.to_owned(),
-                    first_join: at,
-                    last_join: at,
-                    last_seen: at,
-                    logout: None,
-                    back: None,
-                    afk: false,
-                    nickname: None,
+            let Some(entry) = cache.players.get(&uuid) else {
+                let record = Player::new(uuid, name, at);
+                cache.put_player(record.clone());
+                let joined = Joined {
+                    first: true,
+                    previous_name: None,
                 };
-                (
-                    record,
-                    Joined {
-                        first: true,
-                        previous_name: None,
-                    },
-                )
+                return Ok((joined, Some(Op::PutPlayer(Box::new(record)))));
             };
+            let mut record = entry.record.clone();
+            let previous_name = (record.name != name).then(|| record.name.clone());
+            name.clone_into(&mut record.name);
+            record.last_join = at;
+            record.last_seen = at;
             cache.put_player(record.clone());
-            Ok((joined, Some(Op::PutPlayer(Box::new(record)))))
+            let record = Box::new(record);
+            let op = match &previous_name {
+                Some(previous) => {
+                    let past = PastName {
+                        name: previous.clone(),
+                        changed_at: Some(at),
+                    };
+                    if let Some(entry) = cache.player_mut(&uuid) {
+                        entry.past_names.push(past.clone());
+                    }
+                    Op::RenamePlayer { record, past }
+                }
+                None => Op::PutPlayer(record),
+            };
+            let joined = Joined {
+                first: false,
+                previous_name,
+            };
+            Ok((joined, Some(op)))
         })
     }
 
@@ -577,13 +582,33 @@ impl Store {
         self.edit_player(uuid, |record| record.last_seen = at)
     }
 
+    /// Sets one of the toggles of the player, or the time of their last teleport, which is
+    /// never below zero.
+    pub fn set_player_toggle(&self, uuid: Uuid, toggle: PlayerToggle) -> Result<(), StoreError> {
+        if let PlayerToggle::LastTeleport(at) = toggle {
+            check_time("the last teleport of a player", at)?;
+        }
+        self.edit_player(uuid, |record| match toggle {
+            PlayerToggle::TeleportEnabled(enabled) => record.teleport_enabled = enabled,
+            PlayerToggle::TeleportAuto(auto) => record.teleport_auto = auto,
+            PlayerToggle::LastTeleport(at) => record.last_teleport = at,
+            PlayerToggle::AcceptingPay(accepting) => record.accepting_pay = accepting,
+            PlayerToggle::ConfirmPay(confirm) => record.confirm_pay = confirm,
+            PlayerToggle::ReplyToLastRecipient(reply) => record.reply_to_last_recipient = reply,
+            PlayerToggle::BaltopExempt(exempt) => record.baltop_exempt = exempt,
+            PlayerToggle::SocialSpy(spy) => record.social_spy = spy,
+        })
+    }
+
     /// Puts the whole record of a player in place of the one before, or creates it, keeping
-    /// their homes, mail, ignore list and account. This is the call of the migration tool.
+    /// their homes, mail, ignore list, past names, settings and account. A name that differs
+    /// from the one before adds no past name. This is the call of the migration tool.
     pub fn put_player(&self, mut record: Player) -> Result<(), StoreError> {
         check_name("the name of a player", &record.name)?;
         if let Some(nickname) = &record.nickname {
             check_name("a nickname", nickname)?;
         }
+        check_time("the last teleport of a player", record.last_teleport)?;
         record.logout = record
             .logout
             .map(|logout| take_location("the logout location", logout))
@@ -636,6 +661,89 @@ impl Store {
     /// The number of players in the store.
     pub fn player_count(&self) -> usize {
         self.read(|cache| cache.players.len())
+    }
+
+    /// The names the player had before the one they have now, the newest first.
+    pub fn past_names(&self, uuid: Uuid) -> Vec<PastName> {
+        self.read(|cache| {
+            cache.players.get(&uuid).map_or_else(Vec::new, |entry| {
+                entry.past_names.iter().rev().cloned().collect()
+            })
+        })
+    }
+
+    /// Puts a whole list of past names, the newest first, in place of the one the player has.
+    /// This is the call of the migration tool, whose names have no time.
+    pub fn put_past_names(&self, uuid: Uuid, mut names: Vec<PastName>) -> Result<(), StoreError> {
+        for past in &names {
+            check_name("a past name", &past.name)?;
+        }
+        // The cache and the file keep the list oldest first, so a new name goes to its end.
+        names.reverse();
+        self.change(|cache| {
+            let entry = cache
+                .player_mut(&uuid)
+                .ok_or(Refusal::UnknownPlayer(uuid))?;
+            entry.past_names.clone_from(&names);
+            let op = Op::PutPastNames {
+                player: uuid,
+                names,
+            };
+            Ok(((), Some(op)))
+        })
+    }
+
+    /// Sets a setting of the player, a text by key that a plugin keeps for them.
+    pub fn set_player_setting(&self, uuid: Uuid, key: &str, value: &str) -> Result<(), StoreError> {
+        check_name("the key of a setting", key)?;
+        check_text("the value of a setting", value)?;
+        self.change(|cache| {
+            let entry = cache
+                .player_mut(&uuid)
+                .ok_or(Refusal::UnknownPlayer(uuid))?;
+            entry.settings.insert(key.to_owned(), value.to_owned());
+            let op = Op::PutPlayerSetting {
+                player: uuid,
+                key: key.to_owned(),
+                value: value.to_owned(),
+            };
+            Ok(((), Some(op)))
+        })
+    }
+
+    /// Removes a setting of the player, and answers whether there was one.
+    pub fn remove_player_setting(&self, uuid: Uuid, key: &str) -> Result<bool, StoreError> {
+        self.change(|cache| {
+            let entry = cache
+                .player_mut(&uuid)
+                .ok_or(Refusal::UnknownPlayer(uuid))?;
+            if entry.settings.remove(key).is_none() {
+                return Ok((false, None));
+            }
+            let op = Op::RemovePlayerSetting {
+                player: uuid,
+                key: key.to_owned(),
+            };
+            Ok((true, Some(op)))
+        })
+    }
+
+    /// A setting of the player.
+    pub fn player_setting(&self, uuid: Uuid, key: &str) -> Option<String> {
+        self.read(|cache| cache.players.get(&uuid)?.settings.get(key).cloned())
+    }
+
+    /// The settings of the player, sorted by key.
+    pub fn player_settings(&self, uuid: Uuid) -> Vec<(String, String)> {
+        self.read(|cache| {
+            cache.players.get(&uuid).map_or_else(Vec::new, |entry| {
+                entry
+                    .settings
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.clone()))
+                    .collect()
+            })
+        })
     }
 
     // The homes.
@@ -708,13 +816,15 @@ impl Store {
 
     // The warps.
 
-    /// Sets the warp `name` with the node a player needs for it, if any, and answers whether it
-    /// replaced one.
+    /// Sets the warp `name` with the node a player needs for it, if any, and with `owner` as the
+    /// player who set it last, and answers whether it replaced one. The warp takes the owner as
+    /// given, so none leaves it without one, and the owner need not be a player of the store.
     pub fn set_warp(
         &self,
         name: &str,
         location: Location,
         permission: Option<&str>,
+        owner: Option<Uuid>,
     ) -> Result<bool, StoreError> {
         check_name("the name of a warp", name)?;
         let location = take_location("the location of a warp", location)?;
@@ -724,18 +834,14 @@ impl Store {
         self.change(|cache| {
             let warp = Warp {
                 name: name.to_owned(),
-                location: location.clone(),
-                permission: permission.map(str::to_owned),
-            };
-            let replaced = Arc::make_mut(&mut cache.warps)
-                .insert(name.to_owned(), warp)
-                .is_some();
-            let op = Op::PutWarp {
-                name: name.to_owned(),
                 location,
                 permission: permission.map(str::to_owned),
+                last_owner: owner,
             };
-            Ok((replaced, Some(op)))
+            let replaced = Arc::make_mut(&mut cache.warps)
+                .insert(name.to_owned(), warp.clone())
+                .is_some();
+            Ok((replaced, Some(Op::PutWarp(Box::new(warp)))))
         })
     }
 
@@ -809,7 +915,7 @@ impl Store {
     // The mail.
 
     /// Sends a mail from a player, or from the console when `sender` is `None`, and answers its
-    /// number.
+    /// number. The mail expires at `expires_at`, a time above zero, or never when it is `None`.
     pub fn send_mail(
         &self,
         sender: Option<Uuid>,
@@ -817,8 +923,10 @@ impl Store {
         receiver: Uuid,
         text: &str,
         at: i64,
+        expires_at: Option<i64>,
     ) -> Result<i64, StoreError> {
         check_name("the name of the sender", sender_name)?;
+        check_expiry(expires_at)?;
         check_text("the text of a mail", text)?;
         if text.is_empty() {
             return Err(Refusal::Invalid {
@@ -845,6 +953,8 @@ impl Store {
                 text: text.to_owned(),
                 sent_at: at,
                 read: false,
+                expires_at,
+                legacy: false,
             };
             entry.mail.push(mail.clone());
             entry.unread += 1;
@@ -863,9 +973,23 @@ impl Store {
         })
     }
 
-    /// The number of mails a player has not read.
-    pub fn unread_mail(&self, receiver: Uuid) -> usize {
-        self.read(|cache| cache.players.get(&receiver).map_or(0, |entry| entry.unread))
+    /// The number of mails a player has not read and that have not expired at `at`, the time
+    /// of the caller, since the store reads no clock.
+    pub fn unread_mail(&self, receiver: Uuid, at: i64) -> usize {
+        self.read(|cache| {
+            cache.players.get(&receiver).map_or(0, |entry| {
+                // A player without an unread mail, which is most players, costs no look at a
+                // mail.
+                if entry.unread == 0 {
+                    return 0;
+                }
+                entry
+                    .mail
+                    .iter()
+                    .filter(|mail| !mail.read && !mail.expired(at))
+                    .count()
+            })
+        })
     }
 
     /// Marks every mail of a player as read, and answers how many were unread.

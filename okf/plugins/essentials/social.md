@@ -7,7 +7,7 @@ type: Spec
 title: EssentialsX social, info, status, economy and admin commands
 description: The part of the port of EssentialsX 2.22.0 to golem-essentials that covers messages, mail, ignore, the info commands, AFK, suicide, the economy and the admin commands eco, gamemode, kick and ban, as the Java code does them with the default config, with their messages, config keys, bridge needs and the quirks Golem fixes.
 tags: [essentials, port, spec, messages, mail, afk, economy, gamemode]
-timestamp: 2026-11-07
+timestamp: 2026-11-16
 ---
 
 # EssentialsX social, info, status, economy and admin commands
@@ -1893,8 +1893,8 @@ turns `money` into the whole cents of the Golem accounts by the rules of
 report names the account, and a balance below zero is refused with its debt, see issue
 [#106](https://github.com/skytekx/golem/issues/106). It keeps mails with their read flags, keeps
 ignore lists, and drops `afk`, which is runtime state. A key that has no column in the store, such
-as the expiry of a mail, the port adds to the schema or the migration drops, see the section Storage
-of [What the port needs from the bridge](#what-the-port-needs-from-the-bridge).
+as `ip-address`, the port adds to the schema or the migration drops, see the section Storage of
+[What the port needs from the bridge](#what-the-port-needs-from-the-bridge).
 
 ## What the port needs from the bridge
 
@@ -1973,8 +1973,9 @@ A command handler runs on the server thread, so the game can answer these while 
 
 The [store](../../store.md) of the plugins holds the players with their last name, the times of
 their joins and the place of their last quit, the accounts, the mails and the ignore lists, all
-keyed by UUID. The past names, the expiry of a mail and the per player toggles of the table above
-have no column there, so the port adds them to the schema or drops them in the migration.
+keyed by UUID, and with the schema version 2 the past names, the expiry of a mail and the per player
+toggles of the table above. A key that has no column there the port keeps as a setting of the
+player, adds to the schema or drops in the migration.
 
 ## Teleports
 

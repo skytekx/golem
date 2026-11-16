@@ -26,14 +26,15 @@
 //!
 //! A step is a call of `Store` by its name with its arguments by name, a location being
 //! `{"dimension", "x", "y", "z", "yaw", "pitch"}`, where a number may also be a string such as
-//! `"NaN"`. The devtool adds `close_concurrently`, which closes the store on two threads at once
-//! and answers both closes, `drop`, which drops the store without a close, `open_beside` with
-//! `path`, which opens a second store beside the one of the script and closes it again, `reopen`,
-//! which closes the store and opens the same file, `repeat`, which runs its `steps` `count` times
-//! with `{i}` in a string replaced by the round from 1 and prints one line for all rounds, `sleep`
-//! with `ms`, `sqlite_version`, which answers the version of `SQLite` that the store runs and
-//! needs no store, and `wait`, which prints its line and then waits until its standard input
-//! ends, for a notebook that kills the process there.
+//! `"NaN"`, a past name `{"name", "changed_at"}`, and a toggle of a player the name of its field in
+//! `toggle` with what it takes in `value`. The devtool adds `close_concurrently`, which closes the
+//! store on two threads at once and answers both closes, `drop`, which drops the store without a
+//! close, `open_beside` with `path`, which opens a second store beside the one of the script and
+//! closes it again, `reopen`, which closes the store and opens the same file, `repeat`, which runs
+//! its `steps` `count` times with `{i}` in a string replaced by the round from 1 and prints one
+//! line for all rounds, `sleep` with `ms`, `sqlite_version`, which answers the version of `SQLite`
+//! that the store runs and needs no store, and `wait`, which prints its line and then waits until
+//! its standard input ends, for a notebook that kills the process there.
 //!
 //! Four steps reach the writer through the hooks of the feature `testing` of golem-store, so a
 //! notebook drives the paths of a failure: `pause_writer` with `ms` holds the writer still,
@@ -78,10 +79,12 @@ use golem_store::{
     Location,
     MAX_PENDING,
     Mail,
+    PastName,
     PermissionGroup,
     PermissionSet,
     Player,
     PlayerPermissions,
+    PlayerToggle,
     Receipt,
     Stats,
     Store,
@@ -215,6 +218,13 @@ impl Arguments<'_> {
             .ok_or_else(|| argument(format!("{key:?} is not true or false")))
     }
 
+    fn optional_flag(&self, key: &str) -> Result<Option<bool>, StepError> {
+        match self.0.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(_) => self.flag(key).map(Some),
+        }
+    }
+
     fn uuid(&self, key: &str) -> Result<Uuid, StepError> {
         let text = self.text(key)?;
         Uuid::parse(text).ok_or_else(|| argument(format!("{key:?} {text:?} is not a UUID")))
@@ -303,7 +313,19 @@ fn player_json(player: &Player) -> Value {
         "back": player.back.as_ref().map(location_json),
         "afk": player.afk,
         "nickname": player.nickname,
+        "teleport_enabled": player.teleport_enabled,
+        "teleport_auto": player.teleport_auto,
+        "last_teleport": player.last_teleport,
+        "accepting_pay": player.accepting_pay,
+        "confirm_pay": player.confirm_pay,
+        "reply_to_last_recipient": player.reply_to_last_recipient,
+        "baltop_exempt": player.baltop_exempt,
+        "social_spy": player.social_spy,
     })
+}
+
+fn past_name_json(past: &PastName) -> Value {
+    json!({"name": past.name, "changed_at": past.changed_at})
 }
 
 fn warp_json(warp: &Warp) -> Value {
@@ -311,6 +333,7 @@ fn warp_json(warp: &Warp) -> Value {
         "name": warp.name,
         "location": location_json(&warp.location),
         "permission": warp.permission,
+        "last_owner": warp.last_owner.map(|owner| owner.to_string()),
     })
 }
 
@@ -323,6 +346,8 @@ fn mail_json(mail: &Mail) -> Value {
         "text": mail.text,
         "sent_at": mail.sent_at,
         "read": mail.read,
+        "expires_at": mail.expires_at,
+        "legacy": mail.legacy,
     })
 }
 
@@ -615,6 +640,7 @@ fn run_step(session: &mut Session, step: &Value) -> Answer {
             let store = session.store()?;
             lifecycle(store, op, &arguments)
                 .or_else(|| players(store, op, &arguments))
+                .or_else(|| player_fields(store, op, &arguments))
                 .or_else(|| places(store, op, &arguments))
                 .or_else(|| messages(store, op, &arguments))
                 .or_else(|| accounts(store, op, &arguments))
@@ -804,6 +830,14 @@ fn players(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer>
                     back: arguments.optional_location("back")?,
                     afk: arguments.flag("afk")?,
                     nickname: arguments.optional_text("nickname")?.map(str::to_owned),
+                    teleport_enabled: arguments.flag("teleport_enabled")?,
+                    teleport_auto: arguments.flag("teleport_auto")?,
+                    last_teleport: arguments.integer("last_teleport")?,
+                    accepting_pay: arguments.flag("accepting_pay")?,
+                    confirm_pay: arguments.optional_flag("confirm_pay")?,
+                    reply_to_last_recipient: arguments.optional_flag("reply_to_last_recipient")?,
+                    baltop_exempt: arguments.flag("baltop_exempt")?,
+                    social_spy: arguments.flag("social_spy")?,
                 })?;
                 Value::Null
             }
@@ -821,6 +855,94 @@ fn players(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer>
                     .collect(),
             ),
             "player_count" => json!(store.player_count()),
+            _ => return Err(argument(String::new())),
+        })
+    };
+    known(run())
+}
+
+/// The toggle of a step: the name of the field in `toggle` and what it takes in `value`, true
+/// or false, null as well for a toggle that may follow the default of the plugin, and an integer
+/// for the time of the last teleport.
+fn read_toggle(arguments: &Arguments<'_>) -> Result<PlayerToggle, StepError> {
+    Ok(match arguments.text("toggle")? {
+        "teleport_enabled" => PlayerToggle::TeleportEnabled(arguments.flag("value")?),
+        "teleport_auto" => PlayerToggle::TeleportAuto(arguments.flag("value")?),
+        "last_teleport" => PlayerToggle::LastTeleport(arguments.integer("value")?),
+        "accepting_pay" => PlayerToggle::AcceptingPay(arguments.flag("value")?),
+        "confirm_pay" => PlayerToggle::ConfirmPay(arguments.optional_flag("value")?),
+        "reply_to_last_recipient" => {
+            PlayerToggle::ReplyToLastRecipient(arguments.optional_flag("value")?)
+        }
+        "baltop_exempt" => PlayerToggle::BaltopExempt(arguments.flag("value")?),
+        "social_spy" => PlayerToggle::SocialSpy(arguments.flag("value")?),
+        other => return Err(argument(format!("there is no toggle {other:?}"))),
+    })
+}
+
+/// The past names of a step, each `{"name", "changed_at"}` with a time or null.
+fn read_past_names(arguments: &Arguments<'_>) -> Result<Vec<PastName>, StepError> {
+    let names = arguments
+        .value("names")?
+        .as_array()
+        .ok_or_else(|| argument("\"names\" is not a list".to_owned()))?;
+    names
+        .iter()
+        .map(|past| -> Result<PastName, StepError> {
+            let fields = past
+                .as_object()
+                .ok_or_else(|| argument("\"names\" holds a value that is no object".to_owned()))?;
+            let fields = Arguments(fields);
+            Ok(PastName {
+                name: fields.text("name")?.to_owned(),
+                changed_at: fields.optional_integer("changed_at")?,
+            })
+        })
+        .collect()
+}
+
+/// The fields of a player that the ports of `EssentialsX` keep: the toggles, the past names and
+/// the settings.
+fn player_fields(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> {
+    let run = || -> Answer {
+        Ok(match op {
+            "set_player_toggle" => {
+                store.set_player_toggle(arguments.uuid("uuid")?, read_toggle(arguments)?)?;
+                Value::Null
+            }
+            "past_names" => Value::Array(
+                store
+                    .past_names(arguments.uuid("uuid")?)
+                    .iter()
+                    .map(past_name_json)
+                    .collect(),
+            ),
+            "put_past_names" => {
+                store.put_past_names(arguments.uuid("uuid")?, read_past_names(arguments)?)?;
+                Value::Null
+            }
+            "set_player_setting" => {
+                store.set_player_setting(
+                    arguments.uuid("uuid")?,
+                    arguments.text("key")?,
+                    arguments.text("value")?,
+                )?;
+                Value::Null
+            }
+            "remove_player_setting" => {
+                let (uuid, key) = (arguments.uuid("uuid")?, arguments.text("key")?);
+                json!(store.remove_player_setting(uuid, key)?)
+            }
+            "player_setting" => {
+                json!(store.player_setting(arguments.uuid("uuid")?, arguments.text("key")?))
+            }
+            "player_settings" => {
+                let settings: BTreeMap<String, String> = store
+                    .player_settings(arguments.uuid("uuid")?)
+                    .into_iter()
+                    .collect();
+                json!(settings)
+            }
             _ => return Err(argument(String::new())),
         })
     };
@@ -866,6 +988,7 @@ fn places(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer> 
                 arguments.text("name")?,
                 arguments.location("location")?,
                 arguments.optional_text("permission")?,
+                arguments.optional_uuid("owner")?,
             )?),
             "remove_warp" => json!(store.remove_warp(arguments.text("name")?)?),
             "warp" => store
@@ -902,6 +1025,7 @@ fn messages(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer
                 arguments.uuid("receiver")?,
                 arguments.text("text")?,
                 arguments.integer("at")?,
+                arguments.optional_integer("expires_at")?,
             )?),
             "mail" => Value::Array(
                 store
@@ -910,7 +1034,9 @@ fn messages(store: &Store, op: &str, arguments: &Arguments<'_>) -> Option<Answer
                     .map(mail_json)
                     .collect(),
             ),
-            "unread_mail" => json!(store.unread_mail(arguments.uuid("receiver")?)),
+            "unread_mail" => {
+                json!(store.unread_mail(arguments.uuid("receiver")?, arguments.integer("at")?))
+            }
             "mark_mail_read" => json!(store.mark_mail_read(arguments.uuid("receiver")?)?),
             "remove_mail" => {
                 json!(store.remove_mail(arguments.uuid("receiver")?, arguments.integer("id")?)?)
@@ -1321,8 +1447,8 @@ fn fill(store: &Store, players: usize) -> Result<(), StoreError> {
         store.create_account(uuid, 100_000, at, "starting balance")?;
         if index > 0 {
             let sender = bench_uuid(index - 1);
-            store.send_mail(Some(sender), "player", uuid, "hello there", at)?;
-            store.send_mail(None, "Console", uuid, "welcome to the server", at)?;
+            store.send_mail(Some(sender), "player", uuid, "hello there", at, None)?;
+            store.send_mail(None, "Console", uuid, "welcome to the server", at, None)?;
             store.ignore(uuid, sender)?;
         }
         if index % 10 == 0 {
@@ -1335,6 +1461,7 @@ fn fill(store: &Store, players: usize) -> Result<(), StoreError> {
             &format!("warp{index}"),
             bench_location(index),
             Some(&permission),
+            None,
         )?;
     }
     for group in ["default", "admin", "builder"] {
@@ -1418,7 +1545,7 @@ const CALLS: &[(&str, fn(&Store, &Round))] = &[
         let _ = black_box(store.top_balances(10));
     }),
     ("unread_mail", |store, round| {
-        let _ = black_box(store.unread_mail(round.player));
+        let _ = black_box(store.unread_mail(round.player, BENCH_AT));
     }),
     ("mail", |store, round| {
         let _ = black_box(store.mail(round.player));
@@ -1451,7 +1578,14 @@ const CALLS: &[(&str, fn(&Store, &Round))] = &[
         let _ = black_box(store.set_home(round.player, "base", home));
     }),
     ("send_mail", |store, round| {
-        let sent = store.send_mail(Some(round.other), "player", round.player, "hi", BENCH_AT);
+        let sent = store.send_mail(
+            Some(round.other),
+            "player",
+            round.player,
+            "hi",
+            BENCH_AT,
+            None,
+        );
         let _ = black_box(sent);
     }),
     ("mark_mail_read", |store, round| {

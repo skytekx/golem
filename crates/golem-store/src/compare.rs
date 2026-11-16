@@ -115,6 +115,14 @@ fn differences(file: &Snapshot, cache: &Snapshot) -> Vec<String> {
         ("homes", same(file, cache, |entry| &entry.homes)),
         ("ignore lists", same(file, cache, |entry| &entry.ignores)),
         ("mail", same(file, cache, |entry| entry.mail.as_slice())),
+        (
+            "past names",
+            same(file, cache, |entry| entry.past_names.as_slice()),
+        ),
+        (
+            "player settings",
+            same(file, cache, |entry| &entry.settings),
+        ),
         ("warps", file.warps == cache.warps),
         ("spawns", file.spawns == cache.spawns),
         ("accounts", file.accounts == cache.accounts),

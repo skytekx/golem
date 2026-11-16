@@ -25,7 +25,7 @@ use crate::model::StoreError;
 pub const APPLICATION_ID: i32 = 0x476f_6c6d;
 
 /// The version of the schema this build writes.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// The schema of version 1.
 ///
@@ -180,10 +180,64 @@ CREATE TABLE settings (
 ) STRICT;
 ";
 
+/// The migration from version 1 to version 2, which only adds: columns to three tables and two
+/// tables, so no row of version 1 is written again.
+///
+/// A player gains the seven toggles that a port keeps for them and the time of their last
+/// teleport, a mail the time at which it expires and whether it is a legacy mail, a warp the
+/// player who set it last, and the store the past names and the settings of a player. A column
+/// that refuses NULL takes its default in every row that stands. `SQLite` holds the rows that
+/// stand to the `CHECK` of a new column, so a file that breaks one is refused and stays at
+/// version 1.
+///
+/// The last owner of a warp is the text of a UUID and no reference, since the owner of a warp
+/// need not be a player of the store. A mail is a legacy mail exactly when the name of its sender
+/// is empty, and the file holds every row to that. It is the one rule that a row of version 1
+/// can break, and [`refused_rows`] finds such rows before the migration runs.
+const MIGRATION_2: &str = "
+ALTER TABLE players ADD COLUMN teleport_enabled INTEGER NOT NULL DEFAULT 1
+    CHECK (teleport_enabled IN (0, 1));
+ALTER TABLE players ADD COLUMN teleport_auto INTEGER NOT NULL DEFAULT 0
+    CHECK (teleport_auto IN (0, 1));
+ALTER TABLE players ADD COLUMN last_teleport INTEGER NOT NULL DEFAULT 0
+    CHECK (last_teleport >= 0);
+ALTER TABLE players ADD COLUMN accepting_pay INTEGER NOT NULL DEFAULT 1
+    CHECK (accepting_pay IN (0, 1));
+ALTER TABLE players ADD COLUMN confirm_pay INTEGER CHECK (confirm_pay IN (0, 1));
+ALTER TABLE players ADD COLUMN reply_to_last_recipient INTEGER
+    CHECK (reply_to_last_recipient IN (0, 1));
+ALTER TABLE players ADD COLUMN baltop_exempt INTEGER NOT NULL DEFAULT 0
+    CHECK (baltop_exempt IN (0, 1));
+ALTER TABLE players ADD COLUMN social_spy INTEGER NOT NULL DEFAULT 0
+    CHECK (social_spy IN (0, 1));
+
+ALTER TABLE mail ADD COLUMN expires_at INTEGER CHECK (expires_at > 0);
+ALTER TABLE mail ADD COLUMN legacy INTEGER NOT NULL DEFAULT 0
+    CHECK (legacy IN (0, 1) AND legacy = (sender_name = ''));
+
+ALTER TABLE warps ADD COLUMN last_owner TEXT
+    CHECK (length(last_owner) = 36 AND last_owner = lower(last_owner));
+
+CREATE TABLE player_names (
+    player TEXT NOT NULL REFERENCES players (uuid),
+    position INTEGER NOT NULL CHECK (position >= 0),
+    name TEXT NOT NULL,
+    changed_at INTEGER,
+    PRIMARY KEY (player, position)
+) STRICT;
+
+CREATE TABLE player_settings (
+    player TEXT NOT NULL REFERENCES players (uuid),
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (player, key)
+) STRICT;
+";
+
 /// The migrations in order: the entry at index `n` takes a store of version `n` to `n + 1`. A
 /// new version appends its migration and raises [`SCHEMA_VERSION`], and never changes an entry
 /// before it, since stores of every older version exist.
-const MIGRATIONS: &[&str] = &[SCHEMA_1];
+const MIGRATIONS: &[&str] = &[SCHEMA_1, MIGRATION_2];
 
 /// Opens the file at `path` for the writer of the store, creating it when it does not exist,
 /// and brings its schema to [`SCHEMA_VERSION`].
@@ -361,18 +415,67 @@ fn migrate(connection: &Connection, version: i32) -> Result<(), String> {
     let first = usize::try_from(version).unwrap_or(0);
     for (from, migration) in MIGRATIONS.iter().enumerate().skip(first) {
         let to = i32::try_from(from + 1).unwrap_or(i32::MAX);
+        let failed = |error: &rusqlite::Error| {
+            format!(
+                "the migration from the schema version {from} to {to} failed: {}",
+                migration_error(error)
+            )
+        };
+        if let Some(found) = refused_rows(connection, from).map_err(|error| failed(&error))? {
+            return Err(format!(
+                "the migration from the schema version {from} to {to} is refused: {found}"
+            ));
+        }
         let script = format!(
             "BEGIN IMMEDIATE;\n{migration}\nPRAGMA application_id = {APPLICATION_ID};\nPRAGMA user_version = {to};\nCOMMIT;"
         );
         if let Err(error) = connection.execute_batch(&script) {
             let _ = connection.execute_batch("ROLLBACK;");
-            return Err(format!(
-                "the migration from the schema version {from} to {to} failed: {}",
-                describe_error(&error)
-            ));
+            return Err(failed(&error));
         }
     }
     Ok(())
+}
+
+/// The reason of a migration that failed: the sentence of [`describe_error`], and for a statement
+/// that `SQLite` does not take its message alone, without the text of the migration behind it,
+/// which is nothing that whoever runs the server can mend.
+fn migration_error(error: &rusqlite::Error) -> String {
+    match error {
+        rusqlite::Error::SqlInputError { msg, .. } => msg.clone(),
+        other => describe_error(other),
+    }
+}
+
+/// The rows of a store of the version `from` that the migration to the next version refuses, as
+/// words for the operator that name the rule, the number of the rows and the lowest of them, or
+/// `None` for a file that holds none.
+///
+/// A store of version 1 may hold a mail without a sender name, which only a program that wrote
+/// past the store can make. The schema version 2 takes such a mail for a legacy mail alone, and
+/// the migration marks none as one, since the file does not say that it is one. `SQLite` would
+/// refuse the row inside the migration with the words `CHECK constraint failed` and no more, so
+/// the open looks first.
+fn refused_rows(connection: &Connection, from: usize) -> rusqlite::Result<Option<String>> {
+    if from != 1 {
+        return Ok(None);
+    }
+    let (count, lowest): (i64, Option<i64>) = connection.query_row(
+        "SELECT count(*), min(id) FROM mail WHERE sender_name = ''",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    Ok(lowest.map(|lowest| {
+        let found = if count == 1 {
+            format!("the mail {lowest} has no sender name")
+        } else {
+            format!("{count} mails have no sender name, the lowest of them the mail {lowest}")
+        };
+        format!(
+            "{found}, and the schema version 2 takes a mail without a sender name for a legacy \
+             mail alone, so give each such mail a sender name or remove it and open the store again"
+        )
+    }))
 }
 
 /// A sentence for an error of `SQLite`, with the cases an operator meets in their own words.

@@ -7,7 +7,7 @@ type: Spec
 title: EssentialsX bridge needs
 description: One table of every query, action, event and storage need of the port of EssentialsX 2.22.0 and EssentialsXSpawn 2.22.0, with the commands that need each, what the bridge contract of Golem offers for it and what is missing.
 tags: [plugins, essentials, essentialsx, spawn, bridge, port, gaps]
-timestamp: 2026-11-07
+timestamp: 2026-11-16
 ---
 
 # EssentialsX bridge needs
@@ -113,20 +113,20 @@ coverage check.
 
 Nothing of it needs the game. The column In the store names where the [store](../../store.md) of
 the plugins holds each row, keyed by UUID where a player owns it. A field that has no column there
-the port adds to the schema or drops in the migration, as the social part says in its section
-Storage. The migration of the plan reads the EssentialsX files once.
+the port keeps as a setting of the player, adds to the schema or drops in the migration, as the
+social part says in its section Storage. The migration of the plan reads the EssentialsX files once.
 
 | Store | Fields | Commands | Source keys | In the store |
 | --- | --- | --- | --- | --- |
-| Players | UUID, last account name, past names, login and logout times, logout location, address if kept | `seen`, every offline lookup (`mail send`, `pay`, `eco`, `balance`, `ban`, `ignore`, `home <player>:`) | `last-account-name`, `past-usernames`, `timestamps.login`, `timestamps.logout`, `logoutlocation`, `ip-address`, and `usermap.bin` | `players`, with the last name, the times of the joins and of the last quit and the logout location. The past names and the address have no column |
+| Players | UUID, last account name, past names, login and logout times, logout location, address if kept | `seen`, every offline lookup (`mail send`, `pay`, `eco`, `balance`, `ban`, `ignore`, `home <player>:`) | `last-account-name`, `past-usernames`, `timestamps.login`, `timestamps.logout`, `logoutlocation`, `ip-address`, and `usermap.bin` | `players`, with the last name, the times of the joins and of the last quit and the logout location, and `player_names` with the past names. The address has no column |
 | Homes | Owner, normalized name, location with dimension id | `home`, `sethome`, `delhome`, the compass | `homes.<name>` | `homes` |
 | Last location | Owner, location | `back` | `lastlocation` | The columns `back_dimension` to `back_pitch` of `players` |
-| Toggles | `teleportenabled`, `teleportauto`, `accepting-pay`, `confirm-pay`, `last-message-reply-recipient`, `socialspy`, `baltop-exempt` | `tpa`, `tpahere`, `tpauto`, `tptoggle`, `pay`, `paytoggle`, `payconfirmtoggle`, `r`, `rtoggle`, `socialspy`, `balancetop` | The same keys | No column |
+| Toggles | `teleportenabled`, `teleportauto`, `accepting-pay`, `confirm-pay`, `last-message-reply-recipient`, `socialspy`, `baltop-exempt` | `tpa`, `tpahere`, `tpauto`, `tptoggle`, `pay`, `paytoggle`, `payconfirmtoggle`, `r`, `rtoggle`, `socialspy`, `balancetop` | The same keys | The columns `teleport_enabled`, `teleport_auto`, `accepting_pay`, `confirm_pay`, `reply_to_last_recipient`, `social_spy` and `baltop_exempt` of `players` |
 | Ignore lists | Owner, ignored UUIDs | `ignore`, `msg`, `r`, `mail`, chat, the AFK and suicide broadcasts, `tpa` with tpauto | `ignore` | `ignores` |
-| Last teleport | Owner, milliseconds | The teleport cooldown (live 0, still stamped) | `timestamps.lastteleport` | No column |
-| Mail | Recipient, sender name and UUID, text, time, expiry, read, legacy | `mail`, the notice on join and before commands | `mail` | `mail`, without the expiry and the legacy flag |
+| Last teleport | Owner, milliseconds | The teleport cooldown (live 0, still stamped) | `timestamps.lastteleport` | The column `last_teleport` of `players` |
+| Mail | Recipient, sender name and UUID, text, time, expiry, read, legacy | `mail`, the notice on join and before commands | `mail` | `mail` |
 | Accounts | UUID, balance in the smallest unit | `balance`, `balancetop`, `pay`, `eco` | `money` | `accounts`, with every change in `transfers` |
-| Warps | Name, location, last owner | `warp`, `setwarp`, `delwarp` | `warps/<name>.yml` | `warps`, without the last owner |
+| Warps | Name, location, last owner | `warp`, `setwarp`, `delwarp` | `warps/<name>.yml` | `warps` |
 | Spawns | Group, location | `spawn`, `setspawn` | `spawn.yml`, `spawns.<group>` | `spawns` |
 | Texts and tables | MOTD, rules, the worth table by registry id | `motd`, `rules`, `worth` | `motd.txt`, `rules.txt`, `worth.yml` | No table |
 | Memory only | Teleport requests, warmups, reply targets, AFK state, position and time, pay confirmations, `msgtoggle`, home overwrite confirmations | As today, lost on a restart | `User.java:68-98` | Not stored |

@@ -386,3 +386,15 @@ Oldest first. Times are UTC.
   compares it with the committed file byte for byte and holds the counts of the pages to it. The
   pages give the 1,147 methods of the entity packages to all 211 types of them now, where they gave
   them to the 171 interfaces, which declare 1,037.
+- The store has the schema version 2. A player keeps the seven toggles of EssentialsX and the time
+  of their last teleport, a mail the time at which it expires and whether it is a legacy mail, a
+  warp the player who set it last, and two new tables hold the past names and the settings of a
+  player. `Store::open` migrates a store of version 1 in one transaction that only adds, so every
+  row stays as it was, and a file that the migration cannot take stays a store of version 1. `join`
+  keeps the name before as a past name, `set_player_toggle`, `past_names`, `put_past_names` and the
+  four calls of the settings of a player are new, and `put_player`, `set_warp`, `send_mail` and
+  `unread_mail` take the new fields, the last with the time of the caller, since the store reads no
+  clock. `check` compares the new tables and columns with the cache. `09_store` holds the schema, a
+  store of version 1 that the open migrates, one that it refuses, a migration that fails and one
+  that a kill cuts, each new call and a file that differs from the cache. See
+  [Store](store.md#versions-and-migrations).
