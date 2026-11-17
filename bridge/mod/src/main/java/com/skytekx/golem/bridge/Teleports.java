@@ -235,10 +235,11 @@ public final class Teleports {
 	}
 
 	/**
-	 * Ends a teleport that the bridge never ran with the reason stopped: an action of a drain in
-	 * which an error that ends the server flew out of an action before its turn. No tick follows
-	 * to run it and Golem holds it no longer, so nothing else would end it. An action of another
-	 * kind, and one that does not hold the fields of a teleport or an id that reads, is none.
+	 * Ends a teleport that the bridge never ran with the reason stopped: an action of a drain
+	 * before whose turn an error that ends the server flew out, of an action in front of it or of
+	 * a teleport that waited. No tick follows to run it and Golem holds it no longer, so nothing
+	 * else would end it. An action of another kind, and one that does not hold the fields of a
+	 * teleport or an id that reads, is none.
 	 *
 	 * @param fields the fields of an action, the kind first
 	 */
@@ -279,14 +280,15 @@ public final class Teleports {
 	 * Runs a teleport as far as it gets now, and answers whether it ended, which it reported, or
 	 * waits for the chunks of its search. A teleport that throws ends with the reason error. That
 	 * holds for what the guard catches, behind which the game goes on, and for what it lets pass,
-	 * an error of the JVM that ends the server: the teleport that runs stands in no queue, so
-	 * nothing would end it behind such an error, and it ends here before the error goes on.
+	 * an error of the JVM or any other throwable that is no exception, which ends the server: the
+	 * teleport that runs stands in no queue, so nothing would end it behind such a throwable, and
+	 * it ends here before the throwable goes on.
 	 */
 	private boolean attempt(MinecraftServer server, Request request) {
 		Boolean ended;
 		try {
 			ended = guard.ask("The action teleport", () -> step(server, request), null);
-		} catch (Error fatal) {
+		} catch (Throwable fatal) {
 			release(request);
 			report(request, ERROR);
 			throw fatal;

@@ -5,7 +5,7 @@ type: Spec
 title: Bridge
 description: The contract between the Golem bridge mod in the JVM and the Rust of Golem, with the host class, its native methods, the game that Rust may ask, the permission handler of Forge, the wire form of the actions and the rules of the server thread.
 tags: [bridge, jni, forge, contract]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Bridge
@@ -522,7 +522,7 @@ themselves report a teleport that never reached the mod, as the end of this sect
 | `cancelled` | A mod cancelled `EntityTeleportEvent.TeleportCommand`, or the travel into another dimension on `EntityTravelToDimensionEvent` |
 | `unsafe` | The search found no safe place within its radius |
 | `unloaded` | The chunks of the search did not load within 600 ticks, 30 seconds at 20 TPS |
-| `stopped` | The server stopped while the teleport waited, in the mod for its chunks or in the queue of Golem for its tick, or an error ended the server from inside an action of the drain that handed the teleport to the mod, before its turn |
+| `stopped` | The server stopped while the teleport waited, in the mod for its chunks or in the queue of Golem for its tick, or an error ended the server in the tick whose drain handed the teleport to the mod, before its turn |
 | `error` | The teleport threw. The guard of the mod logs what it catches, and the game goes on. An error that the guard lets pass ends the server, and the teleport that ran ends with this reason before. Either leaves the place of the player unknown, since a mod may throw behind the move. The natives also end a teleport with it whose report does not read, a null or a place that is none, under the UUID of the report or an empty one, where the id reads |
 
 A teleport without a radius moves the player at once, as `tp` does. A teleport with a radius
@@ -558,15 +558,17 @@ the game announced nothing waits, so nothing is reported twice. The game removes
 `ServerStoppedEvent`, and a player whose connection has closed by then leaves there, so the
 teleports that wait in the mod for that player end with `offline`, as at every leave. Such a fault
 may fly out of an action of the bridge itself: the guard of the mod catches an exception and a
-linkage error, and every other error of the JVM, such as a stack that overflows in a listener of
-another mod, passes it and ends the loop of the server. The teleport that ran stands in no queue
-then, and the actions of that drain behind it never run. So the mod reports `error` for the teleport
-that ran and `stopped` for every teleport of that drain behind it, at once and so before the
-teleports that wait in the mod end, and throws the error on. So every id gets its report on every
-way that the game ends its server while the JVM still runs the mod. A JVM that is halted, as the
-watchdog of the dedicated server halts it, or killed, runs nothing, so no report comes then, and no
-teleport outlives the process. The Rust side also refuses a place that is no finite number or
-outside the bounds of the world before it queues a teleport, as
+linkage error, and everything else that a listener throws, such as a stack that overflows in a
+listener of another mod, passes it and ends the loop of the server. The teleport that ran stands in
+no queue then, and the actions of that drain behind it never run. So the mod reports `error` for the
+teleport that ran and `stopped` for every teleport of that drain behind it, at once and so before
+the teleports that wait in the mod end, and throws the error on. Where the error flies out of a
+teleport that waited, which the mod goes on with before the new actions, no action of that drain
+runs, and every teleport of it ends with `stopped`. So every id gets its report on every way that
+the game ends its server while the JVM still runs the mod. A JVM that is halted, as the watchdog of
+the dedicated server halts it, or killed, runs nothing, so no report comes then, a JVM whose memory
+ran out may fail before it reports, and no teleport outlives the process. The Rust side also refuses
+a place that is no finite number or outside the bounds of the world before it queues a teleport, as
 [Plugins](plugins/index.md#the-context-of-a-call) says, so `place` names a fault of the mod or a mod
 that moved the target there.
 

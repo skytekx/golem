@@ -5,7 +5,7 @@ type: Log
 title: Change log
 description: Chronological change log of Golem from the plan of 2026-11-06 on.
 tags: [log, history]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Change log
@@ -585,3 +585,16 @@ Oldest first. Times are UTC.
   to no one. `05_bridge_build` holds it with its second mod, which builds a player that the list
   does not hold, lets it use the sign and has it run a command. See
   [Bridge](bridge.md#the-host-class).
+
+## 2026-11-17
+
+- The mod ends every teleport behind anything that a listener throws past its guard. The guard
+  catches an exception and a linkage error, and the two places that end the teleport that ran and
+  those of the drain behind it caught an error of the JVM alone. So a throwable that is neither an
+  exception nor an error, which a language of the JVM without checked exceptions throws freely,
+  ended the server with those teleports unreported. Both places take every throwable now. The page
+  names both roads into such an end, out of an action of a drain and out of a teleport that waited,
+  and says that a JVM whose memory ran out may fail before it reports. `05_bridge_build` holds it in
+  a boot of its own, in which the second mod throws such a throwable out of a teleport that waited:
+  the natives hear `error` for it and `stopped` for the one teleport of the drain of that tick, each
+  once. See [Bridge](bridge.md#the-end-of-a-teleport).

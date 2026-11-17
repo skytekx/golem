@@ -235,8 +235,8 @@ pub enum TeleportFailure {
     /// The chunks of the search did not load while the teleport waited for them.
     Unloaded,
     /// The server stopped while the teleport waited, in the mod for its chunks or in the queue
-    /// of actions for its tick, or an error ended the server from inside an action of the drain
-    /// that handed the teleport to the mod, before its turn.
+    /// of actions for its tick, or an error ended the server in the tick whose drain handed the
+    /// teleport to the mod, before its turn.
     Stopped,
     /// The teleport threw, which the log of the server holds, or the mod named a reason this
     /// build does not know. The place of the player is unknown then, since a mod may throw

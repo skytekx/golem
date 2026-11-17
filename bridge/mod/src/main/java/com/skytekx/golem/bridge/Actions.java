@@ -41,9 +41,9 @@ final class Actions {
 	/**
 	 * Goes on with the teleports that wait for their chunks, and then runs the actions in their
 	 * order, each on its own, so a failing one stops no other. What the guard lets pass, an error
-	 * of the JVM that ends the server, leaves the actions behind it without a tick to run them,
-	 * and Golem holds them no longer. So the teleports among them end with the reason stopped
-	 * before the error goes on.
+	 * of the JVM or any other throwable that is no exception, ends the server and leaves the
+	 * actions behind it without a tick to run them, and Golem holds them no longer. So the
+	 * teleports among them end with the reason stopped before the throwable goes on.
 	 *
 	 * @param server the server whose tick ended
 	 * @param queued the actions, oldest first, or null for none
@@ -60,7 +60,7 @@ final class Actions {
 					guard.run("The action " + fields[0], () -> perform(server, fields));
 				}
 			}
-		} catch (Error fatal) {
+		} catch (Throwable fatal) {
 			while (next < count) {
 				String action = queued[next++];
 				if (action != null) {
