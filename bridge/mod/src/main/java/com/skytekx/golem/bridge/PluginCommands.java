@@ -9,9 +9,10 @@
  * or a mod holds already goes to the plugin, and CommandTree moves the command it replaces to
  * minecraft:<name>, but for the commands of the game that Spigot keeps. The natives learn who
  * made a command run and at which permission level: the player who typed it or clicked the sign
- * that runs it, whatever entity it runs as, the console, or another source. So a command block or
- * a function never passes for the console, and a source that is no player and runs a command as a
- * player through execute as never passes for that player, as okf/bridge.md specifies.
+ * that runs it, whatever entity it runs as, the console, or another source. So a command block
+ * never passes for the console, a function passes for it only at the level 4, where the game gives
+ * it no entity and the rights of the console, and a source that is no player and runs a command as
+ * a player through execute as never passes for that player, as okf/bridge.md specifies.
  */
 package com.skytekx.golem.bridge;
 
