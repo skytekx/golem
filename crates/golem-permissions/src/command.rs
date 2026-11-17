@@ -66,7 +66,9 @@ pub struct User {
 
 /// What a command asks of the program that runs it.
 pub trait Host {
-    /// Whether the sender holds a node of the commands, such as `luckperms.user.info`.
+    /// Whether the sender holds a node of the commands, such as `luckperms.user.info`: by a rule
+    /// of the permissions, or, where no rule decides, as an operator of the game, whom
+    /// `LuckPerms` lets use every command under its option `commands-allow-op`.
     fn holds(&self, node: &str) -> bool;
 
     /// The name of the sender, for the first steps of a server without permissions.

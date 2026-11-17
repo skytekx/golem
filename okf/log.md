@@ -598,3 +598,14 @@ Oldest first. Times are UTC.
   a boot of its own, in which the second mod throws such a throwable out of a teleport that waited:
   the natives hear `error` for it and `stopped` for the one teleport of the drain of that tick, each
   once. See [Bridge](bridge.md#the-end-of-a-teleport).
+- The operators of the game run the commands of LuckPerms. LuckPerms has the option
+  `commands-allow-op`, which says whether the operators of the game may use every command of
+  LuckPerms and is on by default, and the port had left it out, so a player ran a command by its
+  node alone. The port keeps the default now: a rule of the permissions decides first, and where no
+  rule decides the node of a player, a player whom the game lists as an operator, at the level 1 or
+  more, runs the command, by the lower of that level and the level of the source. `holds_command` of
+  `golem-plugin` is the one place of the rule, for the plugin and for the devtool. The option is no
+  key: the deny `-luckperms.*` in the group `default` writes its off state. `06_permissions` holds
+  the rule and the off state on a configuration, `04_plugins` the level that the plugin reads for a
+  player, and `07_forge_boot` an operator of the level 1 in game, before and behind that deny. See
+  [Permissions](plugins/permissions.md#the-commands-of-luckperms).

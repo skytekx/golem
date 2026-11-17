@@ -67,7 +67,10 @@ pub use crate::{
         PermissionAnswer,
         Resolver, //
     },
-    permissions_plugin::PermissionsPlugin,
+    permissions_plugin::{
+        PermissionsPlugin,
+        holds_command, //
+    },
     runtime::{
         Budget,
         Budgets,

@@ -5,7 +5,7 @@ type: Backlog
 title: Features
 description: Every feature of Golem, from the work of the hand over to the switch of the live server, the plugin API, the Bukkit layer, the native code and the items Golem asks of Aosabi, each with its source, its state and its notebook.
 tags: [features, backlog, golem]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Features
@@ -58,7 +58,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The JVM host and macOS](#the-jvm-host-and-macos) | 2 | 0 | 1 | 0 | 0 | 0 | 12 | 1 | 0 | 0 | 16 |
 | [The bridge](#the-bridge) | 11 | 0 | 1 | 5 | 0 | 0 | 10 | 2 | 0 | 0 | 29 |
 | [The plugin runtime](#the-plugin-runtime) | 2 | 0 | 0 | 0 | 1 | 0 | 10 | 0 | 0 | 0 | 13 |
-| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 6 | 0 | 2 | 0 | 0 | 0 | 4 | 5 | 0 | 0 | 17 |
+| [The permissions and the port of LuckPerms](#the-permissions-and-the-port-of-luckperms) | 7 | 0 | 2 | 0 | 0 | 0 | 4 | 4 | 0 | 0 | 17 |
 | [The store](#the-store) | 4 | 0 | 2 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 8 |
 | [The foundation of the port of EssentialsX](#the-foundation-of-the-port-of-essentialsx) | 0 | 0 | 1 | 7 | 1 | 0 | 0 | 0 | 0 | 0 | 9 |
 | [Teleport and spawn](#teleport-and-spawn) | 0 | 0 | 1 | 24 | 0 | 0 | 2 | 2 | 1 | 0 | 30 |
@@ -75,7 +75,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | [The native code and what follows](#the-native-code-and-what-follows) | 0 | 0 | 0 | 0 | 1 | 0 | 6 | 1 | 0 | 0 | 8 |
 | [What Golem asks of Aosabi](#what-golem-asks-of-aosabi) | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
 | [The tooling, CI, lints and pages](#the-tooling-ci-lints-and-pages) | 2 | 0 | 3 | 0 | 0 | 0 | 16 | 0 | 1 | 0 | 22 |
-| All | 27 | 0 | 12 | 74 | 23 | 25 | 133 | 31 | 6 | 52 | 383 |
+| All | 28 | 0 | 12 | 74 | 23 | 25 | 133 | 30 | 6 | 52 | 383 |
 
 ## The JVM host and macOS
 
@@ -160,7 +160,7 @@ appears by its number alone. The closed issues record pushed fixes and need no r
 | The commands of LuckPerms 5.5.71: user, group, creategroup, deletegroup, listgroups and 15 subcommands, with `/perm` as an alias | Permissions (the commands of LuckPerms), Plan (LuckPerms 5.5.71) | Built | 04, 06, 07 |
 | Every command of the port of LuckPerms held to a case with its node, the operator levels that the plugin keeps, a change that the store refuses, `/lp` in game and the PermissionAPI for an operator of level 1 and a node that nothing names | Permissions, Store (the place in the program golem) | Built | 04, 06, 07 |
 | The quirk of LuckPerms that `/lp deletegroup` leaves `group.<name>` on its members without `--update-parent-lists`, filed as an issue: the port removes the group from every group and player that names it | Permissions (the commands of LuckPerms), issue #231 | Built | 06 |
-| The quirk issue of `commands-allow-op`, the option of LuckPerms that the port does not have | Permissions (the commands of LuckPerms), a decision open with the owner | Held | 06 |
+| The option `commands-allow-op` of LuckPerms at its default: where no rule decides the node of a command of LuckPerms for a player, an operator of the game runs it, by the lower of their operator level and the level of the source, and the deny `-luckperms.*` in the group `default` writes the off state | Permissions (the commands of LuckPerms) | Built | 04, 06, 07 |
 | A group without a weight ties with `default`, kept and documented | Issue #206, commits e12b336 and d340aec | Part | 06 |
 | A source that is no player needs level 4 for the permission commands and for `/golem` and level 2 for the rest, so a command block cannot grant the group admin | Open items, a decision open with the owner | Held | 06, 07 |
 | The members of the group admin after the switch | Open items (the members of the group admin) | Held | 06 |

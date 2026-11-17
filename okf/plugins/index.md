@@ -5,7 +5,7 @@ type: Spec
 title: Plugins
 description: The plugin runtime of Golem, the handler of the bridge that calls the Rust plugins on the server thread in their order, times every call against a budget, catches their panics and routes their commands.
 tags: [plugins, runtime, budget, commands, bridge]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Plugins
@@ -196,25 +196,29 @@ from the players once a second while one is online, so a change of the operator 
 check of another thread within a second. It asks the game nothing off the server thread.
 
 The plugin also owns `/luckperms` and its aliases, the commands of [the port of
-LuckPerms](permissions.md#the-commands-of-luckperms). A command reads the set of the store and its
-generation as one, after it loaded the set when the generation of the store moved, runs on it,
-writes every entry it changed to the store with `put_permission_group`, `remove_permission_group`
-and `put_player_permissions`, in its order, and installs the changed permissions in the resolver
-under the generation of before its writes, so the next check, also of the same tick, sees the
-change, and the reload that the next tick wakes finds the same set. It writes through the handle of
-the store that never waits, which the resolver keeps and which is the only one that it hands out,
-and it asks `Store::room` for all of its changes before the first. So a command makes all of its
-changes or none and never waits for the writer of the store: where the store has no room, the
-command changes nothing, the plugin logs that, and the sender reads `[LP] The store of Golem takes
-no change now, so nothing changed. Run the command again later.`. While the set of the store does
-not load, the resolver keeps an older set for the checks, so a command changes nothing and answers
-`[LP] The permissions of Golem do not load, so no command runs: <reason>.` to the console and to a
-sender who holds a node of the commands by that older set. Every other sender reads the line without
-its reason, since the reason can name a group, a node or the UUID of a player. When the store
-refuses a change, the plugin logs why, loads the set of the store again and sends the line of
-LuckPerms for a failed save, such as `[LP] There was an error whilst saving user data for Alex.`. On
-every tick the plugin hands the resolver a look at the generation of the store, so a change that
-another writer put into the store reaches the checks once the thread `golem-permissions` loaded it.
+LuckPerms](permissions.md#the-commands-of-luckperms). A sender runs a command by its node, and where
+no rule decides the node of a player, an operator of the game runs it, as that section says:
+`holds_command` judges a player by the lower of the level of the source and the operator level that
+the plugin reads for them, from the game on the server thread and from what it kept on any other. A
+command reads the set of the store and its generation as one, after it loaded the set when the
+generation of the store moved, runs on it, writes every entry it changed to the store with
+`put_permission_group`, `remove_permission_group` and `put_player_permissions`, in its order, and
+installs the changed permissions in the resolver under the generation of before its writes, so the
+next check, also of the same tick, sees the change, and the reload that the next tick wakes finds
+the same set. It writes through the handle of the store that never waits, which the resolver keeps
+and which is the only one that it hands out, and it asks `Store::room` for all of its changes before
+the first. So a command makes all of its changes or none and never waits for the writer of the
+store: where the store has no room, the command changes nothing, the plugin logs that, and the
+sender reads `[LP] The store of Golem takes no change now, so nothing changed. Run the command again
+later.`. While the set of the store does not load, the resolver keeps an older set for the checks,
+so a command changes nothing and answers `[LP] The permissions of Golem do not load, so no command
+runs: <reason>.` to the console and to a sender who may run a command of the port by that older set.
+Every other sender reads the line without its reason, since the reason can name a group, a node or
+the UUID of a player. When the store refuses a change, the plugin logs why, loads the set of the
+store again and sends the line of LuckPerms for a failed save, such as `[LP] There was an error
+whilst saving user data for Alex.`. On every tick the plugin hands the resolver a look at the
+generation of the store, so a change that another writer put into the store reaches the checks once
+the thread `golem-permissions` loaded it.
 
 ## The context of a call
 

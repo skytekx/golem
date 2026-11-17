@@ -26,7 +26,7 @@ use golem_permissions::{
         User, //
     },
 };
-use golem_plugin::Resolver;
+use golem_plugin::holds_command;
 use serde::Deserialize;
 use serde_json::{
     Value,
@@ -204,13 +204,16 @@ struct Script {
     commands: Vec<CommandSpec>,
 }
 
-/// The sender of the commands: the console, a player or another source at its level.
+/// The sender of the commands: the console, a player or another source at its level. A player
+/// names as `operator` the operator level at which the game lists them, which is 0 when left
+/// out, beside the `level` of the source of the command.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SenderSpec {
     uuid: Option<String>,
     name: Option<String>,
     level: Option<u8>,
+    operator: Option<u8>,
 }
 
 /// A player that the server knows, online or not.
@@ -235,12 +238,14 @@ struct CommandSpec {
 struct ScriptHost<'a> {
     sender: &'a Sender,
     players: &'a [PlayerSpec],
-    resolver: &'a Resolver,
+    permissions: &'a Permissions,
+    /// The operator level of a player who sends the commands, as the script names it.
+    operator: Option<u8>,
 }
 
 impl Host for ScriptHost<'_> {
     fn holds(&self, node: &str) -> bool {
-        self.resolver.has_permission(self.sender, node)
+        holds_command(self.permissions, self.sender, node, self.operator)
     }
 
     fn sender_name(&self) -> String {
@@ -282,6 +287,7 @@ fn commands(arguments: &[String]) -> i32 {
 }
 
 fn run_commands(script: Script) -> Result<Value, String> {
+    let operator = script.sender.operator;
     let sender = match (script.sender.uuid, script.sender.name) {
         (Some(uuid), Some(name)) => Sender::Player {
             player: Player { uuid, name },
@@ -298,11 +304,11 @@ fn run_commands(script: Script) -> Result<Value, String> {
         Permissions::from_toml(&script.config).map_err(|error| format!("config: {error}"))?;
     let mut outcomes = Vec::new();
     for spec in &script.commands {
-        let resolver = Resolver::from_permissions(permissions.clone());
         let host = ScriptHost {
             sender: &sender,
             players: &script.players,
-            resolver: &resolver,
+            permissions: &permissions,
+            operator,
         };
         let outcome = command::execute(&permissions, &spec.label, &spec.arguments, &host);
         let changes: Vec<Value> = outcome

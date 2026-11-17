@@ -5,7 +5,7 @@ type: Backlog
 title: Open items
 description: What is still open on Golem, from the decisions that the owner has still to make to the parts not built yet and what remains open in the parts that are built.
 tags: [open-items, backlog, todo]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Open items
@@ -89,9 +89,10 @@ Golem API.
   inside a call of the plugin and whose time grows with the players of the store, so no figure holds
   the two to the budget of a call, see [Store](store.md#mail-and-ignore-lists). The bench gains the
   two calls, and the cost table of the store their rows, when that table is next taken.
-- The members of the group `admin`. Golem grants the commands of LuckPerms and of EssentialsX to the
-  group `admin` alone and leaves only the tools of `/golem` with the operators, so at the switch the
-  console puts each operator into the group with `lp user <name> parent add admin`, see
+- The members of the group `admin`. Golem grants the commands of EssentialsX to the group `admin`
+  alone and leaves the tools of `/golem` and, where no rule decides their nodes, the commands of
+  LuckPerms with the operators, so at the switch the console or an operator puts each operator into
+  the group with `lp user <name> parent add admin`, see
   [Permissions](plugins/permissions.md#the-commands-of-luckperms). The importer of a LuckPerms
   export and a comparison of the seed with an `lp export` of the Mac mini are open.
 - The native `permission` carries the UUID and the node alone and does not say whether Forge asked
@@ -100,10 +101,10 @@ Golem API.
   `getPermission`. A flag of the native would tell them apart, which changes the contract of
   [Bridge](bridge.md#permissions). Off the server thread the plugin reads the operator levels once
   a second, so a change of the level reaches such a check within a second.
-- An entry of the list of operators at the level 0 counts as no operator for the PermissionAPI,
-  since the game answers the level alone, where `isOp` of Bukkit counts it. `/op` gives the level of
-  `op-permission-level`, 4 by default, so such an entry comes from an edit of the list or from a
-  level of 0 there.
+- An entry of the list of operators at the level 0 counts as no operator for the PermissionAPI and
+  for the commands of LuckPerms, since the game answers the level alone, where `isOp` of Bukkit
+  counts it. `/op` gives the level of `op-permission-level`, 4 by default, so such an entry comes
+  from an edit of the list or from a level of 0 there.
 - The commands of LuckPerms find an offline player by name only once the store knows them, which
   the port of EssentialsX records on a join, so until then they take the UUID of such a player.
 - A command of LuckPerms loads the whole changed set into `golem-permissions` on the server thread,

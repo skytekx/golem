@@ -10,6 +10,11 @@
  * for room for all of its changes before the first, so it never waits for the writer of the store
  * on the server thread and makes all of its changes or none.
  *
+ * A sender runs a command by its node. Where no rule of the permissions decides the node of a
+ * player, an operator of the game runs the command, as LuckPerms lets the operators use every
+ * command under its option commands-allow-op, which is on by default. holds_command is the one
+ * place that says so, for the plugin and for the devtool.
+ *
  * The native of the PermissionAPI carries the UUID and the node alone, so the plugin keeps the
  * operator level of every player online from their join, from the game on the server thread and
  * from the list of players once a second, and answers a player that is not online with none, so
@@ -59,6 +64,38 @@ use crate::{
 
 /// The ticks between two reads of the operator levels of the players online.
 const LEVEL_TICKS: u64 = 20;
+
+/// The lowest operator level of a player whom the game lists as an operator. `LuckPerms` asked
+/// Bukkit whether a player is an operator, and Bukkit counts every player on the list of
+/// operators, which gives a level of 1 or more.
+const LISTED_OPERATOR: u8 = 1;
+
+/// Whether `sender` runs a command of the port of `LuckPerms` by its `node`, such as
+/// `luckperms.user.info`.
+///
+/// The console and every other source hold the node as they hold every node, by the rules of
+/// [`Context::has_permission`]. For a player a rule of `permissions` decides first, so a deny
+/// takes a command from an operator too. Where no rule decides, an operator of the game runs
+/// the command, as `LuckPerms` 5.5.71 lets the operators use every command under its option
+/// `commands-allow-op`, which is on by default. `operator_level` is the operator level of the
+/// player as the game lists it, or `None` when the game lists no such player. The lower of it
+/// and the level of the source decides, so a command gains nothing by the level of its source,
+/// and a command that runs below the level of its player is judged at its own.
+pub fn holds_command(
+    permissions: &golem_permissions::Permissions,
+    sender: &Sender,
+    node: &str,
+    operator_level: Option<u8>,
+) -> bool {
+    match sender {
+        Sender::Player { player, level } => {
+            permissions.value(&player.uuid, node).unwrap_or_else(|| {
+                operator_level.is_some_and(|own| own.min(*level) >= LISTED_OPERATOR)
+            })
+        }
+        _ => holds(Some(permissions), sender, node),
+    }
+}
 
 /// The plugin of the permissions, the port of `LuckPerms` in the runtime.
 pub struct PermissionsPlugin {
@@ -172,10 +209,16 @@ impl Plugin for PermissionsPlugin {
         arguments: &str,
         context: &mut Context<'_>,
     ) -> Vec<String> {
+        // The operator level of a player who made the command run, as the game lists it now on
+        // the server thread, or as the plugin kept it on any other.
+        let operator_level = match sender {
+            Sender::Player { player, .. } => self.level(&player.uuid.to_ascii_lowercase(), context),
+            _ => None,
+        };
         // A set of the store that does not load leaves the resolver an older set, and a command
         // that built on it would write that older set back over the store. The reason can name a
         // group, a node or the UUID of a player, so it goes to the console and to a sender who
-        // holds a node of the commands by that older set, and every other sender reads the line
+        // may run a command of the port by that older set, and every other sender reads the line
         // without it.
         let (generation, before) = match self.resolver.current() {
             Ok(current) => current,
@@ -185,6 +228,7 @@ impl Plugin for PermissionsPlugin {
                     sender,
                     context,
                     permissions: &older,
+                    operator_level,
                 };
                 let shown = command::holds_any(&host).then_some(reason.as_str());
                 return vec![command::not_loaded(shown)];
@@ -194,6 +238,7 @@ impl Plugin for PermissionsPlugin {
             sender,
             context,
             permissions: &before,
+            operator_level,
         };
         let outcome = command::execute(&before, name, arguments, &host);
         let mut lines = outcome.lines;
@@ -239,9 +284,8 @@ impl Plugin for PermissionsPlugin {
     fn on_permission(&mut self, uuid: &str, node: &str, context: &mut Context<'_>) -> Option<bool> {
         let key = uuid.to_ascii_lowercase();
         let level = self.level(&key, context)?;
-        // LuckPerms granted an operator every node that nothing names, and Bukkit counts every
-        // player on the list of operators, which gives a level of 1 or more.
-        let operator = level >= 1;
+        // LuckPerms granted an operator every node that nothing names.
+        let operator = level >= LISTED_OPERATOR;
         Some(
             self.resolver
                 .permissions()
@@ -301,6 +345,8 @@ struct CommandHost<'a, 'c> {
     sender: &'a Sender,
     context: &'a Context<'c>,
     permissions: &'a golem_permissions::Permissions,
+    /// The operator level of a player who made the command run, as the game lists it.
+    operator_level: Option<u8>,
 }
 
 impl CommandHost<'_, '_> {
@@ -311,7 +357,7 @@ impl CommandHost<'_, '_> {
 
 impl Host for CommandHost<'_, '_> {
     fn holds(&self, node: &str) -> bool {
-        holds(Some(self.permissions), self.sender, node)
+        holds_command(self.permissions, self.sender, node, self.operator_level)
     }
 
     fn sender_name(&self) -> String {

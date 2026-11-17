@@ -5,7 +5,7 @@ type: Spec
 title: Permissions
 description: The permissions of Golem in place of LuckPerms 5.5.71, with the format of the tracked configuration, the rules of resolution in their order, the seed of SkyTekx and how it maps from LuckPerms, and the quirks of the live server that the one source of truth fixes.
 tags: [plugins, permissions, luckperms, essentials, config, quirks]
-timestamp: 2026-11-16
+timestamp: 2026-11-17
 ---
 
 # Permissions
@@ -199,7 +199,8 @@ call of `value`. The senders are those of [Plugins](index.md#commands).
   permissions do not grant them, and the group `admin` of the seed stands for the operators, as
   above. A plugin may add a rule of its own where no rule names a node, as the core plugin leaves
   its tools of operators with the operators of the game, see
-  [Core plugin](core.md#the-command-golem).
+  [Core plugin](core.md#the-command-golem), and as the plugin of the permissions leaves them [the
+  commands of LuckPerms](#the-commands-of-luckperms).
 - Only a player who is online is a player for the check: the very player that the list of the server
   holds under their UUID. A command of any other player reaches the plugins as another source at the
   level 0, which holds no node, see [Bridge](../bridge.md#the-host-class).
@@ -258,9 +259,18 @@ keep their names, the convenience aliases of LuckPerms, such as `/lp u Alex p se
 | `/lp listgroups [page]` | `luckperms.listgroups` | The groups by weight, then by name |
 
 A sender may run a command when they hold its node by [the check of a
-sender](#the-check-of-a-sender), so the console runs every command. The group `admin` of the seed
-grants `luckperms.*`, so the console puts an operator into it with `lp user <name> parent add
-admin`, and from then on that operator changes the permissions in game.
+sender](#the-check-of-a-sender), so the console runs every command, and a player runs the commands
+whose nodes a rule grants them and none whose node a rule denies them. Where no rule decides the
+node of a player, the operators of the game run the command. LuckPerms has the option
+`commands-allow-op`, which says whether the operators of the game may use every command of LuckPerms
+and is on by default, and the port keeps that default. An operator is a player whom the game lists
+as one, at the operator level 1 or more, as for [the PermissionAPI](index.md#permissions). The lower
+of that level and the level of the source of the command decides, as for the tools of [the core
+plugin](core.md#the-command-golem), so a player who is no operator stays none at a source of a
+higher level, such as the click of a sign, and a command that runs below the level of its player is
+judged at its own. `holds_command` of `golem-plugin` is the one place of that rule. The group
+`admin` of the seed grants `luckperms.*`, so a player who is no operator changes the permissions in
+game once the console or an operator put them into it with `lp user <name> parent add admin`.
 
 A command builds the change on the configuration that it is given, loads the result into this
 crate with `Permissions::from_config`, which checks every rule of the format, and answers the
@@ -282,8 +292,12 @@ Where the port differs from LuckPerms:
   `/lp user <user> meta` or `permission settemp`, answers `Golem does not port /lp editor of
   LuckPerms 5.5.71, see okf/plugins/permissions.md.`. Every text names the context `global`, as
   LuckPerms names an empty set of contexts.
-- The port has no option `commands-allow-op`, so a player runs a command by its node alone, whatever
-  their operator level.
+- The option `commands-allow-op` of LuckPerms is no key of a configuration in Golem. The port keeps
+  its default, on, and its off state is written with a rule: the deny `-luckperms.*` in the group
+  `default`, which the console sets with `lp group default permission set luckperms.* false` and
+  takes back with `lp group default permission unset luckperms.*`. It decides for every player, so
+  an operator then runs a command as every other player does, by a node of their own or of a group
+  of a higher weight, such as `admin`.
 - The bridge sends a line as plain text, so the colors of LuckPerms are gone, and an entry of
   `permission info` writes a denied node with its leading `-`, as the configuration writes it, where
   LuckPerms shows it in red. The help and the usage name only the arguments that the port takes, so
@@ -322,10 +336,11 @@ Where the port differs from LuckPerms:
   [Store](../store.md#refusals). A command with a longer one answers its line and then the line
   of LuckPerms for a failed save, the plugin logs why the store refused, and nothing changes.
 
-`golem-devtool permissions-command <script.json>` runs commands on a configuration with a sender
-and the players a server knows, and prints for each its lines, its changes, the configuration
-after it and the line of a failed save, so `06_permissions` holds every command of the table above
-to its texts and to its node without a store and without a JVM.
+`golem-devtool permissions-command <script.json>` runs commands on a configuration with a sender, a
+player with the operator level at which the game lists them, and the players a server knows, and
+prints for each its lines, its changes, the configuration after it and the line of a failed save, so
+`06_permissions` holds every command of the table above to its texts and to its node without a store
+and without a JVM.
 
 ## The cost of a check
 
